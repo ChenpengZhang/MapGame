@@ -1,0 +1,25 @@
+# ---- 原始数据（11GB，已转换进 beijing-transit.json，运行时不需要）----
+data/cptond/
+
+# ---- Node.js ----
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ---- 系统/编辑器 ----
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+*.swp
+*~
+
+# ---- 日志与临时文件 ----
+*.log
+*.tmp
+
+# ---- 敏感配置（防止未来误传高德 Key）----
+.env
+.env.*

@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>城市交通规划 · 北京</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { width: 100%; height: 100%; font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif; }
+    #app { position: relative; width: 100%; height: 100%; overflow: hidden; }
+    #map { position: absolute; inset: 0; background: #e8ecf1; }
+
+    #topbar {
+      position: absolute; top: 0; left: 0; right: 0; z-index: 500;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 10px 16px; background: rgba(20,28,40,.88); color: #fff;
+      backdrop-filter: blur(4px);
+    }
+    #topbar .title { font-size: 16px; font-weight: 600; }
+    #topbar .title .sub { font-weight: 400; font-size: 12px; color: #9fb0c3; margin-left: 8px; }
+    #topbar .status { font-size: 12px; color: #cfe0ee; }
+    .topbar-right { display: flex; align-items: center; gap: 12px; }
+    #menu-btn { border: none; background: rgba(255,255,255,0.12); color: #fff; font-size: 15px; width: 32px; height: 32px; border-radius: 6px; cursor: pointer; }
+    #menu-btn:hover { background: rgba(255,255,255,0.24); }
+
+    #legend {
+      position: absolute; left: 14px; bottom: 22px; z-index: 500;
+      display: flex; flex-direction: column; gap: 6px;
+      padding: 10px 12px; background: rgba(255,255,255,.94);
+      border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,.18);
+      font-size: 12px; color: #333;
+    }
+    #legend .row { display: flex; align-items: center; gap: 6px; }
+    #legend .dot { display: inline-block; border-radius: 50%; border: 1px solid #fff; }
+    #legend .dot.metro { width: 10px; height: 10px; background: #e74c3c; }
+    #legend .dot.bus { width: 7px; height: 7px; background: #3498db; }
+    #legend .hint { color: #888; max-width: 200px; line-height: 1.4; }
+
+    #left-col {
+      position: absolute; left: 14px; top: 70px; z-index: 600;
+      display: flex; flex-direction: column; gap: 8px; max-width: 340px;
+    }
+    /* 爬塔 HUD */
+    #tower-hud {
+      position: absolute; top: 58px; left: 50%; transform: translateX(-50%);
+      z-index: 550; display: flex; align-items: center; gap: 10px;
+      padding: 6px 14px; background: rgba(20,28,40,.85); color: #fff;
+      border-radius: 999px; font-size: 13px; box-shadow: 0 2px 8px rgba(0,0,0,.25);
+    }
+    #tower-hud #tower-layer-label { font-weight: 700; color: #f39c12; }
+    #tower-hud #tower-threshold-label { color: #cfe0ee; }
+    #route-panel, #infocard {
+      padding: 10px 12px; background: rgba(255,255,255,.96);
+      border-radius: 8px; box-shadow: 0 3px 14px rgba(0,0,0,.22);
+      font-size: 12px; color: #333; line-height: 1.7;
+    }
+    #route-panel {
+      max-height: calc(100vh - 150px);
+      overflow-y: auto;
+      scrollbar-width: thin;
+      overscroll-behavior: contain;
+    }
+    #route-panel::-webkit-scrollbar { width: 6px; }
+    #route-panel::-webkit-scrollbar-thumb { background: rgba(0,0,0,.25); border-radius: 3px; }
+    #route-panel::-webkit-scrollbar-track { background: transparent; }
+    #route-panel .rp-title { font-weight: 700; font-size: 13px; margin-bottom: 2px; }
+    #route-panel .rp-total { color: #c0392b; font-weight: 700; }
+    /* 路线面板：左右分栏（描述 | 指标） */
+    #route-panel .rp-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin: 2px 0; }
+    #route-panel .rp-desc { flex: 1; min-width: 0; }
+    #route-panel .rp-metrics { display: flex; gap: 8px; align-items: center; white-space: nowrap; }
+    #route-panel .rp-pill { display: inline-block; padding: 2px 9px; border-radius: 6px; background: #eef1f5; color: #333; font-size: 12px; font-weight: 700; }
+    #route-panel .rp-station { }
+    #route-panel .rp-stops { color: #1f6feb; font-weight: 600; }
+    #route-panel .rp-km { color: #16a085; font-weight: 600; }
+    #route-panel .rp-time { color: #444; font-weight: 600; }
+    #infocard .stop-name { font-weight: 700; font-size: 14px; margin-bottom: 6px; }
+    #infocard .line-list { display: flex; flex-wrap: wrap; gap: 4px; }
+    #infocard .line-tag { padding: 2px 6px; border-radius: 4px; font-size: 11px; color: #fff; }
+    #info-walk { margin-top: 6px; color: #666; font-size: 12px; }
+
+    .pin {
+      width: 24px; height: 24px; border-radius: 50%;
+      color: #fff; font-size: 12px; font-weight: 700;
+      display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 2px 6px rgba(0,0,0,.4); border: 2px solid #fff;
+      animation: pin-pop .32s cubic-bezier(.34,1.56,.64,1);
+    }
+    /* Leaflet 免 Key 后端：图钉外层容器 */
+    .amap-pin-marker { background: transparent; border: none; }
+    .pin.origin { background: #2ecc71; }
+    .pin.dest { background: #e74c3c; cursor: pointer; }
+    .pin.route { background: #1f6feb; }
+    @keyframes pin-pop {
+      from { transform: scale(.4); opacity: 0; }
+      to { transform: scale(1); opacity: 1; }
+    }
+    .pin.flash { animation: pin-flash 1.6s ease-out; }
+    @keyframes pin-flash {
+      0% { transform: scale(.6); opacity: 0; }
+      18% { transform: scale(1.4); opacity: 1; box-shadow: 0 0 0 8px rgba(255,255,255,.9), 0 0 24px 8px rgba(255,255,255,.75); }
+      40% { transform: scale(1); box-shadow: 0 2px 6px rgba(0,0,0,.4); }
+      58% { transform: scale(1.22); box-shadow: 0 0 0 6px rgba(255,255,255,.65), 0 0 16px 5px rgba(255,255,255,.55); }
+      78% { transform: scale(1); box-shadow: 0 2px 6px rgba(0,0,0,.4); }
+      100% { transform: scale(1); box-shadow: 0 2px 6px rgba(0,0,0,.4); }
+    }
+
+    .btn-group { position: absolute; right: 14px; bottom: 22px; z-index: 500; display: flex; gap: 8px; }
+    .btn-group button {
+      padding: 8px 14px; border: none; border-radius: 6px;
+      font-size: 13px; cursor: pointer; color: #fff;
+      box-shadow: 0 2px 8px rgba(0,0,0,.2);
+    }
+    #undo-btn { background: #2980b9; }
+    #undo-btn:hover { background: #1f618d; }
+    #reset-btn { background: #2c3e50; }
+    #reset-btn:hover { background: #1a252f; }
+    #show-all-btn { background: #16a085; }
+    #show-all-btn:hover { background: #0e7c64; }
+    #tower-restart-btn { background: #8e44ad; }
+    #tower-restart-btn:hover { background: #6c3483; }
+
+    .hidden { display: none !important; }
+
+    /* 加载弹窗 */
+    #loading-overlay {
+      position: fixed; inset: 0; z-index: 1000;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      background: rgba(0,0,0,0.5); cursor: wait;
+    }
+    .spinner {
+      width: 44px; height: 44px;
+      border: 4px solid rgba(255,255,255,0.3);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .loading-text { color: #fff; margin-top: 14px; font-size: 15px; letter-spacing: 1px; }
+
+    /* 主菜单 */
+    #main-menu {
+      position: fixed; inset: 0; z-index: 900;
+      display: flex; align-items: center; justify-content: center;
+      background: linear-gradient(135deg, #16222e, #2c3e50);
+    }
+    .main-inner { text-align: center; color: #fff; max-width: 560px; width: 92%; padding: 24px; }
+    .main-inner h1 { font-size: 46px; font-weight: 800; letter-spacing: 3px; margin-bottom: 8px; }
+    .main-sub { color: #9fb0c3; font-size: 15px; margin-bottom: 44px; letter-spacing: 4px; }
+    .main-btns { display: flex; flex-direction: column; gap: 14px; }
+    .main-btns button {
+      padding: 16px 22px; border: none; border-radius: 10px; cursor: pointer;
+      font-size: 17px; color: #fff; background: rgba(255,255,255,0.12);
+      transition: background .15s, transform .1s;
+    }
+    .main-btns button:hover { background: rgba(255,255,255,0.22); transform: translateY(-1px); }
+    .main-btns button.locked { background: rgba(255,255,255,0.06); color: #7c8894; cursor: not-allowed; }
+    .main-btns button.locked:hover { background: rgba(255,255,255,0.06); transform: none; }
+
+    /* 故事模式关卡选择 */
+    #story-menu {
+      position: fixed; inset: 0; z-index: 910;
+      display: flex; align-items: center; justify-content: center;
+      background: linear-gradient(135deg, #16222e, #2c3e50);
+    }
+    .story-menu-inner { text-align: center; color: #fff; width: 92%; max-width: 900px; }
+    .story-menu-inner h2 { font-size: 26px; margin-bottom: 28px; }
+    #story-level-list { display: flex; flex-wrap: wrap; gap: 18px; justify-content: center; }
+    .story-level {
+      width: 240px; padding: 14px 16px; text-align: left;
+      display: flex; align-items: center; gap: 12px;
+      background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 12px; cursor: pointer; transition: background .15s, transform .1s;
+    }
+    .story-level.unlocked:hover { background: rgba(255,255,255,0.16); transform: translateY(-2px); }
+    .story-level.locked { background: rgba(255,255,255,0.04); border-color: rgba(255,255,255,0.08); cursor: not-allowed; }
+    .story-level .slv-num {
+      flex: 0 0 auto; width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+      background: #f39c12; color: #fff; font-size: 20px; font-weight: 800;
+    }
+    .story-level.locked .slv-num { background: rgba(255,255,255,0.12); font-size: 16px; }
+    .story-level .slv-title { font-size: 15px; font-weight: 700; }
+    .story-level .slv-loc { font-size: 12px; color: #b8c4d0; margin-top: 6px; line-height: 1.5; }
+    .story-back { margin-top: 28px; padding: 10px 24px; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; color: #fff; background: rgba(255,255,255,0.14); }
+    .story-back:hover { background: rgba(255,255,255,0.24); }
+
+    /* 自由模式情景选择 */
+    #free-menu {
+      position: fixed; inset: 0; z-index: 910;
+      display: flex; align-items: center; justify-content: center;
+      background: linear-gradient(135deg, #16222e, #2c3e50);
+    }
+    .free-menu-inner {
+      background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 14px; padding: 28px 32px; color: #fff; width: 380px; max-width: 92%; text-align: left;
+    }
+    .free-menu-inner h2 { text-align: center; font-size: 24px; margin-bottom: 6px; }
+    .free-sub { text-align: center; color: #9fb0c3; font-size: 13px; margin-bottom: 18px; }
+    .free-opts { display: flex; flex-direction: column; gap: 12px; margin-bottom: 20px; }
+    .free-opts label { display: flex; align-items: center; gap: 8px; font-size: 15px; cursor: pointer; }
+    .free-btns { display: flex; gap: 10px; justify-content: center; }
+    .free-btns button { padding: 10px 22px; border: none; border-radius: 8px; cursor: pointer; font-size: 15px; color: #fff; }
+    #free-start-btn { background: #27ae60; }
+    #free-start-btn:hover { background: #1e8449; }
+    #free-back-btn { background: rgba(255,255,255,0.14); }
+    #free-back-btn:hover { background: rgba(255,255,255,0.24); }
+
+    /* 无尽模式爬塔畸变选择 */
+    #tower-menu {
+      position: fixed; inset: 0; z-index: 910;
+      display: flex; align-items: center; justify-content: center;
+      background: linear-gradient(135deg, #16222e, #2c3e50);
+    }
+    .tower-menu-inner { color: #fff; width: 92%; max-width: 640px; text-align: center; }
+    .tower-menu-inner h2 { font-size: 26px; margin-bottom: 6px; }
+    .tower-sub { color: #9fb0c3; font-size: 13px; margin-bottom: 22px; }
+    .tower-opts { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; margin-bottom: 24px; }
+    .tower-opt {
+      padding: 18px 16px; border: 1px solid rgba(255,255,255,0.15); border-radius: 12px;
+      background: rgba(255,255,255,0.08); color: #fff; cursor: pointer;
+      display: flex; flex-direction: column; gap: 8px; transition: background .15s, transform .1s;
+    }
+    .tower-opt:hover { background: rgba(255,255,255,0.16); transform: translateY(-2px); }
+    .tower-opt-label { font-size: 16px; font-weight: 700; }
+    .tower-best { font-size: 12px; color: #9fb0c3; }
+
+    /* Galgame 剧情窗口（下半屏） */
+    #story-dialog {
+      position: fixed; left: 0; right: 0; bottom: 0; z-index: 960;
+      display: flex; justify-content: center; pointer-events: none;
+    }
+    .story-dialog-inner {
+      width: 100%; max-width: 1000px; margin: 0 16px 20px;
+      background: rgba(16,22,32,0.92); border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 14px; padding: 20px 26px; color: #fff;
+      pointer-events: auto; cursor: pointer;
+      box-shadow: 0 -6px 30px rgba(0,0,0,.4);
+    }
+    .story-speaker { font-size: 12px; color: #9fb0c3; margin-bottom: 8px; min-height: 16px; }
+    .story-speaker.player { color: #6c8eff; font-weight: 700; }
+    .story-speaker.phone { color: #f39c12; font-weight: 700; }
+    .story-speaker.action { color: #b8c4d0; }
+    .story-text { font-size: 17px; line-height: 1.8; min-height: 44px; }
+    .story-next-hint { text-align: right; font-size: 12px; color: #7c8894; margin-top: 8px; }
+
+    /* 教学聊天泡泡（右下角） */
+    #tutorial-bubble { position: fixed; right: 20px; bottom: 24px; z-index: 960; max-width: 380px; }
+    .tutorial-bubble-inner {
+      background: #fff; border-radius: 14px 14px 4px 14px; padding: 18px 18px 14px;
+      box-shadow: 0 6px 24px rgba(0,0,0,.3); color: #333; font-size: 15px; line-height: 1.7;
+    }
+    .tutorial-btns { text-align: right; margin-top: 12px; }
+    .tutorial-btns button {
+      padding: 8px 20px; border: none; border-radius: 6px; cursor: pointer;
+      background: #2980b9; color: #fff; font-size: 14px;
+    }
+    .tutorial-btns button:hover { background: #1f618d; }
+
+    /* 设置面板 */
+    #settings-panel {
+      position: fixed; inset: 0; z-index: 950;
+      display: flex; align-items: center; justify-content: center;
+      background: rgba(0,0,0,0.55);
+    }
+    .settings-inner {
+      background: #fff; border-radius: 10px; padding: 22px 26px; width: 340px; color: #333;
+    }
+    .settings-inner h2 { font-size: 18px; margin-bottom: 14px; }
+    .settings-inner label { font-size: 14px; display: flex; align-items: center; gap: 8px; cursor: pointer; }
+    .settings-hint { font-size: 12px; color: #888; margin: 8px 0 0 26px; line-height: 1.5; }
+    .settings-btns { margin-top: 18px; text-align: right; }
+    .settings-btns button { padding: 8px 16px; border: none; border-radius: 6px; background: #2c3e50; color: #fff; cursor: pointer; }
+
+    /* 关卡结束弹窗 */
+    #result-overlay {
+      position: fixed; inset: 0; z-index: 920;
+      display: flex; align-items: center; justify-content: center;
+      background: rgba(0,0,0,0.58);
+      animation: overlay-fade .25s ease-out;
+    }
+    @keyframes overlay-fade { from { opacity: 0; } to { opacity: 1; } }
+    .result-inner {
+      background: #fff; border-radius: 14px; padding: 30px 32px;
+      width: 460px; max-width: 94%; color: #333; text-align: center;
+      max-height: 86vh; overflow-y: auto;
+      box-shadow: 0 8px 40px rgba(0,0,0,.4);
+      animation: result-pop .5s cubic-bezier(.34,1.56,.64,1) both;
+    }
+    @keyframes result-pop {
+      from { transform: translateY(28px) scale(.8); opacity: 0; }
+      to { transform: translateY(0) scale(1); opacity: 1; }
+    }
+    #result-title { font-size: 27px; margin-bottom: 14px; }
+    #result-message { font-size: 15px; line-height: 1.8; margin-bottom: 14px; color: #444; }
+    #result-times { font-size: 13px; color: #888; margin-bottom: 22px; }
+    .result-btns { display: flex; gap: 10px; justify-content: center; }
+    .result-btns button {
+      padding: 10px 18px; border: none; border-radius: 8px; cursor: pointer;
+      font-size: 14px; color: #fff;
+    }
+    #result-next { background: #27ae60; }
+    #result-next:hover { background: #1e8449; }
+    #result-tower-reset { background: #8e44ad; }
+    #result-tower-reset:hover { background: #6c3483; }
+    #result-restart { background: #2980b9; }
+    #result-restart:hover { background: #1f618d; }
+    #result-viewmap { background: #2c3e50; }
+    #result-viewmap:hover { background: #1a252f; }
+
+    .pin.transfer { background: #f39c12; font-size: 11px; }
+
+    #result-toggle-btn {
+      position: absolute; right: 14px; bottom: 22px; z-index: 500;
+      padding: 8px 14px; border: none; border-radius: 6px;
+      background: #2c3e50; color: #fff; font-size: 13px; cursor: pointer;
+      box-shadow: 0 2px 8px rgba(0,0,0,.2);
+    }
+
+    #error {
+      position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
+      z-index: 700; max-width: 440px; padding: 18px 20px;
+      background: #fff; border-radius: 10px; box-shadow: 0 6px 30px rgba(0,0,0,.3);
+      font-size: 14px; line-height: 1.6; color: #c0392b;
+    }
+
+    /* 屏幕正中心提示框（半透明黑圆角） */
+    #center-toast {
+      position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
+      z-index: 980; pointer-events: none;
+    }
+    .center-toast-inner {
+      padding: 14px 22px; background: rgba(0,0,0,0.72); border-radius: 14px;
+      color: #fff; font-size: 15px; letter-spacing: 1px; text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <div id="map"></div>
+
+    <header id="topbar">
+      <div class="title">从A到B<span class="sub" id="city-label">北京</span></div>
+      <div class="topbar-right">
+        <div class="status" id="status">加载中…</div>
+        <button id="menu-btn" title="返回主界面">🏠</button>
+      </div>
+    </header>
+
+    <div id="legend">
+      <div class="row"><span class="dot metro"></span> 地铁站</div>
+      <div class="row"><span class="dot bus"></span> 公交站</div>
+      <div class="hint">放大地图显示站点；点击站点开始规划，点击沿途站点换乘，点击「终」完成</div>
+    </div>
+
+    <div id="left-col">
+      <div id="route-panel" class="hidden"></div>
+      <div id="infocard" class="hidden">
+        <div class="stop-name" id="info-stop"></div>
+        <div class="line-list" id="info-lines"></div>
+        <div id="info-walk"></div>
+      </div>
+    </div>
+
+    <div id="error" class="hidden"></div>
+
+    <!-- 屏幕正中心提示框 -->
+    <div id="center-toast" class="hidden">
+      <div class="center-toast-inner"></div>
+    </div>
+
+    <div class="btn-group hidden" id="btn-group">
+      <button id="show-all-btn">显示全图站点</button>
+      <button id="tower-restart-btn" class="hidden">🔄 从第1层重来</button>
+      <button id="undo-btn">上一步</button>
+      <button id="reset-btn">取消</button>
+    </div>
+
+    <div id="loading-overlay" class="hidden">
+      <div class="spinner"></div>
+      <div class="loading-text" id="loading-text">正在计算最优路线…</div>
+    </div>
+
+    <!-- 关卡结束结果 -->
+    <div id="result-overlay" class="hidden">
+      <div class="result-inner">
+        <div id="result-title">🎉 恭喜！</div>
+        <div id="result-message"></div>
+        <div id="result-times"></div>
+        <div class="result-btns">
+          <button id="result-restart">重新开始</button>
+          <button id="result-viewmap">查看最快</button>
+          <button id="result-next">下一关</button>
+          <button id="result-tower-reset" class="hidden">🔄 从第1层重新开始</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 查看地图时返回结果的开关 -->
+    <button id="result-toggle-btn" class="hidden">📋 结果</button>
+
+    <!-- 主菜单 -->
+    <div id="main-menu">
+      <div class="main-inner">
+        <h1>从A到B</h1>
+        <p class="main-sub">城市公共交通制霸</p>
+        <div class="main-btns">
+          <button id="story-btn">📖 故事模式</button>
+          <button id="tower-btn">🗼 无尽模式</button>
+          <button id="free-btn">🆓 自由模式</button>
+          <button id="online-btn" class="locked">🏆 排位模式（敬请期待）</button>
+          <button id="settings-btn">⚙️ 设置</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 故事模式关卡选择 -->
+    <div id="story-menu" class="hidden">
+      <div class="story-menu-inner">
+        <h2>故事模式</h2>
+        <div id="story-level-list"></div>
+        <button id="story-back-btn" class="story-back">← 返回</button>
+      </div>
+    </div>
+
+    <!-- 剧情窗口（下半屏 Galgame） -->
+    <div id="story-dialog" class="hidden">
+      <div class="story-dialog-inner">
+        <div class="story-speaker" id="story-speaker"></div>
+        <div class="story-text" id="story-text"></div>
+        <div class="story-next-hint">点击继续 ▸</div>
+      </div>
+    </div>
+
+    <!-- 教学聊天泡泡（右下角） -->
+    <div id="tutorial-bubble" class="hidden">
+      <div class="tutorial-bubble-inner">
+        <div id="tutorial-text"></div>
+        <div class="tutorial-btns"><button id="tutorial-next">下一步</button></div>
+      </div>
+    </div>
+
+    <!-- 自由模式：情景选择 -->
+    <div id="free-menu" class="hidden">
+      <div class="free-menu-inner">
+        <h2>🆓 自由模式</h2>
+        <p class="free-sub">选择要加载的情景（可多选）</p>
+        <div class="free-opts">
+          <label><input type="checkbox" id="free-no-metro"> 地下瘫痪（禁用地铁）</label>
+          <label><input type="checkbox" id="free-bus-boost"> 一路畅通（公交加速20%）</label>
+          <label><input type="checkbox" id="free-rain"> 大雨滂沱（公交/步行减缓50%）</label>
+        </div>
+        <div class="free-btns">
+          <button id="free-start-btn">开始</button>
+          <button id="free-back-btn">← 返回</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 无尽模式：爬塔畸变选择（成绩分别记录） -->
+    <div id="tower-menu" class="hidden">
+      <div class="tower-menu-inner">
+        <h2>🗼 无尽模式</h2>
+        <p class="tower-sub">选择畸变开始爬塔（各畸变成绩分别记录）</p>
+        <div class="tower-opts">
+          <button id="tower-normal" class="tower-opt"><span class="tower-opt-label">普通模式</span><span class="tower-best">暂无纪录</span></button>
+          <button id="tower-no-metro" class="tower-opt"><span class="tower-opt-label">地铁瘫痪（禁用地铁）</span><span class="tower-best">暂无纪录</span></button>
+          <button id="tower-bus-boost" class="tower-opt"><span class="tower-opt-label">一路畅通（公交加速20%）</span><span class="tower-best">暂无纪录</span></button>
+          <button id="tower-rain" class="tower-opt"><span class="tower-opt-label">大雨滂沱（公交/步行减缓50%）</span><span class="tower-best">暂无纪录</span></button>
+        </div>
+        <button id="tower-back-btn" class="story-back">← 返回</button>
+      </div>
+    </div>
+
+    <!-- 爬塔 HUD（无尽模式进行中显示） -->
+    <div id="tower-hud" class="hidden">
+      <span id="tower-layer-label">第 1 层</span>
+      <span id="tower-threshold-label">要求 ≤ 100%</span>
+    </div>
+
+    <!-- 设置 -->
+    <div id="settings-panel" class="hidden">
+      <div class="settings-inner">
+        <h2>设置</h2>
+        <label style="margin-top:4px;">缩放速度</label>
+        <div style="display:flex;align-items:center;gap:8px;margin-top:4px;">
+          <span style="font-size:12px;color:#888;">慢</span>
+          <input type="range" id="zoom-speed-slider" min="0" max="1" step="0.05" value="0.5" style="flex:1;">
+          <span style="font-size:12px;color:#888;">快</span>
+        </div>
+        <div class="settings-hint">数值越大，滚轮缩放越快（0.5 为默认）</div>
+
+        <label style="margin-top:14px;">高德地图 Key（可选）</label>
+        <div style="margin-top:4px;">
+          <input type="text" id="amap-key-input" placeholder="jsApiKey（留空则用免 Key 的 OSM 地图）" style="width:100%;padding:7px;font-size:13px;">
+          <input type="text" id="amap-sec-input" placeholder="securityJsCode（安全密钥）" style="width:100%;padding:7px;font-size:13px;margin-top:6px;">
+        </div>
+        <div class="settings-hint" style="margin-left:0;">
+          <a href="https://lbs.amap.com/api/javascript-api-v2/guide/abc/prepare" target="_blank" rel="noopener">📖 高德 Key 获取教程</a>
+          <br>填 Key 后保存并刷新 → 使用高德底图；清空保存 → 回到免 Key 的 OSM 地图。
+        </div>
+        <div style="text-align:right;margin-top:8px;"><button id="amap-save-btn">保存 Key</button></div>
+
+        <div class="settings-btns"><button id="settings-close">返回</button></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/router.js?v=2"></script>
+  <script src="js/amap-polyfill.js"></script>
+  <script src="js/app.js?v=3"></script>
+</body>
+</html>
