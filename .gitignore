@@ -1,3 +1,6 @@
+# ---- 构建产物 ----
+release/
+
 # ---- 原始数据（11GB，已转换进 beijing-transit.json，运行时不需要）----
 data/cptond/
 

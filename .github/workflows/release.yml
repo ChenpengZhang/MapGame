@@ -1,0 +1,45 @@
+name: Build Release
+
+# 触发条件：push 一个 v 开头的标签（如 v0.1.0）
+on:
+  push:
+    tags:
+      - 'v*'
+
+# 允许 workflow 写入 Release
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: 打包 ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            target: win-x64
+          - os: macos-latest
+            target: darwin-arm64
+          - os: macos-13
+            target: darwin-x64
+          - os: ubuntu-latest
+            target: linux-x64
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 安装 Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: 打包
+        run: node build-release.js --target ${{ matrix.target }}
+
+      - name: 上传产物到 Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release/MapGame-${{ matrix.target }}.*
