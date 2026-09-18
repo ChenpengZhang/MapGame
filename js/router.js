@@ -196,7 +196,8 @@
       lineById.set(lid, l);
       l.stopIndex = new Map(l.stops.map((s, i) => [s.id, i]));
       // 地铁环线（内环/外环）首尾相邻，补上闭环距离，供"走站少的那边"
-      l.isLoop = /内环|外环/.test(line.name || '');
+      // 注意：名称含"区间"的是短途/区间线（如 300路外环区间），首末站不相邻，不是闭环，不能按环线处理
+      l.isLoop = /内环|外环/.test(line.name || '') && !/区间/.test(line.name || '');
       if (l.isLoop && l.stops.length >= 2) {
         const a = l.stops[0], b = l.stops[l.stops.length - 1];
         l.wrapDistKm = haversineKm([a.lng, a.lat], [b.lng, b.lat]);
@@ -280,7 +281,12 @@
         physIds.push(p.id);
       }
 
-      const id = 'S_' + name + '@' + rep.lng.toFixed(4) + ',' + rep.lat.toFixed(4);
+      // 逻辑站 id 必须全局唯一。
+      // 曾经只用「站名 + 代表点坐标(4位小数)」，但多个同名、坐标相近却因共享线路而
+      // 无法合并的簇会生成同一个 id，后者在 logicalById.set() 时覆盖前者，导致先者的
+      // 物理站全部丢失线路信息（stopByLine 查不到 → 乘车边断开 → 寻路被迫绕远）。
+      // 实测「马连店」一个站就有 15 条线路因此失踪。这里追加代表物理站的唯一 id 消歧。
+      const id = 'S_' + name + '@' + rep.lng.toFixed(4) + ',' + rep.lat.toFixed(4) + '#' + rep.id;
       logicalById.set(id, {
         id, name, lng: rep.lng, lat: rep.lat, mode: rep.mode,
         lineIds: Array.from(lineIds), stopByLine,
@@ -307,29 +313,50 @@
     return out;
   }
 
-  // 候选站：固定取直线最近（且 ≤1.5km）的 N 个公交站 + M 个地铁站
+  // 候选站：1.5km 内「全部」站点。
+  //
+  // 历史教训：早期版本只取最近 N 公交 + M 地铁（3+2），导致系统"最优"的可选范围
+  // 小于玩家的可选范围（玩家能点 1.5km 内任意站），于是出现"玩家比最优还快"的
+  // 逻辑错误（实测约 36% 的随机题目会触发，平均差 5.7 分钟、最多差 47 分钟）。
+  // 现在返回全部候选：系统的搜索空间 ⊇ 玩家可达空间，从构造上保证 最优 ≤ 玩家方案。
+  // 性能无忧：城区 1.5km 内约 60~150 站，全候选与 3+2 的单次寻路耗时基本相同
+  //（Dijkstra 本就遍历全图，候选只影响源点数与步行计算；步行是纯 haversine）。
   function adaptiveCandidates(graph, pt, opts) {
     opts = Object.assign({}, DEFAULT_PARAMS, opts || {}); // 防御：未传的参数用默认值
-    const bus = [], metro = [], all = [];
+    const all = [];
     for (const p of graph.physList) {
       const d = haversineKm(pt, [p.lng, p.lat]);
       if (d > MAX_WALK_KM) continue; // 距离过滤：步行不超过 1.5km
       all.push({ p, d });
-      if (p.mode === 'metro') metro.push({ p, d });
-      else bus.push({ p, d });
     }
-    bus.sort((a, b) => a.d - b.d);
-    metro.sort((a, b) => a.d - b.d);
+    all.sort((a, b) => a.d - b.d);
+    if (!all.length) return [];
+    return all.map((x) => x.p);
+  }
 
-    const out = [];
-    for (let i = 0; i < opts.candidateBaseBus && i < bus.length; i++) out.push(bus[i].p);
-    if (opts.allowMetro) {
-      for (let i = 0; i < opts.candidateBaseMetro && i < metro.length; i++) out.push(metro[i].p);
-    }
-    if (!out.length && all.length) {
-      // 兜底：1.5km 内没有任何站时，取最近的一个（避免无路线）
-      all.sort((a, b) => a.d - b.d);
-      out.push(all[0].p);
+  // 把「候选物理站」展开成「(逻辑站, 线路) 状态 → 该线路上真实的上/下车物理站」。
+  //
+  // 为什么必须按线路取物理站：一个逻辑站是若干物理站的合并簇（例：地铁站与 200m 外的
+  // 同名公交站被合并），不同线路的实际停靠点可能相距几百米。步行时间必须按"你要坐的
+  // 那条线"的真实停靠点计算，否则会出现"按候选站打分、按真实站报数"的口径不一致
+  //（这正是旧版另一个 bug：选出来的最优用同一套坐标重算后反而变慢）。
+  function expandStates(graph, candidates, opts) {
+    const out = new Map(); // stateKey -> { logicalId, lineId, physId }
+    for (const p of candidates) {
+      const logId = graph.physToLogical.get(p.id);
+      if (!logId) continue;
+      const log = graph.logicalById.get(logId);
+      if (!log) continue;
+      for (const lid of log.lineIds) {
+        const line = graph.lineById.get(lid);
+        if (!line) continue;
+        if (!opts.allowMetro && line.mode === 'metro') continue;
+        const key = stateKey(logId, lid);
+        if (out.has(key)) continue;
+        const phys = physicalStopFor(graph, logId, lid);
+        if (!phys) continue;
+        out.set(key, { logicalId: logId, lineId: lid, physId: phys.id });
+      }
     }
     return out;
   }
@@ -509,63 +536,73 @@
   // origin/dest: [lng, lat]；opts: 成本参数覆盖（含 allowMetro）；walkFn(a,b) -> Promise<{dist(米), min(分钟)}>
   function findOptimalRoute(graph, origin, dest, opts, walkFn) {
     opts = Object.assign({}, DEFAULT_PARAMS, opts || {});
-    // 自适应候选站：直线前 3 公交 + 前 2 地铁必选，距离接近的额外纳入
-    const board = adaptiveCandidates(graph, origin, opts);
-    const alight = adaptiveCandidates(graph, dest, opts);
-    if (!board.length || !alight.length) return Promise.resolve(null);
+    // 候选站：1.5km 内全部站点
+    const boardCand = adaptiveCandidates(graph, origin, opts);
+    const alightCand = adaptiveCandidates(graph, dest, opts);
+    if (!boardCand.length || !alightCand.length) return Promise.resolve(null);
+
+    // 展开成 (逻辑站,线路) 状态，并取该线路上的真实上/下车物理站
+    const boardStates = expandStates(graph, boardCand, opts);
+    const alightStates = expandStates(graph, alightCand, opts);
+    if (!boardStates.size || !alightStates.size) return Promise.resolve(null);
+
+    // 步行时间：按「每个涉及到的物理站」各算一次（去重，避免重复调用）
+    const boardPhysIds = new Set();
+    for (const s of boardStates.values()) boardPhysIds.add(s.physId);
+    const alightPhysIds = new Set();
+    for (const s of alightStates.values()) alightPhysIds.add(s.physId);
 
     const tasks = [];
-    for (const p of board) tasks.push(walkFn(origin, [p.lng, p.lat]).then((r) => ({ kind: 'to', physId: p.id, r })));
-    for (const p of alight) tasks.push(walkFn([p.lng, p.lat], dest).then((r) => ({ kind: 'from', physId: p.id, r })));
+    for (const pid of boardPhysIds) {
+      const p = graph.physById.get(pid);
+      tasks.push(walkFn(origin, [p.lng, p.lat]).then((r) => ({ kind: 'to', physId: pid, min: r.min })));
+    }
+    for (const pid of alightPhysIds) {
+      const p = graph.physById.get(pid);
+      tasks.push(walkFn([p.lng, p.lat], dest).then((r) => ({ kind: 'from', physId: pid, min: r.min })));
+    }
 
     return Promise.all(tasks).then((results) => {
       const toMin = new Map();
       const fromMin = new Map();
       for (const x of results) {
-        if (x.kind === 'to') toMin.set(x.physId, x.r.min);
-        else fromMin.set(x.physId, x.r.min);
+        if (x.kind === 'to') toMin.set(x.physId, x.min);
+        else fromMin.set(x.physId, x.min);
       }
 
-      // 单次多源 Dijkstra：把"步行到上车站"的时间并入源点成本，保证配对正确
+      // 单次多源 Dijkstra：源点成本 = 步行到「该线路真实上车站」+ 等车
       const sources = new Map();
-      for (const p of board) {
-        const logId = graph.physToLogical.get(p.id);
-        const wTo = toMin.get(p.id);
-        if (!logId || wTo == null) continue;
-        const log = graph.logicalById.get(logId);
-        for (const lid of log.lineIds) {
-          const line = graph.lineById.get(lid);
-          if (!line) continue;
-          if (!opts.allowMetro && line.mode === 'metro') continue;
-          const key = stateKey(logId, lid);
-          const c = wTo + waitOf(line, opts);
-          const cur = sources.get(key);
-          if (!cur || c < cur.cost) sources.set(key, { logicalId: logId, lineId: lid, cost: c, boardPhysId: p.id, walkToMin: wTo });
+      for (const [key, s] of boardStates) {
+        const wTo = toMin.get(s.physId);
+        if (wTo == null) continue;
+        const line = graph.lineById.get(s.lineId);
+        if (!line) continue;
+        const c = wTo + waitOf(line, opts);
+        const cur = sources.get(key);
+        if (!cur || c < cur.cost) {
+          sources.set(key, { logicalId: s.logicalId, lineId: s.lineId, cost: c, boardPhysId: s.physId, walkToMin: wTo });
         }
       }
       if (!sources.size) return null;
 
       const { dist, parent } = runDijkstra(graph, sources, opts);
 
+      // 终点：总时间 = 到达该状态的乘车成本（已含步行到上车站）+ 从「该线路真实下车站」步行到终点
       let best = null;
-      for (const ap of alight) {
-        const aLog = graph.physToLogical.get(ap.id);
-        const wFrom = fromMin.get(ap.id);
-        if (!aLog || wFrom == null) continue;
-        const alog = graph.logicalById.get(aLog);
-        let bestLine = null, bestTransit = Infinity;
-        for (const lid of alog.lineIds) {
-          if (!opts.allowMetro && graph.lineById.get(lid).mode === 'metro') continue;
-          const key = stateKey(aLog, lid);
-          if (dist.has(key) && dist.get(key) < bestTransit) {
-            bestTransit = dist.get(key);
-            bestLine = lid;
-          }
-        }
-        if (bestTransit === Infinity) continue;
-        const total = bestTransit + wFrom; // bestTransit 已含步行到上车站
+      for (const [key, s] of alightStates) {
+        const d = dist.get(key);
+        if (d == null || d === Infinity) continue;
+        const wFrom = fromMin.get(s.physId);
+        if (wFrom == null) continue;
+        const total = d + wFrom;
         if (!best || total < best.totalMin) {
-          best = { totalMin: total, fromOriginMin: bestTransit, walkFromMin: wFrom, alightPhys: ap, bestState: { logicalId: aLog, lineId: bestLine } };
+          best = {
+            totalMin: total,
+            fromOriginMin: d,
+            walkFromMin: wFrom,
+            alightPhys: graph.physById.get(s.physId),
+            bestState: { logicalId: s.logicalId, lineId: s.lineId },
+          };
         }
       }
       if (!best) return null;
@@ -580,32 +617,17 @@
       }
       const src = srcState ? sources.get(stateKey(srcState.logicalId, srcState.lineId)) : null;
       best.walkToMin = src ? src.walkToMin : 0;
-      best.transitMin = best.fromOriginMin - best.walkToMin;
+      best.transitMin = best.fromOriginMin - best.walkToMin; // 纯乘车（含等车/换乘），不含两端步行
       best.boardPhys = src ? graph.physById.get(src.boardPhysId) : null;
 
       best.legs = reconstructRoute(graph, parent, best.bestState, opts);
       best.board = best.boardPhys ? { name: best.boardPhys.name, mode: best.boardPhys.mode, lng: best.boardPhys.lng, lat: best.boardPhys.lat } : null;
-      best.alight = { name: best.alightPhys.name, mode: best.alightPhys.mode, lng: best.alightPhys.lng, lat: best.alightPhys.lat };
+      best.alight = best.alightPhys ? { name: best.alightPhys.name, mode: best.alightPhys.mode, lng: best.alightPhys.lng, lat: best.alightPhys.lat } : null;
       best.transferCount = best.legs.filter((l) => l.type === 'transfer').length;
 
-      // 修正起/终点为换乘站时的上下车点：实际上下车点应是"所选线路"上的物理站
-      // （而非离起/终点直线最近的那个候选物理站），步行时间也要按它重算。
-      const boardPhys2 = srcState ? physicalStopFor(graph, srcState.logicalId, srcState.lineId) : null;
-      const alightPhys2 = physicalStopFor(graph, best.bestState.logicalId, best.bestState.lineId);
-      const pWalkTo = boardPhys2 ? walkFn(origin, [boardPhys2.lng, boardPhys2.lat]).then((r) => r.min) : Promise.resolve(best.walkToMin);
-      const pWalkFrom = alightPhys2 ? walkFn([alightPhys2.lng, alightPhys2.lat], dest).then((r) => r.min) : Promise.resolve(best.walkFromMin);
-
-      return Promise.all([pWalkTo, pWalkFrom]).then(([walkToMin, walkFromMin]) => {
-        best.transitMin = best.fromOriginMin - best.walkToMin; // 纯乘车时间不变
-        best.walkToMin = walkToMin;
-        best.walkFromMin = walkFromMin;
-        best.totalMin = best.transitMin + best.walkToMin + best.walkFromMin;
-        if (boardPhys2) best.boardPhys = boardPhys2;
-        if (alightPhys2) best.alightPhys = alightPhys2;
-        best.board = best.boardPhys ? { name: best.boardPhys.name, mode: best.boardPhys.mode, lng: best.boardPhys.lng, lat: best.boardPhys.lat } : null;
-        best.alight = best.alightPhys ? { name: best.alightPhys.name, mode: best.alightPhys.mode, lng: best.alightPhys.lng, lat: best.alightPhys.lat } : null;
-        return best;
-      });
+      // 注意：上下车物理站与步行时间已在「选择最优」时按所选线路确定并计入 totalMin，
+      // 这里不再事后重算（旧版在此处重算，导致选择的打分口径与最终报数口径不一致）。
+      return best;
     });
   }
 

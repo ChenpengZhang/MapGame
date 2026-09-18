@@ -506,8 +506,16 @@
     </div>
   </div>
 
+  <!--
+    脚本加载顺序（勿随意调整）：
+      1) router.js       纯算法寻路器（UMD，挂 window.TransitRouter），必须最先执行；
+      2) amap-polyfill.js 免 Key 的 Leaflet+OSM 兼容层（定义 window.AMap）；
+      3) app.js          应用入口，type="module"：模块是延迟执行的，
+                         因此它必然在这两个普通脚本之后运行，可以安全使用它们的全局对象。
+    前端源码分层见 js/{core,data,map,game,ui}/，说明见 docs/前端架构.md。
+  -->
   <script src="js/router.js?v=2"></script>
   <script src="js/amap-polyfill.js"></script>
-  <script src="js/app.js?v=3"></script>
+  <script src="js/app.js?v=4" type="module"></script>
 </body>
 </html>
