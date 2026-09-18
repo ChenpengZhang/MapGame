@@ -131,6 +131,7 @@ MapGame/
 ├── calibrate.js           # 成本模型锚点法校准
 ├── benchmark.js           # 本地模型 vs 高德真实耗时（端到端误差）
 ├── lib/shp.js             # 最小 shapefile 读取器（零依赖）
+├── fonts/                 # ChillRoundF（寒蝉全圆体，SIL OFL 1.1，本地打包）
 ├── data/
 │   ├── sample.json         # 演示数据（开箱即用）
 │   ├── beijing-transit.json        # 全量数据（GCJ-02，唯一数据源）

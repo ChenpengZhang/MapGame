@@ -1,0 +1,35 @@
+ChillRoundF（寒蝉全圆体）字体说明与许可证
+============================================
+
+字体名称：ChillRoundF / 寒蝉全圆体
+版本：Version 3.200（Regular）
+作者 / 维护者：Warren2060（ChillType）
+项目主页：https://github.com/Warren2060/ChillRoundF
+
+版权与来源（摘自字体元数据 Name Table）：
+  copyright: {Kosugi Maru}{Justfont}{Maoken}{ChillType}
+              Copyright(C)2010 MOTOYA CO.,LTD.
+  trademark:  Justfont & Maoken & ChillType
+  manufacturer: ChillType
+  designer:   Warren2060
+
+字体构成（改作来源）：
+  · Kosugi Maru（小杉圆体，MOTOYA）
+  · jf open 粉圆（justfont）
+  · 猫啃糖圆体（Maoken）
+  · Varela Round（西文，Joe Prince，SIL OFL）
+
+许可证：SIL Open Font License, Version 1.1
+  http://scripts.sil.org/OFL
+
+本字体以 SIL OFL 1.1 授权发布。您可以免费使用、修改并在项目中再分发本字体，
+包括随本游戏打包发布，前提是：
+  1. 不得单独销售字体本身；
+  2. 分发时需保留本许可证与上述版权/署名信息；
+  3. 修改后的字体不得继续使用原名称（"Reserved Font Name" 规则，如适用）。
+
+完整的 SIL OFL 1.1 许可证文本：
+  https://openfontlicense.org/open-font-license-official-text/
+
+本目录中的 .woff2 文件由 cn-font-split 工具按 Unicode 范围切分，
+来自 https://file.tcdw.net/fonts/ChillRoundF/ChillRoundF.css 所引用的子集文件。

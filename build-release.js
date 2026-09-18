@@ -42,6 +42,7 @@ const INCLUDE = [
   'server.js',
   'index.html',
   'js',                         // app.js / router.js / amap-polyfill.js
+  'fonts',                      // ChillRoundF 字体（SIL OFL，本地打包）
   'data/beijing-transit.json',  // 全量数据（GCJ-02）
   'data/sample.json',           // 演示兜底
   'README.md',

@@ -20,15 +20,32 @@ import { loadAmapKey, loadAmapSecurity } from '../core/storage.js';
 /** 互斥的五个主面板（同一时间只该出现一个） */
 export const PANELS = ['main-menu', 'story-menu', 'tower-menu', 'free-menu', 'settings-panel'];
 
+/**
+ * 同步"菜单态"：只要任意一个全屏面板可见，就给 #app 打上 .menu-open，
+ * 由 CSS 隐藏地图上的游戏 UI（顶栏/图例/操作条等），避免从半透明菜单透出。
+ * 面板显隐的唯一出口（hideAllPanels / showPanel / 设置开关）都会调用它，
+ * 因此不需要在其它地方手工维护这个状态。
+ */
+export function refreshMenuChrome() {
+  const menuOpen = PANELS.some((id) => {
+    const el = $(id);
+    return el && !el.classList.contains('hidden');
+  });
+  const app = $('app');
+  if (app) app.classList.toggle('menu-open', menuOpen);
+}
+
 /** 隐藏所有主面板（开始一局、切关卡时用） */
 export function hideAllPanels() {
   for (const id of PANELS) hide(id);
+  refreshMenuChrome();
 }
 
 /** 只显示指定主面板 */
 export function showPanel(id) {
   hideAllPanels();
   show(id);
+  refreshMenuChrome();
 }
 
 // ============ 设置面板 ============
@@ -40,11 +57,13 @@ export function openSettingsPanel() {
   if (keyInput) keyInput.value = loadAmapKey();
   if (secInput) secInput.value = loadAmapSecurity();
   show('settings-panel');
+  refreshMenuChrome();
 }
 
 /** 关闭设置面板（不保存） */
 export function closeSettingsPanel() {
   hide('settings-panel');
+  refreshMenuChrome();
 }
 
 // ============ 状态驱动的局部刷新 ============
@@ -69,7 +88,10 @@ export function updateFreeButton() {
   const free = $('free-btn');
   if (!free) return;
   free.classList.remove('locked');
-  free.textContent = '🆓 自由模式';
+  // 只改文字标签，保留左下角的 emoji 贴纸（.btn-emoji）
+  const label = free.querySelector('.btn-label');
+  if (label) label.textContent = '自由模式';
+  else free.textContent = '🆓 自由模式';
 }
 
 /** 按完成状态切换按钮：规划中=上一步+取消；完成后隐藏（由结果弹窗接管） */

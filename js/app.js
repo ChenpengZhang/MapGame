@@ -36,7 +36,7 @@ import { startTower, resetTowerFromLayer1 } from './game/tower.js';
 // 注意：import game/flow.js 会执行它的模块体，从而注册"最优路线就绪"的订阅（结算弹窗）
 import { nextLevel, restartLevel } from './game/flow.js';
 import { loadStoryProgress, loadTowerState } from './game/progress.js';
-import { buildStoryLevels, openSettingsPanel, closeSettingsPanel, setCityLabel } from './ui/menu.js';
+import { buildStoryLevels, openSettingsPanel, closeSettingsPanel, setCityLabel, refreshMenuChrome } from './ui/menu.js';
 import { hideResultOverlay } from './ui/result.js';
 import { storyNext, tutorialNext } from './ui/story.js';
 
@@ -155,4 +155,5 @@ bindUiEvents();
 loadStoryProgress();   // 故事模式解锁进度（localStorage）
 loadTowerState();      // 爬塔纪录（localStorage）
 buildStoryLevels(startLevel); // 预生成关卡卡片（打开故事菜单时也会重建）
+refreshMenuChrome();          // 首屏即为主菜单，隐藏地图上的游戏 UI
 bootstrap();
