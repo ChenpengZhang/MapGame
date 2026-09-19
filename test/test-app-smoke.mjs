@@ -191,7 +191,7 @@ const { stopToData } = await import('../js/map/stop-marks.js');
 const { initMap } = await import('../js/map/map-init.js');
 const { renderMetroContext, renderStops, toggleShowAllStops } = await import('../js/map/stop-layer.js');
 const { onStopMouseOver, onStopMouseOut } = await import('../js/map/hover.js');
-const { onStopClick, onCandidateStopClick, finishRoute, resetRoute, undoRoute, confirmStart } = await import('../js/game/route.js');
+const { onStopClick, onCandidateStopClick, finishRoute, resetRoute, undoRoute } = await import('../js/game/route.js');
 const { startLevel, showMenu, openStoryMenu, openTowerMenu } = await import('../js/game/session.js');
 const { startTower, resetTowerFromLayer1, towerThreshold } = await import('../js/game/tower.js');
 const { nextLevel, restartLevel } = await import('../js/game/flow.js');
@@ -343,19 +343,27 @@ await step('手机两阶段选站 + 两局残留检查', async () => {
   }, { skipStory: true });
 
   start();
+  // 起点：第一次点 = 悬浮高亮（不开始）
   onStopClick({ data: stopToData(physA) });
-  assert.equal(state.routeStops.length, 0, '第一次点只预览，不开始路线');
+  assert.equal(state.routeStops.length, 0, '起点第一次点只预览');
   assert.ok(state.pendingStart, '已记录待确认起点');
-  assert.ok(state.candidateMarks && state.candidateMarks.data.length > 0, '已显示换乘站（候选网络）');
+  assert.equal(state.candidateMarks, null, '预览阶段不显示候选网络');
 
-  // 再次点击同一站 = 确认
+  // 起点：再次点击同一站 = 确认
   onStopClick({ data: stopToData(physA) });
-  assert.equal(state.routeStops.length, 1, '再次点击同一站确认后路线才开始');
-  assert.equal(state.pendingStart, null, '确认后清空待确认状态');
+  assert.equal(state.routeStops.length, 1, '起点再次点击确认后开始');
+  assert.equal(state.pendingStart, null, '确认后清空待确认起点');
 
-  // 换乘一步 + 完成第一局
+  // 下一站：第一次点 = 悬浮高亮（不确定）
   onCandidateStopClick(stopToData(physB));
-  assert.equal(state.routeStops.length, 2, '换乘后两站');
+  assert.equal(state.routeStops.length, 1, '下一站第一次点只预览');
+  assert.ok(state.pendingCandidate, '已记录待确认下一站');
+
+  // 下一站：再次点击同一站 = 确认
+  onCandidateStopClick(stopToData(physB));
+  assert.equal(state.routeStops.length, 2, '下一站再次点击确认后换乘');
+  assert.equal(state.pendingCandidate, null, '确认后清空待确认下一站');
+
   finishRoute();
   await wait(400);
   assert.equal(state.finished, true, '第一局完成');
@@ -368,7 +376,8 @@ await step('手机两阶段选站 + 两局残留检查', async () => {
   assert.equal(state.finished, false, '重开后 finished 复位');
   assert.equal(state.candidateMarks, null, '重开后无候选站点残留');
   assert.equal(state.candidateOverlays.length, 0, '重开后无候选线路残留');
-  assert.equal(state.pendingStart, null, '重开后无预览状态残留');
+  assert.equal(state.pendingStart, null, '重开后无起点预览残留');
+  assert.equal(state.pendingCandidate, null, '重开后无下一站预览残留');
 
   // 第二局应能正常重新预览
   onStopClick({ data: stopToData(physA) });

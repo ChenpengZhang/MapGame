@@ -46,6 +46,7 @@ export const state = {
   showAllStops: false,          // 规划中"全图显示站点"开关（开启时不能继续规划）
   isTouch: false,               // 是否触摸设备（由 app.js 启动时用 isTouchDevice 判定）
   pendingStart: null,           // 手机端两阶段选站：已预览但未确认的起点 {logical, point}
+  pendingCandidate: null,       // 手机端两阶段选站：已预览但未确认的下一站 {logical}
 
   // ---------- 无尽模式（爬塔） ----------
   towerActive: false,           // 是否处于爬塔中

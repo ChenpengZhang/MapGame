@@ -24,7 +24,7 @@ import { state } from '../core/state.js';
 import { METRO_MIN_ZOOM, BUS_MIN_ZOOM, MAX_BUS_RENDER } from '../core/config.js';
 import { setStatus, $ } from '../core/dom.js';
 import { makeMassMarks, stopToData } from './stop-marks.js';
-import { fadeInOverlay, tweenAlpha, overlayAlpha, captureMassMarksCanvas, removeOverlay, ANIM_FADE_OUT_MS } from './anim.js';
+import { fadeInOverlay, captureMassMarksCanvas, removeOverlay } from './anim.js';
 import { mapContainer } from './map-init.js';
 
 // ---------- 模块内部状态（只被本文件使用，因此不放进 core/state.js） ----------
@@ -153,7 +153,7 @@ export function updateStopsByZoom() {
   setStopsVisible(busMarks, showBase && z >= BUS_MIN_ZOOM, () => busMarksShown, (v) => { busMarksShown = v; }); // 公交站按缩放等级显隐
 }
 
-/** 站点层显隐：状态变化时才淡入/淡出，避免每次缩放重复触发 */
+/** 站点层显隐：直接 show/hide，不依赖淡出动画回调（回调在 iOS Safari 等环境可能不触发，导致站点层卡住） */
 function setStopsVisible(mm, show, getShown, setShown) {
   if (!mm) return;
   if (getShown() === show) return;
@@ -161,12 +161,9 @@ function setStopsVisible(mm, show, getShown, setShown) {
   if (show) {
     refreshStopData(mm); // 显示前按当前视野填充数据（视野渲染）
     mm.show();
-    fadeInOverlay(mm);
   } else {
     // 隐藏用 hide() 而非 setMap(null)，这样后续 show() 还能恢复
-    const info = overlayAlpha(mm);
-    if (!info) { mm.hide(); return; }
-    tweenAlpha(mm, info.set, info.get(), 0, ANIM_FADE_OUT_MS, () => mm.hide());
+    mm.hide();
   }
 }
 

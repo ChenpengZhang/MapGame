@@ -24,7 +24,7 @@ import { makeMassMarks, stopToData } from '../map/stop-marks.js';
 import { fadeInOverlay, setMassMarksMap, removeOverlay } from '../map/anim.js';
 import { hideBaseStops, updateStopsByZoom } from '../map/stop-layer.js';
 import { addStopMarker, drawRideSegment, drawTransferWalk, rideEndpoint, drawWalkLeg, clearGroupOverlays } from '../map/route-layer.js';
-import { onStopMouseOver, onStopMouseOut } from '../map/hover.js';
+import { onStopMouseOver, onStopMouseOut, clearHighlight, renderHighlight } from '../map/hover.js';
 import { clearOptimal } from '../map/optimal-layer.js';
 import { haversineKm } from '../core/router-api.js';
 import { rideStats } from './time-model.js';
@@ -36,6 +36,18 @@ import { updateButtons, updateLegend } from '../ui/menu.js';
 const MAX_CANDIDATE_POINTS = 3000;
 
 // ============ 起点：点第一个站 ============
+
+/** 判断两个逻辑站是否同一个（id 可能来自不同来源，统一转字符串比较） */
+function sameLogical(a, b) {
+  return String(a.id) === String(b.id);
+}
+
+/** "下一步该点哪里"的状态栏提示（手机端是两阶段点击，桌面是单击） */
+function ridingHint() {
+  return state.isTouch
+    ? '点一下沿途站高亮、再点一下确定换乘；点击「终」完成'
+    : '点击沿途站点换乘，点击「终」完成';
+}
 
 /** 基础站点层的点击回调（由 app.js 注入到 map/stop-layer.js） */
 export function onStopClick(e) {
@@ -50,8 +62,8 @@ export function onStopClick(e) {
     return;
   }
   if (state.isTouch) {
-    // 手机两阶段：第一次点预览换乘站；再次点击同一站 = 确认开始
-    if (state.pendingStart && String(state.pendingStart.logical.id) === String(logical.id)) {
+    // 手机两阶段：第一次点 = 悬浮高亮；再次点同一站 = 确认开始（等价于桌面第一次点击）
+    if (state.pendingStart && sameLogical(state.pendingStart.logical, logical)) {
       confirmStart();
     } else {
       previewStart({ logical, point: phys.lnglat });
@@ -61,27 +73,24 @@ export function onStopClick(e) {
   }
 }
 
-/** 手机端两阶段选站 · 第一步：预览换乘站，不立即开始路线 */
+/** 手机端选站 · 第一步：模拟"鼠标悬浮"效果（高亮该站 + 信息卡），不立即开始 */
 function previewStart(d) {
   state.pendingStart = d;
-  hideBaseStops();                 // 只显示换乘站，避免与基础站点重叠
-  showCandidateNetwork(d.logical); // 显示换乘站 + 可达线路
+  renderHighlight(d.logical);
   show('btn-group');
-  show('confirm-start-btn');
   hide('undo-btn');
   hide('show-all-btn');
   hide('tower-restart-btn');
   show('reset-btn');
   setText('reset-btn', '取消');
-  updateLegend();
-  setStatus('起点预览：' + d.logical.name + '，再次点击该站确认起点');
+  setStatus('已高亮 ' + d.logical.name + '，再次点击确认起点');
 }
 
-/** 手机端两阶段选站 · 第二步：确认（由 app.js 的「确认起点」按钮调用） */
+/** 手机端选站 · 第二步：确认起点（再次点击同一站触发） */
 export function confirmStart() {
   const d = state.pendingStart;
   if (!d) return;
-  startRoute(d); // startRoute 内的 resetRoute 会清空 pendingStart 并隐藏确认按钮
+  startRoute(d); // startRoute 内的 resetRoute 会清空 pendingStart
 }
 
 /** 开始规划：以该站为首站 */
@@ -103,7 +112,7 @@ function startRoute(d) {
   renderRoutePanel();
   show('btn-group');
   updateButtons();
-  setStatus('已选择 ' + d.logical.name + '，点击沿途站点换乘，点击「终」完成');
+  setStatus('已选择 ' + d.logical.name + '，' + ridingHint());
 }
 
 // ============ 中间：点沿途站接一段乘车 ============
@@ -113,24 +122,51 @@ export function onCandidateStopClick(phys) {
   if (state.showAllStops) { showCenterToast('请关闭全图显示后继续'); return; }
   const logical = resolveStop(phys);
   if (!logical) return;
-  // 手机两阶段预览态：起点也会出现在候选网络里，再次点到它 = 确认
-  if (state.pendingStart && String(logical.id) === String(state.pendingStart.logical.id)) {
+  // 手机预览起点阶段：起点也在候选网络里，再次点到它 = 确认起点
+  if (state.pendingStart && sameLogical(state.pendingStart.logical, logical)) {
     confirmStart();
     return;
   }
   if (!state.routeStops.length || state.finished) return;
 
   const prev = state.routeStops[state.routeStops.length - 1];
-  if (String(logical.id) === String(prev.logical.id)) return;
-  if (state.routeStops.some((s) => String(s.logical.id) === String(logical.id))) return;
+  if (sameLogical(logical, prev.logical)) return;
+  if (state.routeStops.some((s) => sameLogical(s.logical, logical))) return;
 
+  if (state.isTouch) {
+    // 手机两阶段：第一次点候选站 = 悬浮高亮；再次点同一站 = 确定换乘（等价于桌面第一次点击）
+    if (state.pendingCandidate && sameLogical(state.pendingCandidate.logical, logical)) {
+      confirmCandidate(logical);
+    } else {
+      previewCandidate(logical);
+    }
+  } else {
+    commitCandidate(logical, prev);
+  }
+}
+
+/** 手机端选下一站 · 第一步：模拟"鼠标悬浮"效果，不立即确定 */
+function previewCandidate(logical) {
+  state.pendingCandidate = { logical };
+  renderHighlight(logical);
+  setStatus('已高亮 ' + logical.name + '，再次点击确定换乘到该站');
+}
+
+/** 手机端选下一站 · 第二步：确定 */
+function confirmCandidate(logical) {
+  state.pendingCandidate = null;
+  commitCandidate(logical, state.routeStops[state.routeStops.length - 1]);
+}
+
+/** 确定换乘到某候选站（手机第二次点击 / 桌面点击都走这里） */
+function commitCandidate(logical, prev) {
   const shared = sharedLines(prev.logical, logical);
   if (!shared.length) return;
 
   const line = shared[0]; // 站数更少优先（同站数时地铁优先）
   // 到达点 = 该线路上的物理站坐标（乘车段终点，也是下一步步行的起点）
   const physStop = findStopInLine(line, logical);
-  const point = physStop ? [physStop.lng, physStop.lat] : (phys.lnglat || [logical.lng, logical.lat]);
+  const point = physStop ? [physStop.lng, physStop.lat] : [logical.lng, logical.lat];
   const cur = { logical, point };
 
   state.routeOverlayGroups.push([]); // 新组：本步站点标记 + 乘车段（供撤回）
@@ -146,9 +182,10 @@ export function onCandidateStopClick(phys) {
     drawTransferWalk(rideEndpoint(prevLine, prev.logical), rideEndpoint(line, prev.logical));
   }
 
+  clearHighlight(); // 清掉预览悬浮高亮
   showCandidateNetwork(cur.logical);
   renderRoutePanel();
-  setStatus('继续点击沿途站点换乘，或点击「终」完成');
+  setStatus(ridingHint());
 }
 
 // ============ 终点：完成规划 ============
@@ -210,15 +247,16 @@ export function resetRoute() {
   state.routeOverlayGroups = [];
   clearCandidate();
   clearOptimal();
+  clearHighlight();          // 清掉悬浮高亮，避免上一局的线路高亮残留
   state.showAllStops = false;
-  state.pendingStart = null; // 取消手机两阶段预览
+  state.pendingStart = null; // 取消手机两阶段预览（起点）
+  state.pendingCandidate = null; // 取消手机两阶段预览（下一站）
   const sab = $('show-all-btn');
   if (sab) sab.textContent = '显示全图站点';
   updateButtons();
   updateLegend(); // 重新开始后恢复图例
   hide('route-panel');
   hide('btn-group');
-  hide('confirm-start-btn');
   hide('result-overlay');
   hide('result-toggle-btn');
   updateStopsByZoom();

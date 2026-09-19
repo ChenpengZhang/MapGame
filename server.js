@@ -31,6 +31,8 @@ const MIME = {
   '.png': 'image/png',
   '.svg': 'image/svg+xml',
   '.ico': 'image/x-icon',
+  '.woff2': 'font/woff2', // ChillRoundF 字体，Chrome 需要正确的 font MIME 才加载 @font-face
+  '.woff': 'font/woff',
 };
 
 http

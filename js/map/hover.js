@@ -36,8 +36,8 @@ export function onStopMouseOut() {
   clearHighlight();
 }
 
-/** 画出该站所属线路 + 高亮圈，并弹出信息卡 */
-function renderHighlight(d) {
+/** 画出该站所属线路 + 高亮圈，并弹出信息卡（桌面悬浮效果；手机端"第一次点击"也复用它） */
+export function renderHighlight(d) {
   clearHighlight();
 
   const shown = [];

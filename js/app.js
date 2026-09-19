@@ -104,7 +104,6 @@ function on(id, handler, evt) {
 
 function bindUiEvents() {
   // ---- 规划中的操作条 ----
-  on('confirm-start-btn', confirmStart);       // 手机两阶段：确认起点
   on('undo-btn', undoRoute);                  // 上一步
   on('reset-btn', resetRoute);                // 取消（重置路线）
   on('show-all-btn', toggleShowAllStops);     // 显示/关闭全图站点

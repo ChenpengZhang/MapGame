@@ -16,7 +16,7 @@
 import { state } from '../core/state.js';
 import { setStatus } from '../core/dom.js';
 import { haversineKm } from '../core/router-api.js';
-import { TUTORIAL_COMMON } from '../data/levels.js';
+import { TUTORIAL_COMMON, TUTORIAL_COMMON_TOUCH } from '../data/levels.js';
 import { drawEndpoints, setMapLocked } from '../map/map-init.js';
 import { applyScenario } from '../map/stop-layer.js';
 import { hideAllPanels, showPanel, setCityLabel, setTowerHudVisible, updateFreeButton, buildStoryLevels, updateTowerMenuBest } from '../ui/menu.js';
@@ -69,8 +69,11 @@ export function startLevel(level, opts) {
   } else {
     playStory(level, () => {
       // 第一关：完整教学；情景关卡：弹出情景提示；其余：直接进入玩法
-      if (level.series === 1) playHint([level.goalText || ''].concat(TUTORIAL_COMMON), () => beginGameplay(level));
-      else if (level.scenarioHint) playHint([level.scenarioHint], () => beginGameplay(level));
+      if (level.series === 1) {
+        // 手机端用"点一下高亮、再点一下确定"的文案，桌面用点击文案
+        const tutorial = state.isTouch ? TUTORIAL_COMMON_TOUCH : TUTORIAL_COMMON;
+        playHint([level.goalText || ''].concat(tutorial), () => beginGameplay(level));
+      } else if (level.scenarioHint) playHint([level.scenarioHint], () => beginGameplay(level));
       else beginGameplay(level);
     });
   }
