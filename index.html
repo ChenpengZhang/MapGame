@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1.0, user-scalable=no" />
   <title>城市交通规划 · 北京</title>
     <link rel="stylesheet" href="fonts/ChillRoundF/ChillRoundF.css" />
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -545,6 +545,9 @@ html, body {
   #topbar .title .sub { font-size: 11px; }
   #topbar .status { max-width: 40vw; font-size: 11px; padding: 4px 8px; }
 
+  /* 手机端隐藏"缩放速度"设置（滚轮惯性缩放只在桌面生效） */
+  #zoom-speed-row { display: none; }
+
   /* 图例：挪到左上，收起说明文字，只留两个色点 */
   #legend {
     left: 10px; top: 58px; bottom: auto;
@@ -721,13 +724,15 @@ html, body {
     <div id="settings-panel" class="hidden">
       <div class="settings-inner">
         <h2>设置</h2>
-        <label style="margin-top:4px;">缩放速度</label>
-        <div style="display:flex;align-items:center;gap:8px;margin-top:4px;">
-          <span style="font-size:12px;color:#888;">慢</span>
-          <input type="range" id="zoom-speed-slider" min="0" max="1" step="0.05" value="0.5" style="flex:1;">
-          <span style="font-size:12px;color:#888;">快</span>
+        <div id="zoom-speed-row">
+          <label style="margin-top:4px;">缩放速度</label>
+          <div style="display:flex;align-items:center;gap:8px;margin-top:4px;">
+            <span style="font-size:12px;color:#888;">慢</span>
+            <input type="range" id="zoom-speed-slider" min="0" max="1" step="0.05" value="0.5" style="flex:1;">
+            <span style="font-size:12px;color:#888;">快</span>
+          </div>
+          <div class="settings-hint">数值越大，滚轮缩放越快（0.5 为默认）</div>
         </div>
-        <div class="settings-hint">数值越大，滚轮缩放越快（0.5 为默认）</div>
 
         <label style="margin-top:14px;">高德地图 Key（可选）</label>
         <div style="margin-top:4px;">

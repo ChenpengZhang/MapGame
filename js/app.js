@@ -21,7 +21,7 @@
  */
 
 import { state } from './core/state.js';
-import { $, hide, show, setStatus, showError, showLoading, hideLoading, loadScript, isTouchDevice } from './core/dom.js';
+import { $, hide, show, setStatus, showError, showLoading, hideLoading, loadScript, isTouchDevice, preventPagePinch } from './core/dom.js';
 import { buildGraph } from './core/router-api.js';
 import { loadAmapKey, loadAmapSecurity, saveAmapKey, saveAmapSecurity } from './core/storage.js';
 import { loadTransitData } from './data/loader.js';
@@ -153,6 +153,7 @@ function bindUiEvents() {
 // ============ 启动 ============
 
 state.isTouch = isTouchDevice(); // 判定触摸设备：手机端启用两阶段选站 + 更大的站点热区
+preventPagePinch();             // 禁用页面级双指缩放（地图自身的双指缩放保留）
 // 自动化测试/调试钩子：暴露只读状态引用 + 关键动作，供浏览器回归探针驱动流程（不影响游戏逻辑）
 if (typeof window !== 'undefined') {
   window.__MG = {

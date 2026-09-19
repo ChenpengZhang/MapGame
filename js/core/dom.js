@@ -107,3 +107,22 @@ export function isTouchDevice() {
   } catch (e) { /* 忽略 */ }
   return false;
 }
+
+/**
+ * 禁用"页面级"双指缩放（浏览器把整个页面放大、缩不回来的那种），
+ * 但保留地图自身的双指缩放（Leaflet 自己处理触摸手势，不受影响）。
+ * 原理：
+ *   - iOS Safari 忽略 user-scalable=no，需要用 gesturestart 兜底；
+ *   - 其它环境用 touchmove：只有"非地图区域"的 multi-touch 才 preventDefault，
+ *     地图上的双指手势交给 Leaflet（e.target 命中 .leaflet-container 就跳过）。
+ */
+export function preventPagePinch() {
+  document.addEventListener('gesturestart', (e) => e.preventDefault());
+  document.addEventListener('touchmove', (e) => {
+    if (e.touches && e.touches.length > 1) {
+      const t = e.target;
+      const onMap = t && t.closest ? t.closest('.leaflet-container') : null;
+      if (!onMap) e.preventDefault();
+    }
+  }, { passive: false });
+}
