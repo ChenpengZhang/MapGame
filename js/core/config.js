@@ -16,20 +16,13 @@
 
 // ============ 地图与数据源 ============
 
-/** 地图初始中心（GCJ-02，与高德一致；OSM 后端由 amap-polyfill.js 在渲染边界统一换算） */
-export const MAP_CENTER = [116.397, 39.909];
-
 /**
  * 数据文件版本号：重跑数据管线（cptond-convert.js）更新数据后，把这里 +1，
  * 浏览器缓存才会失效并重新下载（URL 带 ?v=N，版本号一变就是全新资源）。
  */
 export const DATA_VERSION = 1;
 
-/** 唯一数据源：GCJ-02（路由/关卡/交互全部用同一坐标系，两端结果一致） */
-export const DATA_FULL = 'data/beijing-transit.json?v=' + DATA_VERSION;
-
-/** 全量数据缺失时的演示兜底数据 */
-export const DATA_SAMPLE = 'data/sample.json?v=' + DATA_VERSION;
+// 注：地图初始中心、数据文件路径、城市列表都按城市区分，见 data/cities.js。
 
 // ============ 站点渲染阈值 ============
 

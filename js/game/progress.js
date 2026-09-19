@@ -20,7 +20,9 @@ import { LEVELS } from '../data/levels.js';
 const DEV_DEBUG_MODE = true;
 
 const KEY_STORY = 'mg_story_unlocked';
-const KEY_TOWER = 'mg_tower_state';
+// 爬塔存档按城市分开（否则切换城市后深圳会读到北京的起终点缓存，一点进去就"传送"回北京）：
+// 每个城市一个 key，如 mg_tower_state_beijing / mg_tower_state_shenzhen
+const towerKey = () => 'mg_tower_state_' + (state.currentCityId || 'beijing');
 
 // ============ 故事模式解锁进度 ============
 
@@ -40,7 +42,7 @@ export function saveStoryProgress() {
 
 /** 读存档：best（各畸变最高层）+ progress（各畸变进行中的层数）+ round（本轮起终点） */
 export function loadTowerState() {
-  const v = readJSON(KEY_TOWER) || {};
+  const v = readJSON(towerKey()) || {};
   const b = v.best || {}, p = v.progress || {}, r = v.round || {};
   for (const k of Object.keys(state.towerBest)) {
     const bn = parseInt(b[k], 10);
@@ -56,7 +58,7 @@ export function loadTowerState() {
   }
 }
 
-/** 写存档：best + progress + round */
+/** 写存档：best + progress + round（按当前城市分开存） */
 export function saveTowerState() {
-  writeJSON(KEY_TOWER, { best: state.towerBest, progress: state.towerProgress, round: state.towerRound });
+  writeJSON(towerKey(), { best: state.towerBest, progress: state.towerProgress, round: state.towerRound });
 }

@@ -3,7 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1.0, user-scalable=no" />
-  <title>城市交通规划 · 北京</title>
+  <title>从A到B · 城市公共交通制霸</title>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg" />
     <link rel="stylesheet" href="fonts/ChillRoundF/ChillRoundF.css" />
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <style>
@@ -105,6 +106,39 @@ html, body {
   max-width: min(52vw, 560px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .topbar-right { display: flex; align-items: center; gap: 10px; }
+
+/* 右上角城市下拉选择器：默认（游戏进行中）隐藏，只在菜单态显示——
+   游戏过程中不允许切换城市（切换会整页重载，清空当前局）。 */
+.city-select { position: relative; display: none; }
+#app.menu-open .city-select { display: block; }
+.city-select-btn {
+  display: flex; align-items: center; gap: 6px;
+  border: 1px solid var(--ring); background: rgba(255, 255, 255, 0.06);
+  color: var(--ink-strong); font-size: 16.5px; font-weight: 700;
+  padding: 9px 16px; border-radius: 999px; cursor: pointer;
+  box-shadow: var(--shadow-sm);
+  transition: transform .15s cubic-bezier(.4,0,.2,1), background .15s, box-shadow .15s;
+}
+.city-select-btn:hover { background: rgba(255, 255, 255, 0.12); transform: translateY(-1px); box-shadow: var(--shadow-lg); }
+.city-select-btn:active { transform: translateY(0) scale(.96); }
+.city-select-caret { font-size: 12px; color: var(--ink-muted); transition: transform .2s; }
+.city-select.open .city-select-caret { transform: rotate(180deg); }
+.city-select-menu {
+  position: absolute; top: calc(100% + 6px); right: 0; min-width: 165px;
+  background: var(--surface-glass-strong);
+  -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--ring); border-radius: var(--r-md);
+  box-shadow: var(--shadow-lg); padding: 6px; z-index: 1200;
+  display: flex; flex-direction: column; gap: 2px;
+}
+.city-select-menu .city-item {
+  display: flex; align-items: center; justify-content: space-between; gap: 6px;
+  padding: 9px 14px; border-radius: 8px; cursor: pointer;
+  font-size: 15px; font-weight: 600; color: var(--ink); white-space: nowrap;
+  transition: background .12s;
+}
+.city-select-menu .city-item:hover { background: rgba(255,255,255,0.10); }
+.city-select-menu .city-item.current { color: var(--accent); background: rgba(251,146,60,0.12); }
 #menu-btn {
   border: 1px solid var(--ring); background: rgba(255, 255, 255, 0.06);
   color: var(--ink-strong); font-size: 15px; width: 34px; height: 34px;
@@ -297,14 +331,27 @@ html, body {
   background: rgba(13, 20, 34, 0.80);
   -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px);
 }
-/* 菜单态：任一菜单打开时隐藏地图上的游戏 UI，避免从半透明菜单透出 */
-#app.menu-open #topbar,
+/* 菜单态：任一菜单打开时隐藏地图上的游戏 UI，避免从半透明菜单透出。
+   注意：顶栏整体不隐藏，只隐藏标题、状态文字和 🏠 返回键，保留右上角的城市下拉，
+   这样玩家在主菜单/二级菜单里也能随时切换城市，且不会看到多余的返回键
+   （二级页面各有自己的「← 返回」按钮，主菜单本就在原地）。 */
+#app.menu-open #topbar .title,
+#app.menu-open #topbar .status,
+#app.menu-open #menu-btn,
 #app.menu-open #legend,
 #app.menu-open #left-col,
 #app.menu-open #btn-group,
 #app.menu-open #tower-hud,
 #app.menu-open #result-toggle-btn {
   display: none;
+}
+#app.menu-open #topbar {
+  justify-content: flex-end;
+  z-index: 950; /* 高于全屏菜单(900)，让城市下拉在主菜单打开时可点 */
+  background: transparent;      /* 菜单态不显示整条顶栏背景 */
+  border-bottom: none;
+  box-shadow: none;
+  -webkit-backdrop-filter: none; backdrop-filter: none;
 }
 #main-menu {
   position: fixed; inset: 0; z-index: 900;
@@ -409,6 +456,7 @@ html, body {
 }
 .tower-opt:hover { background: rgba(255,255,255,0.16); transform: translateY(-2px); }
 .tower-opt-label { font-size: 16px; font-weight: 700; }
+.tower-opt-sub { font-size: 12px; color: #9fb0c3; }
 .tower-best { font-size: 12px; color: #9fb0c3; }
 
 /* ==========================================================================
@@ -603,6 +651,13 @@ html, body {
       <div class="title">从A到B<span class="sub" id="city-label">北京</span></div>
       <div class="topbar-right">
         <div class="status" id="status">加载中…</div>
+        <div class="city-select" id="city-select">
+          <button class="city-select-btn" id="city-select-btn" title="切换城市">
+            <span id="city-select-current">北京</span>
+            <span class="city-select-caret">▾</span>
+          </button>
+          <div class="city-select-menu hidden" id="city-select-menu"></div>
+        </div>
         <button id="menu-btn" title="返回主界面">🏠</button>
       </div>
     </header>
@@ -676,7 +731,7 @@ html, body {
         <div class="main-btns">
           <button id="story-btn"><span class="btn-emoji">📖</span><span class="btn-label">故事模式</span></button>
           <button id="tower-btn"><span class="btn-emoji">🗼</span><span class="btn-label">无尽模式</span></button>
-          <button id="free-btn"><span class="btn-emoji">🆓</span><span class="btn-label">自由模式</span></button>
+          <button id="free-btn"><span class="btn-emoji">🎲</span><span class="btn-label">随机模式</span></button>
           <button id="online-btn" class="locked"><span class="btn-emoji">🏆</span><span class="btn-label">排位模式（敬请期待）</span></button>
           <button id="settings-btn"><span class="btn-emoji">⚙️</span><span class="btn-label">设置</span></button>
         </div>
@@ -709,10 +764,10 @@ html, body {
       </div>
     </div>
 
-    <!-- 自由模式：情景选择 -->
+    <!-- 随机模式：情景选择 -->
     <div id="free-menu" class="hidden">
       <div class="free-menu-inner">
-        <h2>🆓 自由模式</h2>
+        <h2>🎲 随机模式</h2>
         <p class="free-sub">选择要加载的情景（可多选）</p>
         <div class="free-opts">
           <label><input type="checkbox" id="free-no-metro"> 地下瘫痪（禁用地铁）</label>
@@ -732,10 +787,10 @@ html, body {
         <h2>🗼 无尽模式</h2>
         <p class="tower-sub">选择畸变开始爬塔（各畸变成绩分别记录）</p>
         <div class="tower-opts">
-          <button id="tower-normal" class="tower-opt"><span class="tower-opt-label">普通模式</span><span class="tower-best">暂无纪录</span></button>
-          <button id="tower-no-metro" class="tower-opt"><span class="tower-opt-label">地铁瘫痪（禁用地铁）</span><span class="tower-best">暂无纪录</span></button>
-          <button id="tower-bus-boost" class="tower-opt"><span class="tower-opt-label">一路畅通（公交加速20%）</span><span class="tower-best">暂无纪录</span></button>
-          <button id="tower-rain" class="tower-opt"><span class="tower-opt-label">大雨滂沱（公交/步行减缓50%）</span><span class="tower-best">暂无纪录</span></button>
+          <button id="tower-normal" class="tower-opt"><span class="tower-opt-label">普通</span><span class="tower-opt-sub">无特殊效果</span><span class="tower-best">暂无纪录</span></button>
+          <button id="tower-no-metro" class="tower-opt"><span class="tower-opt-label">地铁瘫痪</span><span class="tower-opt-sub">禁用地铁</span><span class="tower-best">暂无纪录</span></button>
+          <button id="tower-bus-boost" class="tower-opt"><span class="tower-opt-label">一路畅通</span><span class="tower-opt-sub">公交加速20%</span><span class="tower-best">暂无纪录</span></button>
+          <button id="tower-rain" class="tower-opt"><span class="tower-opt-label">大雨滂沱</span><span class="tower-opt-sub">公交/步行减缓50%</span><span class="tower-best">暂无纪录</span></button>
         </div>
         <button id="tower-back-btn" class="story-back">← 返回</button>
       </div>
@@ -797,6 +852,6 @@ html, body {
   -->
   <script src="js/router.js?v=2"></script>
   <script src="js/amap-polyfill.js"></script>
-  <script src="js/app.js?v=5" type="module"></script>
+  <script src="js/app.js?v=10" type="module"></script>
 </body>
 </html>

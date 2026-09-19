@@ -1,23 +1,44 @@
 'use strict';
 
-// 把 CPTOND-2025 的北京 shapefile 转换成游戏用的 beijing-transit.json
-// 用法：node cptond-convert.js
-// 输入：data/cptond/{metro,bus}/shapefiles/Beijing/beijing_*_routes.shp + beijing_*_stops.shp
-// 输出：data/beijing-transit.json
+// 把 CPTOND-2025 的某城市 shapefile 转换成游戏用的 <城市>-transit.json
+// 用法：
+//   node cptond-convert.js                 # 默认转换北京
+//   node cptond-convert.js guangzhou       # 转换广州
+//   node cptond-convert.js shenzhen shanghai  # 批量转换多城
+// 输入：data/cptond/{metro,bus}/shapefiles/<City>/<city>_*_routes.shp + <city>_*_stops.shp
+// 输出：data/<city>-transit.json
 // 要点：
-//   1) 线路↔站点靠 route_cn 精确匹配，全程用 Map 保证 O(N)（bus_stops 约 11 万条）
+//   1) 线路↔站点靠 route_cn 精确匹配，全程用 Map 保证 O(N)（bus_stops 可达 11 万+ 条）
 //   2) 坐标系 WGS-84 → GCJ-02（对齐高德底图）。OSM 后端在 amap-polyfill.js 渲染边界统一换算回 WGS-84，
 //      所以全项目只维护这一份 GCJ-02 数据，路由/关卡/交互两端结果一致。
 //   3) 同一线路的两个方向合并为一条（按 route_cn 去掉 "(起点--终点)" 后缀）
 //   4) 路径抽稀到每线 ≤300 点，坐标取 6 位小数，控制输出体积
+//   5) 幽灵站修正按城市配置（GHOST_STOPS），新城市上线前人工核对后补上
 
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { parseDbf, parseShp } = require('./lib/shp');
 
-const OUT_FILE = path.join(__dirname, 'data', 'beijing-transit.json');
 const PATH_MAX_POINTS = 300;
+
+// ---------- 城市配置（加新城市只需在此表加一行 + 下载源数据） ----------
+// dir：data/cptond/{metro,bus}/shapefiles/ 下的目录名；prefix = dir 小写，用于文件名。
+const CITIES = {
+  beijing:   { dir: 'Beijing',   zh: '北京' },
+  guangzhou: { dir: 'Guangzhou', zh: '广州' },
+  shenzhen:  { dir: 'Shenzhen',  zh: '深圳' },
+  shanghai:  { dir: 'Shanghai',  zh: '上海' },
+};
+
+// ---------- 幽灵站修正（坑2：未开通/预留站仍出现在数据里，需按线路+站名剔除） ----------
+// 剔除后前一个站的 d 会自动按「前一站 → 下一站」重算。新城市上线前人工核对后补进这里。
+const GHOST_STOPS = {
+  beijing: { '地铁14号线': ['高家园'] },
+  guangzhou: {},
+  shenzhen: {},
+  shanghai: {},
+};
 
 // ---------- WGS-84 → GCJ-02 ----------
 const PI = Math.PI;
@@ -93,11 +114,11 @@ function haversine(lng1, lat1, lng2, lat2) {
 }
 
 // 读取 CPTOND segments（相邻站间真实距离，km），建立双向 lookup
-function loadSegmentDistances() {
+function loadSegmentDistances(dir) {
   const lookup = new Map();
   const bases = [
-    'data/cptond/metro/shapefiles/Beijing/beijing_metro_segments',
-    'data/cptond/bus/shapefiles/Beijing/beijing_bus_segments',
+    `data/cptond/metro/shapefiles/${dir}/${dir.toLowerCase()}_metro_segments`,
+    `data/cptond/bus/shapefiles/${dir}/${dir.toLowerCase()}_bus_segments`,
   ];
   for (const base of bases) {
     for (const f of loadFeatures(base)) {
@@ -112,17 +133,24 @@ function loadSegmentDistances() {
   return lookup;
 }
 
-function main() {
+// 转换单个城市
+function convertCity(cityKey) {
+  const cfg = CITIES[cityKey];
+  if (!cfg) throw new Error('未知城市：' + cityKey + '（可用：' + Object.keys(CITIES).join(', ') + '）');
+  const dir = cfg.dir;
+  const prefix = dir.toLowerCase();
+  const OUT_FILE = path.join(__dirname, 'data', prefix + '-transit.json');
+
   const t0 = Date.now();
-  const segDist = loadSegmentDistances();
+  const segDist = loadSegmentDistances(dir);
 
   const stopGroups = new Map(); // route_cn -> [{id,name,lng,lat,seq}]
   const routes = [];            // {cn, attrs, geom}
-  let orphanStops = 0;          // stops whose route_cn 没有对应的 route（也算进 stopGroups）
+  let orphanStops = 0;
 
   const pairs = [
-    ['data/cptond/metro/shapefiles/Beijing/beijing_metro_routes', 'data/cptond/metro/shapefiles/Beijing/beijing_metro_stops'],
-    ['data/cptond/bus/shapefiles/Beijing/beijing_bus_routes', 'data/cptond/bus/shapefiles/Beijing/beijing_bus_stops'],
+    [`data/cptond/metro/shapefiles/${dir}/${prefix}_metro_routes`, `data/cptond/metro/shapefiles/${dir}/${prefix}_metro_stops`],
+    [`data/cptond/bus/shapefiles/${dir}/${prefix}_bus_routes`, `data/cptond/bus/shapefiles/${dir}/${prefix}_bus_stops`],
   ];
 
   for (const [rbase, sbase] of pairs) {
@@ -164,6 +192,7 @@ function main() {
   }
 
   // 构建合并后的线路
+  const ghostMap = GHOST_STOPS[cityKey] || {};
   const lines = [];
   let orphanRoutes = 0;
   for (const [base, cns] of baseGroups) {
@@ -190,10 +219,13 @@ function main() {
       seen.add(s.id);
       stops.push(s);
     }
-    // 数据修正：14号线「高家园」站尚未开通，剔除（后续段距自动按 将台→望京南 重算）
-    if (base === '地铁14号线') {
-      const g = stops.findIndex((s) => (s.name || '').includes('高家园'));
-      if (g >= 0) stops.splice(g, 1);
+    // 幽灵站剔除（坑2）：按线路名 + 站名
+    const ghostNames = ghostMap[base];
+    if (ghostNames && ghostNames.length) {
+      for (const g of ghostNames) {
+        const idx = stops.findIndex((s) => (s.name || '').includes(g));
+        if (idx >= 0) stops.splice(idx, 1);
+      }
     }
     // 逐站距离（优先 CPTOND segments 真实值，缺失用 haversine 兜底）
     for (let i = 0; i < stops.length; i++) {
@@ -226,9 +258,9 @@ function main() {
       end_time: String(attrs.end_time || ''),
       stops: stops.map((s) => {
         const [lng, lat] = gcj(s.lng, s.lat);
-        // CPTOND 里"临时站"等占位站会在不同位置复用同一 stop_id（如 BV09413140
-        // 同时出现在大兴与平谷），按 id 去重会把它们当成同一站造成"虚空换乘"。
-        // 这里把 id 改成"原始id+坐标"，保证物理站在 (id,坐标) 上唯一。
+        // 坑1：CPTOND 里"临时站"等占位站会在不同位置复用同一 stop_id，
+        // 按 id 去重会把它们当成同一站造成"虚空换乘"。这里把 id 改成"原始id+坐标"，
+        // 保证物理站在 (id,坐标) 上唯一。
         const sid = s.id ? String(s.id) + '@' + lng.toFixed(5) + ',' + lat.toFixed(5) : null;
         return { id: sid, name: s.name, lng, lat, seq: s.seq, d: s.d };
       }),
@@ -241,7 +273,7 @@ function main() {
   const stopEntries = lines.reduce((n, l) => n + l.stops.length, 0);
 
   const out = {
-    city: '北京',
+    city: cfg.zh,
     source: 'CPTOND-2025 (WGS-84 → GCJ-02)',
     generated_at: new Date().toISOString(),
     count: lines.length,
@@ -251,6 +283,8 @@ function main() {
 
   const sizeMB = (fs.statSync(OUT_FILE).size / 1024 / 1024).toFixed(1);
   const summary = {
+    city: cfg.zh,
+    city_key: cityKey,
     total_lines: lines.length,
     metro_lines: metroCount,
     bus_lines: busCount,
@@ -261,8 +295,12 @@ function main() {
     output_mb: sizeMB,
     elapsed_ms: Date.now() - t0,
   };
-  fs.writeFileSync(path.join(__dirname, 'data', 'cptond', 'convert-summary.txt'), JSON.stringify(summary, null, 2), 'utf8');
+  fs.writeFileSync(path.join(__dirname, 'data', 'cptond', 'convert-summary-' + prefix + '.txt'), JSON.stringify(summary, null, 2), 'utf8');
   console.log(JSON.stringify(summary, null, 2));
+  return summary;
 }
 
-main();
+// ---------- 入口 ----------
+const args = process.argv.slice(2).filter((a) => !a.startsWith('-'));
+const cities = args.length ? args : ['beijing'];
+for (const c of cities) convertCity(c);

@@ -5,6 +5,7 @@
  *   bootstrap 里跟着网页一起加载（首屏 fetch 全量数据），玩家要等数据下完才能玩。
  *   现在改成"玩家点了再下载"：进入故事/自由/爬塔任一模式菜单时才触发下载，
  *   之后内存里已有数据，再次开局秒开（幂等，只加载一次）。
+ *   加载文案不写死文件大小，而是从响应头 Content-Length 动态读取（见 loadAll）。
  *
  * 【为什么放在 game 层】
  *   "数据 → 索引 → 寻路图 → 站点图层"这条组装链同时依赖 core/data/map 三层，
@@ -28,6 +29,12 @@ import { onStopClick } from './route.js';
 /** 数据加载 Promise（null = 尚未开始；加载完成后保留，失败时重置以允许重试） */
 let readyPromise = null;
 
+/** 字节数 → 可读大小（<1MB 显示 KB，否则显示 MB，保留 1 位小数） */
+function formatMB(bytes) {
+  if (bytes < 1024 * 1024) return Math.max(1, Math.round(bytes / 1024)) + 'KB';
+  return (bytes / 1024 / 1024).toFixed(1) + 'MB';
+}
+
 /** 数据是否已就绪（索引 + 寻路图都已建好，站点层已渲染） */
 export function isGameDataReady() {
   return !!(state.routerGraph && state.physStops.length > 0);
@@ -45,10 +52,15 @@ export function ensureGameDataReady() {
 
 /** 完整加载：下载 JSON → 建索引 → 建寻路图 → 渲染地铁底图与站点层 */
 async function loadAll() {
-  showLoading('正在下载交通数据（首次约 19MB）…');
+  // 文案不写死大小：拿到 Content-Length 后再动态补上「约 X MB」；
+  // gzip/brotli 下拿不到（浏览器剥头），就保持这句通用文案。多城市无需单独配置。
+  showLoading('正在下载城市交通数据…');
   setLoadingProgress(null); // 初始隐藏进度条，等下载开始有 Content-Length 再显示
   try {
-    const { data, source } = await loadTransitData((f) => setLoadingProgress(f));
+    const { data, source } = await loadTransitData(
+      (f) => setLoadingProgress(f),
+      (bytes) => showLoading('正在下载交通数据（约 ' + formatMB(bytes) + '）…'),
+    );
     buildIndex(data);                                      // 物理站/逻辑站索引
     state.routerGraph = buildGraph(data.lines);            // 本地寻路图（供最优路线计算）
     renderMetroContext();                                  // 灰色地铁底图

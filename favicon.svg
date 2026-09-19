@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#111c30"/>
+      <stop offset="1" stop-color="#0b1120"/>
+    </linearGradient>
+    <linearGradient id="bus" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fdba74"/>
+      <stop offset="1" stop-color="#ea580c"/>
+    </linearGradient>
+  </defs>
+  <rect x="2" y="2" width="60" height="60" rx="14" fill="url(#bg)"/>
+  <!-- 公交车车身 -->
+  <path d="M10 34 a6 6 0 0 1 6 -6 h36 a6 6 0 0 1 6 6 v10 a4 4 0 0 1 -4 4 h-4 v3 a2 2 0 0 1 -2 2 h-6 a2 2 0 0 1 -2 -2 v-3 h-16 v3 a2 2 0 0 1 -2 2 h-6 a2 2 0 0 1 -2 -2 v-3 h-4 a4 4 0 0 1 -4 -4 z" fill="url(#bus)"/>
+  <!-- 车窗 -->
+  <rect x="18" y="30" width="8" height="7" rx="1.5" fill="#e0f2fe"/>
+  <rect x="29" y="30" width="8" height="7" rx="1.5" fill="#e0f2fe"/>
+  <rect x="40" y="30" width="8" height="7" rx="1.5" fill="#e0f2fe"/>
+  <!-- 前挡风（圆角车头） -->
+  <path d="M10 34 a6 6 0 0 1 6 -6 h2 l-8 8 z" fill="#7dd3fc" opacity="0.7"/>
+  <!-- 车轮 -->
+  <circle cx="22" cy="48" r="5" fill="#0f172a"/>
+  <circle cx="22" cy="48" r="2" fill="#64748b"/>
+  <circle cx="46" cy="48" r="5" fill="#0f172a"/>
+  <circle cx="46" cy="48" r="2" fill="#64748b"/>
+</svg>

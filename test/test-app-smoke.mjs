@@ -454,9 +454,10 @@ await step('菜单与关卡衔接：下一关 / 重开 / 回主菜单', () => {
   assert.ok(el('result-overlay').classList.contains('hidden'), '结果弹窗已清掉');
 });
 
-await step('存档写入（爬塔纪录 best/progress）', () => {
-  assert.ok(store.has('mg_tower_state'), '爬塔纪录已落盘');
-  const saved = JSON.parse(store.get('mg_tower_state'));
+await step('存档写入（爬塔纪录 best/progress，按城市分开存）', () => {
+  // 爬塔存档按城市分 key：当前测试城市是默认的 beijing
+  assert.ok(store.has('mg_tower_state_beijing'), '爬塔纪录已落盘（按城市分 key）');
+  const saved = JSON.parse(store.get('mg_tower_state_beijing'));
   assert.ok(saved.best && typeof saved.best.normal === 'number', 'best 结构正确');
   assert.ok(saved.progress && typeof saved.progress.normal === 'number', 'progress 结构正确');
 });

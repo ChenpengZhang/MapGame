@@ -14,10 +14,11 @@
 
 import { state } from '../core/state.js';
 import { $, hide, show, setText, toggleHidden } from '../core/dom.js';
-import { LEVELS } from '../data/levels.js';
+import { LEVELS, TOWER_SCENARIOS } from '../data/levels.js';
+import { CITIES, cityById } from '../data/cities.js';
 import { loadAmapKey, loadAmapSecurity } from '../core/storage.js';
 
-/** 互斥的五个主面板（同一时间只该出现一个） */
+/** 互斥的五个主面板（同一时间只该出现一个；城市选择是顶栏下拉，不在此列） */
 export const PANELS = ['main-menu', 'story-menu', 'tower-menu', 'free-menu', 'settings-panel'];
 
 /**
@@ -85,15 +86,73 @@ export function updateLegend() {
   toggleHidden('legend', state.routeStops.length > 0);
 }
 
-/** 自由模式始终开放（预留的解锁位，目前恒为解锁） */
+/** 随机模式始终开放（预留的解锁位，目前恒为解锁） */
 export function updateFreeButton() {
   const free = $('free-btn');
   if (!free) return;
   free.classList.remove('locked');
   // 只改文字标签，保留左下角的 emoji 贴纸（.btn-emoji）
   const label = free.querySelector('.btn-label');
-  if (label) label.textContent = '自由模式';
-  else free.textContent = '🆓 自由模式';
+  if (label) label.textContent = '随机模式';
+  else free.textContent = '🎲 随机模式';
+}
+
+/**
+ * 故事模式按钮：只有当前城市有故事（hasStory）才解锁，否则锁住。
+ * 目前只有北京写了 6 关剧情，广州/深圳/上海禁用。
+ */
+export function updateStoryButton() {
+  const story = $('story-btn');
+  if (!story) return;
+  const city = cityById(state.currentCityId) || cityById('beijing');
+  const hasStory = !!(city && city.hasStory);
+  story.classList.toggle('locked', !hasStory);
+  const label = story.querySelector('.btn-label');
+  if (label) label.textContent = hasStory ? '故事模式' : '故事模式（敬请期待）';
+  else story.textContent = hasStory ? '📖 故事模式' : '🔒 故事模式';
+}
+
+// ============ 城市选择下拉 ============
+
+/**
+ * 渲染顶栏城市下拉菜单（含"当前城市"标记）。
+ * @param {(id:string)=>void} onPick 点击某城市时的回调（由 session.selectCity 传入）
+ */
+export function buildCityMenu(onPick) {
+  const menu = $('city-select-menu');
+  if (!menu) return;
+  menu.innerHTML = '';
+  const cur = cityById(state.currentCityId);
+  CITIES.forEach((c) => {
+    const item = document.createElement('div');
+    item.className = 'city-item' + (cur && cur.id === c.id ? ' current' : '');
+    item.textContent = c.name;
+    item.addEventListener('click', () => onPick(c.id));
+    menu.appendChild(item);
+  });
+}
+
+/** 更新顶栏当前城市名（如「北京」） */
+export function setCitySelectLabel(name) {
+  setText('city-select-current', name);
+}
+
+/** 打开/关闭城市下拉（切换 .open 类控制三角旋转 + .hidden 控制菜单显隐） */
+export function toggleCityMenu() {
+  const wrap = $('city-select');
+  const menu = $('city-select-menu');
+  if (!wrap || !menu) return;
+  const willOpen = menu.classList.contains('hidden');
+  menu.classList.toggle('hidden', !willOpen);
+  wrap.classList.toggle('open', willOpen);
+}
+
+/** 关闭城市下拉 */
+export function closeCityMenu() {
+  const wrap = $('city-select');
+  const menu = $('city-select-menu');
+  if (wrap) wrap.classList.remove('open');
+  if (menu) menu.classList.add('hidden');
 }
 
 /** 按完成状态切换按钮：规划中=上一步+取消；完成后隐藏（由结果弹窗接管） */
@@ -107,6 +166,7 @@ export function updateButtons() {
   } else {
     show('btn-group');
     show('undo-btn');
+    show('show-all-btn'); // 规划中恢复"显示全图站点"（手机端预览阶段 hide 过，这里要 show 回来）
     setText('reset-btn', '取消');
   }
 }
@@ -138,11 +198,18 @@ export function buildStoryLevels(onPick) {
 /** 各畸变按钮 id（与 index.html 对应） */
 const TOWER_MENU_IDS = { normal: 'tower-normal', noMetro: 'tower-no-metro', busBoost: 'tower-bus-boost', rain: 'tower-rain' };
 
-/** 刷新四个畸变按钮上的"最佳 第 N 层 / 进行中 第 M 层" */
+/** 刷新四个畸变按钮：标题/二级说明（单一来源 levels.js）+ "最佳 第 N 层 / 进行中 第 M 层" */
 export function updateTowerMenuBest() {
   for (const [key, elId] of Object.entries(TOWER_MENU_IDS)) {
     const el = $(elId);
     if (!el) continue;
+    const cfg = TOWER_SCENARIOS[key];
+    if (cfg) {
+      const label = el.querySelector('.tower-opt-label');
+      const sub = el.querySelector('.tower-opt-sub');
+      if (label) label.textContent = cfg.label;
+      if (sub) sub.textContent = cfg.sub || '';
+    }
     const best = state.towerBest[key] || 0;
     const prog = state.towerProgress[key] || 0;
     let txt = best > 0 ? ('最佳 第 ' + best + ' 层') : '暂无纪录';

@@ -16,11 +16,13 @@
 import { state } from '../core/state.js';
 import { setStatus } from '../core/dom.js';
 import { haversineKm } from '../core/router-api.js';
+import { saveCityId } from '../core/storage.js';
+import { cityById } from '../data/cities.js';
 import { ensureGameDataReady, isGameDataReady } from './data-ready.js';
 import { TUTORIAL_COMMON, TUTORIAL_COMMON_TOUCH } from '../data/levels.js';
 import { drawEndpoints, setMapLocked } from '../map/map-init.js';
 import { applyScenario } from '../map/stop-layer.js';
-import { hideAllPanels, showPanel, setCityLabel, setTowerHudVisible, updateFreeButton, buildStoryLevels, updateTowerMenuBest } from '../ui/menu.js';
+import { hideAllPanels, showPanel, setCityLabel, setTowerHudVisible, updateFreeButton, updateStoryButton, buildStoryLevels, updateTowerMenuBest, buildCityMenu, setCitySelectLabel, toggleCityMenu } from '../ui/menu.js';
 import { playStory, playHint, hideStoryAndTutorial } from '../ui/story.js';
 import { clearResult } from '../ui/result.js';
 import { resetRoute, finishRoute } from './route.js';
@@ -44,10 +46,10 @@ export function beginGameplay(level) {
  *        skipStory 跳过剧情直接开玩；scenario 覆盖关卡自带情景（自由模式勾选的情景走这里）
  */
 export function startLevel(level, opts) {
-  // 数据懒加载：首次点开始时数据可能还没下载（~19MB）。
+  // 数据懒加载：首次点开始时数据可能还没下载。
   // 若未就绪 → 触发按需加载，加载完再真正开始本关（递归调用一次）。
   if (!isGameDataReady()) {
-    setStatus('正在下载交通数据（首次约 19MB）…');
+    setStatus('正在下载城市交通数据…');
     ensureGameDataReady().then((ready) => { if (ready) startLevel(level, opts); });
     return;
   }
@@ -64,7 +66,7 @@ export function startLevel(level, opts) {
   state.towerActive = (level.id === 'tower');
   if (!state.towerActive) setTowerHudVisible(false);
 
-  setCityLabel('北京 · ' + level.title);
+  setCityLabel((cityById(state.currentCityId) || cityById('beijing')).name + ' · ' + level.title);
   hideAllPanels();
   hideStoryAndTutorial();
   resetRoute();
@@ -102,15 +104,40 @@ export function showMenu() {
   }
   state.towerActive = false;
   setTowerHudVisible(false);
-  setCityLabel('北京');
+  const cityName = (cityById(state.currentCityId) || cityById('beijing')).name;
+  setCityLabel(cityName);
+  setCitySelectLabel(cityName);
   setStatus('选择游戏模式');
   showPanel('main-menu');
   clearResult();
-  updateFreeButton(); // 自由模式始终开放
+  updateFreeButton();  // 自由模式始终开放
+  updateStoryButton(); // 故事模式按城市可用性锁定
 }
 
-/** 打开故事模式关卡列表 */
+/**
+ * 切换城市：保存选择并刷新页面。
+ * 切换 = 整页重载（和换高德 Key 一样）：所有状态（数据索引/寻路图/图层/关卡进度）
+ * 天然清空，数据按新城市重新懒加载，最不容易出状态残留的 bug。
+ */
+export function selectCity(id) {
+  if (!cityById(id)) return;
+  saveCityId(id);
+  location.reload();
+}
+
+/** 打开/关闭顶栏城市下拉（点击展开小三角时触发） */
+export function openCityMenu() {
+  buildCityMenu(selectCity);
+  toggleCityMenu();
+}
+
+/** 打开故事模式关卡列表（当前城市没有故事时拦截，不进入） */
 export function openStoryMenu() {
+  const city = cityById(state.currentCityId) || cityById('beijing');
+  if (!city || !city.hasStory) {
+    setStatus('该城市的故事模式尚未开放，敬请期待');
+    return;
+  }
   buildStoryLevels(startLevel); // 卡片点击 → 直接开始该关
   showPanel('story-menu');
   setStatus('选择关卡');
@@ -135,12 +162,14 @@ const RANDOM_OFFSET_MAX_M = 1500; // 上限 1.5km，保证起终点步行不超�
  * 且点永不远离站点（步行可控）。
  */
 export function randomPoint() {
-  if (!state.physStops.length) return [116.4, 39.9];
+  const city = cityById(state.currentCityId) || cityById('beijing');
+  if (!state.physStops.length) return city.center.slice();
   const stop = state.physStops[Math.floor(Math.random() * state.physStops.length)];
   const angle = Math.random() * 2 * Math.PI;
   const dist = RANDOM_OFFSET_MIN_M + Math.random() * (RANDOM_OFFSET_MAX_M - RANDOM_OFFSET_MIN_M);
   const dLat = (dist * Math.cos(angle)) / 111000; // 1° 纬度 ≈ 111km
-  const dLng = (dist * Math.sin(angle)) / 85000;  // 1° 经度 ≈ 85km（北京纬度）
+  const mPerDegLng = 111320 * Math.cos(stop.lat * Math.PI / 180); // 经度每度米数，随纬度变化
+  const dLng = (dist * Math.sin(angle)) / mPerDegLng;
   return [stop.lng + dLng, stop.lat + dLat];
 }
 

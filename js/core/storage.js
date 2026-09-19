@@ -9,8 +9,9 @@
  * 【本项目用到的 localStorage key（集中登记，避免互相覆盖）】
  *   mg_amap_key              高德 jsApiKey（只存本地，不上传）
  *   mg_amap_security         高德 securityJsCode
- *   mg_story_unlocked        故事模式已解锁关卡数
- *   mg_tower_state           爬塔纪录 { best, progress }
+ *   mg_story_unlocked        故事模式已解锁关卡数（仅北京有故事，故不按城市分）
+ *   mg_tower_state_<cityId>  爬塔纪录 { best, progress, round }（按城市分开，见 game/progress.js）
+ *   mg_city_id               当前选中城市 id（data/cities.js）
  *   amapWalkCache_v4         高德步行结果缓存（当前未启用，见 map/walk.js 末尾）
  */
 
@@ -81,6 +82,18 @@ export function saveAmapKey(key) {
 
 export function saveAmapSecurity(code) {
   writeText(KEY_AMAP_SECURITY, String(code || '').trim());
+}
+
+// ============ 当前城市 ============
+
+const KEY_CITY_ID = 'mg_city_id';
+
+export function loadCityId(fallback) {
+  return readText(KEY_CITY_ID, fallback);
+}
+
+export function saveCityId(id) {
+  writeText(KEY_CITY_ID, String(id || ''));
 }
 
 // ============ 步行换乘开关 ============

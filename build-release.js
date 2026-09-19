@@ -41,9 +41,13 @@ const TARGETS = {
 const INCLUDE = [
   'server.js',
   'index.html',
+  'favicon.svg',
   'js',                         // app.js / router.js / amap-polyfill.js
   'fonts',                      // ChillRoundF 字体（SIL OFL，本地打包）
-  'data/beijing-transit.json',  // 全量数据（GCJ-02）
+  'data/beijing-transit.json',  // 北京全量数据（GCJ-02）
+  'data/guangzhou-transit.json',// 广州全量数据
+  'data/shenzhen-transit.json', // 深圳全量数据
+  'data/shanghai-transit.json', // 上海全量数据
   'data/sample.json',           // 演示兜底
   'README.md',
 ];

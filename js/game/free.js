@@ -10,10 +10,10 @@ import { setStatus, hide, $ } from '../core/dom.js';
 import { startLevel, ensureStopsReady, sampleRandomEndpoints } from './session.js';
 import { showPanel } from '../ui/menu.js';
 
-/** 自由模式二级页：勾选情景 */
+/** 随机模式二级页：勾选情景 */
 export function openFreeMenu() {
   showPanel('free-menu');
-  setStatus('勾选情景后开始自由模式');
+  setStatus('勾选情景后开始随机模式');
 }
 
 /** 读取勾选的情景并开局（多个勾选会叠乘：加速 1.2 × 雨天 0.5 = 0.6） */
@@ -37,7 +37,7 @@ export async function randomLevel(scenario) {
   const level = {
     id: 'random',
     mode: 'random',
-    title: '自由模式',
+    title: '随机模式',
     goalText: '规划一条从随机起点到随机终点的最快路线。',
     origin: { name: '随机起点', lng: o[0], lat: o[1] },
     dest: { name: '随机终点', lng: d[0], lat: d[1] },

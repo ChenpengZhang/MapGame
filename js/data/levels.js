@@ -142,11 +142,12 @@ export const TUTORIAL_COMMON_TOUCH = [
 
 // ============ 无尽模式（爬塔）可选的畸变 ============
 // 普通也是其一；四种畸变的成绩分别记录（见 state.towerBest / towerProgress）
+// label 是标题（进游戏后左上角关卡描述用），sub 是二级说明（菜单卡片上的小字）。
 export const TOWER_SCENARIOS = {
-  normal:   { label: '普通模式', scenario: { noMetro: false, busSpeedFactor: 1.0, walkSpeedFactor: 1.0 } },
-  noMetro:  { label: '地铁瘫痪（禁用地铁）', scenario: { noMetro: true, busSpeedFactor: 1.0, walkSpeedFactor: 1.0 } },
-  busBoost: { label: '一路畅通（公交加速20%）', scenario: { noMetro: false, busSpeedFactor: 1.2, walkSpeedFactor: 1.0 } },
-  rain:     { label: '大雨滂沱（公交/步行减缓50%）', scenario: { noMetro: false, busSpeedFactor: 0.5, walkSpeedFactor: 0.5 } },
+  normal:   { label: '普通', sub: '无特殊效果', scenario: { noMetro: false, busSpeedFactor: 1.0, walkSpeedFactor: 1.0 } },
+  noMetro:  { label: '地铁瘫痪', sub: '禁用地铁', scenario: { noMetro: true, busSpeedFactor: 1.0, walkSpeedFactor: 1.0 } },
+  busBoost: { label: '一路畅通', sub: '公交加速20%', scenario: { noMetro: false, busSpeedFactor: 1.2, walkSpeedFactor: 1.0 } },
+  rain:     { label: '大雨滂沱', sub: '公交/步行减缓50%', scenario: { noMetro: false, busSpeedFactor: 0.5, walkSpeedFactor: 0.5 } },
 };
 
 /** 爬塔畸变的展示顺序（菜单与纪录表按此顺序） */

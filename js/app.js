@@ -22,17 +22,18 @@
 
 import { state } from './core/state.js';
 import { $, hide, show, setStatus, showError, showLoading, hideLoading, showCenterToast, loadScript, isTouchDevice, preventPagePinch } from './core/dom.js';
-import { loadAmapKey, loadAmapSecurity, saveAmapKey, saveAmapSecurity, loadWalkTransfer, saveWalkTransfer } from './core/storage.js';
+import { loadAmapKey, loadAmapSecurity, saveAmapKey, saveAmapSecurity, loadWalkTransfer, saveWalkTransfer, loadCityId, saveCityId } from './core/storage.js';
+import { cityById } from './data/cities.js';
 import { initMap, setZoomSpeed } from './map/map-init.js';
 import { toggleShowAllStops } from './map/stop-layer.js';
 import { onStopClick, onCandidateStopClick, finishRoute, resetRoute, undoRoute, confirmStart, setForceWalk } from './game/route.js';
-import { showMenu, openStoryMenu, openTowerMenu, startLevel } from './game/session.js';
+import { showMenu, openStoryMenu, openTowerMenu, openCityMenu, startLevel, selectCity } from './game/session.js';
 import { openFreeMenu, startFreeGame } from './game/free.js';
 import { startTower, resetTowerFromLayer1 } from './game/tower.js';
 // 注意：import game/flow.js 会执行它的模块体，从而注册"最优路线就绪"的订阅（结算弹窗）
 import { nextLevel, restartLevel } from './game/flow.js';
 import { loadStoryProgress, loadTowerState } from './game/progress.js';
-import { buildStoryLevels, openSettingsPanel, closeSettingsPanel, setCityLabel, refreshMenuChrome } from './ui/menu.js';
+import { buildStoryLevels, openSettingsPanel, closeSettingsPanel, setCityLabel, setCitySelectLabel, closeCityMenu, updateStoryButton, refreshMenuChrome } from './ui/menu.js';
 import { hideResultOverlay } from './ui/result.js';
 import { storyNext, tutorialNext } from './ui/story.js';
 
@@ -54,8 +55,11 @@ async function bootstrap() {
       // 未配置 Key → 免 Key 的 Leaflet + OSM（amap-polyfill.js 提供 AMap 兼容层）
       await loadScript('https://unpkg.com/leaflet@1.9.4/dist/leaflet.js');
     }
-    setCityLabel('北京');
+    const cityName = (cityById(state.currentCityId) || cityById('beijing')).name;
+    setCityLabel(cityName);
+    setCitySelectLabel(cityName);
     initMap();
+    updateStoryButton(); // 按城市恢复故事模式按钮的锁定状态（切换城市后立即生效）
     hideLoading(); // 地图就绪即收起遮罩；交通数据改为进入游戏时按需下载（见 game/data-ready.js）
   } catch (e) {
     hideLoading();
@@ -87,6 +91,7 @@ function bindUiEvents() {
   on('free-btn', openFreeMenu);
   on('free-start-btn', startFreeGame);
   on('free-back-btn', showMenu);
+  on('city-select-btn', openCityMenu);
   on('online-btn', () => setStatus('排位模式尚未开放，敬请期待'));
 
   // ---- 爬塔：四种畸变 ----
@@ -127,12 +132,20 @@ function bindUiEvents() {
   on('result-tower-reset', resetTowerFromLayer1);
   on('result-viewmap', hideResultOverlay);
   on('result-toggle-btn', () => { hide('result-toggle-btn'); show('result-overlay'); });
+
+  // ---- 城市下拉：点击下拉区域以外的地方关闭 ----
+  document.addEventListener('click', (e) => {
+    const wrap = $('city-select');
+    if (wrap && !wrap.contains(e.target)) closeCityMenu();
+  });
 }
 
 // ============ 启动 ============
 
 state.isTouch = isTouchDevice(); // 判定触摸设备：手机端启用两阶段选站 + 更大的站点热区
 state.walkTransfer = loadWalkTransfer(); // 步行换乘开关（持久化在 localStorage）
+state.currentCityId = loadCityId('beijing'); // 恢复上次选的城市（默认北京）
+if (!cityById(state.currentCityId)) state.currentCityId = 'beijing'; // 校验无效值
 preventPagePinch();             // 禁用页面级双指缩放（地图自身的双指缩放保留）
 // 自动化测试/调试钩子：暴露只读状态引用 + 关键动作，供浏览器回归探针驱动流程（不影响游戏逻辑）
 if (typeof window !== 'undefined') {

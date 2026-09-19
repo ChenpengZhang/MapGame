@@ -13,13 +13,14 @@
  */
 
 import { state } from '../core/state.js';
-import { MAP_CENTER } from '../core/config.js';
 import { setStatus, $ } from '../core/dom.js';
+import { cityById } from '../data/cities.js';
 import { loadWalkCache } from './walk.js';
 
 /** 创建地图并做首屏准备（交通数据懒加载，由 game/data-ready.js 在进入游戏时触发） */
 export function initMap() {
-  state.map = new AMap.Map('map', { center: MAP_CENTER, zoom: 11, viewMode: '2D', scrollWheel: false });
+  const city = cityById(state.currentCityId) || cityById('beijing');
+  state.map = new AMap.Map('map', { center: city.center, zoom: 11, viewMode: '2D', scrollWheel: false });
   setupZoomInertia();
   loadWalkCache();
   setStatus('选择关卡开始游戏');

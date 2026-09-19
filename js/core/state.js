@@ -30,6 +30,9 @@ export const state = {
   // ---------- 寻路图 ----------
   routerGraph: null,            // 本地寻路图（router-api.buildGraph 的结果）
 
+  // ---------- 当前城市 ----------
+  currentCityId: 'beijing',     // 当前选中城市（data/cities.js 的 id；启动时由 storage 恢复）
+
   // ---------- 关卡与情景 ----------
   ORIGIN: null,                 // 起点 [lng, lat]（由关卡设定）
   DEST: null,                   // 终点 [lng, lat]

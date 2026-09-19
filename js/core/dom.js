@@ -111,17 +111,21 @@ export function loadScript(src) {
 
 /**
  * 是否触摸设备（手机/平板）。
- * 用多个信号取或：pointer:coarse 是主要信号，其余做兜底；
+ * 优先判「有鼠标」：只要同时满足"精确指针 + 悬停能力"，就是桌面（单击选站）；
+ * 否则再判 coarse 指针。这样触屏笔记本（虽带触屏、maxTouchPoints>0）在用鼠标时
+ * 不会被误判成手机，避免桌面端出现"点两下才确定"的两阶段选站。
  * 全部取不到时按非触摸处理（桌面），保证 Node 桩环境/老浏览器不报错。
  */
 export function isTouchDevice() {
   try {
-    if (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) return true;
+    if (window.matchMedia) {
+      // 有鼠标（fine pointer + hover）→ 桌面
+      if (window.matchMedia('(hover: hover)').matches && window.matchMedia('(pointer: fine)').matches) return false;
+      // 主要输入是触摸（coarse pointer）→ 手机/平板
+      if (window.matchMedia('(pointer: coarse)').matches) return true;
+    }
   } catch (e) { /* 忽略 */ }
   if ('ontouchstart' in window) return true;
-  try {
-    if (typeof navigator !== 'undefined' && navigator.maxTouchPoints > 0) return true;
-  } catch (e) { /* 忽略 */ }
   return false;
 }
 
