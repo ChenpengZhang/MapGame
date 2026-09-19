@@ -21,7 +21,7 @@
  */
 
 import { state } from './core/state.js';
-import { $, hide, show, setStatus, showError, showLoading, hideLoading, loadScript } from './core/dom.js';
+import { $, hide, show, setStatus, showError, showLoading, hideLoading, loadScript, isTouchDevice } from './core/dom.js';
 import { buildGraph } from './core/router-api.js';
 import { loadAmapKey, loadAmapSecurity, saveAmapKey, saveAmapSecurity } from './core/storage.js';
 import { loadTransitData } from './data/loader.js';
@@ -29,7 +29,7 @@ import { buildIndex } from './data/index-builder.js';
 import { initMap, setZoomSpeed } from './map/map-init.js';
 import { renderMetroContext, renderStops, toggleShowAllStops } from './map/stop-layer.js';
 import { onStopMouseOver, onStopMouseOut } from './map/hover.js';
-import { onStopClick, resetRoute, undoRoute } from './game/route.js';
+import { onStopClick, resetRoute, undoRoute, confirmStart } from './game/route.js';
 import { showMenu, openStoryMenu, openTowerMenu, startLevel } from './game/session.js';
 import { openFreeMenu, startFreeGame } from './game/free.js';
 import { startTower, resetTowerFromLayer1 } from './game/tower.js';
@@ -104,6 +104,7 @@ function on(id, handler, evt) {
 
 function bindUiEvents() {
   // ---- 规划中的操作条 ----
+  on('confirm-start-btn', confirmStart);       // 手机两阶段：确认起点
   on('undo-btn', undoRoute);                  // 上一步
   on('reset-btn', resetRoute);                // 取消（重置路线）
   on('show-all-btn', toggleShowAllStops);     // 显示/关闭全图站点
@@ -151,6 +152,7 @@ function bindUiEvents() {
 
 // ============ 启动 ============
 
+state.isTouch = isTouchDevice(); // 判定触摸设备：手机端启用两阶段选站 + 更大的站点热区
 bindUiEvents();
 loadStoryProgress();   // 故事模式解锁进度（localStorage）
 loadTowerState();      // 爬塔纪录（localStorage）

@@ -223,8 +223,10 @@
   };
 
   // 海量点：每个站两层 —— 小视觉圆点（非交互）+ 大透明命中圆（交互）。
-  // 命中圆半径约 9px，避免 OSM 下"必须点中 3.5px 小点"的精度问题；悬浮/点击挂在命中圆上。
-  // 数据对象（含 GCJ-02 lnglat）原样保留，事件回传时不改坐标系。
+  // 命中圆半径：桌面 9px 精确点选；触摸设备 16px（约 32px 直径，更接近手指点选目标）。
+  // 悬浮/点击挂在命中圆上；数据对象（含 GCJ-02 lnglat）原样保留，事件回传时不改坐标系。
+  const TOUCH = !!(typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
+  const HIT_R = TOUCH ? 16 : 9;
   AMap.MassMarks = class {
     constructor(data, opts) {
       this._data = data || [];
@@ -251,7 +253,7 @@
           interactive: false,
         });
         const hit = L.circleMarker(ll, {
-          radius: 9,
+          radius: HIT_R,
           stroke: false, fill: true, fillOpacity: 0,
           interactive: true,
         });

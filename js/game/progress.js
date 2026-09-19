@@ -38,19 +38,25 @@ export function saveStoryProgress() {
 
 // ============ 爬塔纪录 ============
 
-/** 读存档：best（各畸变最高层）+ progress（各畸变进行中的层数） */
+/** 读存档：best（各畸变最高层）+ progress（各畸变进行中的层数）+ round（本轮起终点） */
 export function loadTowerState() {
   const v = readJSON(KEY_TOWER) || {};
-  const b = v.best || {}, p = v.progress || {};
+  const b = v.best || {}, p = v.progress || {}, r = v.round || {};
   for (const k of Object.keys(state.towerBest)) {
     const bn = parseInt(b[k], 10);
     if (bn > 0) state.towerBest[k] = bn;
     const pn = parseInt(p[k], 10);
     if (pn > 0) state.towerProgress[k] = pn;
+    // 校验本轮起终点结构，忽略旧版/损坏的存档，避免污染状态
+    const round = r[k];
+    if (round && typeof round.layer === 'number' &&
+        Array.isArray(round.origin) && Array.isArray(round.dest)) {
+      state.towerRound[k] = { layer: round.layer, origin: round.origin, dest: round.dest };
+    }
   }
 }
 
-/** 写存档：best + progress */
+/** 写存档：best + progress + round */
 export function saveTowerState() {
-  writeJSON(KEY_TOWER, { best: state.towerBest, progress: state.towerProgress });
+  writeJSON(KEY_TOWER, { best: state.towerBest, progress: state.towerProgress, round: state.towerRound });
 }

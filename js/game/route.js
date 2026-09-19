@@ -18,7 +18,7 @@
 
 import { state } from '../core/state.js';
 import { MAX_WALK_M } from '../core/config.js';
-import { showCenterToast, setStatus, hide, show, $ } from '../core/dom.js';
+import { showCenterToast, setStatus, setText, hide, show, $ } from '../core/dom.js';
 import { resolveStop, getLine, getPhys, findStopInLine, distM } from '../data/index-builder.js';
 import { makeMassMarks, stopToData } from '../map/stop-marks.js';
 import { fadeInOverlay, fadeOutOverlay, setMassMarksMap } from '../map/anim.js';
@@ -49,7 +49,35 @@ export function onStopClick(e) {
     showCenterToast('距离起点步行超过 1.5km，请选择更近的站点');
     return;
   }
-  startRoute({ logical, point: phys.lnglat });
+  if (state.isTouch) {
+    // 手机两阶段：第一次点只预览换乘站，第二次点（确认按钮）才真正开始
+    previewStart({ logical, point: phys.lnglat });
+  } else {
+    startRoute({ logical, point: phys.lnglat });
+  }
+}
+
+/** 手机端两阶段选站 · 第一步：预览换乘站，不立即开始路线 */
+function previewStart(d) {
+  state.pendingStart = d;
+  hideBaseStops();                 // 只显示换乘站，避免与基础站点重叠
+  showCandidateNetwork(d.logical); // 显示换乘站 + 可达线路
+  show('btn-group');
+  show('confirm-start-btn');
+  hide('undo-btn');
+  hide('show-all-btn');
+  hide('tower-restart-btn');
+  show('reset-btn');
+  setText('reset-btn', '取消');
+  updateLegend();
+  setStatus('起点预览：' + d.logical.name + '，点「确认起点」开始规划');
+}
+
+/** 手机端两阶段选站 · 第二步：确认（由 app.js 的「确认起点」按钮调用） */
+export function confirmStart() {
+  const d = state.pendingStart;
+  if (!d) return;
+  startRoute(d); // startRoute 内的 resetRoute 会清空 pendingStart 并隐藏确认按钮
 }
 
 /** 开始规划：以该站为首站 */
@@ -174,12 +202,14 @@ export function resetRoute() {
   clearCandidate();
   clearOptimal();
   state.showAllStops = false;
+  state.pendingStart = null; // 取消手机两阶段预览
   const sab = $('show-all-btn');
   if (sab) sab.textContent = '显示全图站点';
   updateButtons();
   updateLegend(); // 重新开始后恢复图例
   hide('route-panel');
   hide('btn-group');
+  hide('confirm-start-btn');
   hide('result-overlay');
   hide('result-toggle-btn');
   updateStopsByZoom();

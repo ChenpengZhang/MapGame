@@ -1,13 +1,12 @@
 'use strict';
 
 // 本地寻路器测试脚本（Node）
-// 用法：node test-router.js
+// 用法：node test/test-router.js
 // 用直线距离×步行速度模拟步行时间，验证寻路算法本身。
 
-const path = require('path');
-const router = require('./js/router.js');
+const router = require('../js/router.js');
 
-const data = require('./data/beijing-transit.json');
+const data = require('../data/beijing-transit.json');
 
 const ORIGIN = [116.3971, 39.9163]; // 故宫
 const DEST = [116.4615, 39.9095];   // 国贸

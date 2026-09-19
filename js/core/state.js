@@ -44,6 +44,8 @@ export const state = {
   storyActive: false,           // 剧情/教学进行中，禁止地图操作
   mapLocked: false,             // 剧情期间锁定地图拖拽/缩放
   showAllStops: false,          // 规划中"全图显示站点"开关（开启时不能继续规划）
+  isTouch: false,               // 是否触摸设备（由 app.js 启动时用 isTouchDevice 判定）
+  pendingStart: null,           // 手机端两阶段选站：已预览但未确认的起点 {logical, point}
 
   // ---------- 无尽模式（爬塔） ----------
   towerActive: false,           // 是否处于爬塔中
@@ -52,6 +54,7 @@ export const state = {
   towerLastPass: false,         // 上一层是否通过
   towerBest: { normal: 0, noMetro: 0, busBoost: 0, rain: 0 },     // 各畸变最高层
   towerProgress: { normal: 0, noMetro: 0, busBoost: 0, rain: 0 }, // 各畸变当前进行到第几层（0 = 无进度）
+  towerRound: { normal: null, noMetro: null, busBoost: null, rain: null }, // 各畸变"本轮"的起终点 {layer,origin,dest}：退出重进沿用，防止刷起终点
 
   // ---------- 玩家路线链 ----------
   routeStops: [],               // [S1, S2, ...]：{logical, point}

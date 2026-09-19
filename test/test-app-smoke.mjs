@@ -11,8 +11,8 @@
  *     → 算最优路线 → 结算弹窗 → 爬塔一局 → 剧情/教学流程 → 回主菜单
  *
  * 【用法】
- *   node test-app-smoke.mjs          # 用 data/sample.json（快，默认）
- *   MG_FULL=1 node test-app-smoke.mjs # 用全量 beijing-transit.json（慢，验证真实规模）
+ *   node test/test-app-smoke.mjs          # 用 data/sample.json（快，默认）
+ *   MG_FULL=1 node test/test-app-smoke.mjs # 用全量 beijing-transit.json（慢，验证真实规模）
  *
  * 【边界】这是冒烟测试，不替代浏览器验证：桩件只覆盖"能跑到"的 API，
  *   地图真实渲染效果仍需在浏览器里用 node server.js 打开确认。
@@ -24,7 +24,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 
-const ROOT = path.dirname(fileURLToPath(import.meta.url));
+// 项目根目录（本文件位于 test/ 下，向上一级即项目根）
+const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const require = createRequire(import.meta.url);
 const USE_FULL = process.env.MG_FULL === '1';
 
@@ -179,25 +180,25 @@ globalThis.AMap = {
 // 2. 加载 router.js（UMD → window.TransitRouter），再导入被测模块
 // ======================================================================
 
-globalThis.window.TransitRouter = require('./js/router.js');
+globalThis.window.TransitRouter = require('../js/router.js');
 
-const { state } = await import('./js/core/state.js');
-const { buildGraph, haversineKm } = await import('./js/core/router-api.js');
-const { loadTransitData } = await import('./js/data/loader.js');
-const { buildIndex } = await import('./js/data/index-builder.js');
-const { LEVELS } = await import('./js/data/levels.js');
-const { stopToData } = await import('./js/map/stop-marks.js');
-const { initMap } = await import('./js/map/map-init.js');
-const { renderMetroContext, renderStops, toggleShowAllStops } = await import('./js/map/stop-layer.js');
-const { onStopMouseOver, onStopMouseOut } = await import('./js/map/hover.js');
-const { onStopClick, onCandidateStopClick, finishRoute, resetRoute, undoRoute } = await import('./js/game/route.js');
-const { startLevel, showMenu, openStoryMenu, openTowerMenu } = await import('./js/game/session.js');
-const { startTower, resetTowerFromLayer1, towerThreshold } = await import('./js/game/tower.js');
-const { nextLevel, restartLevel } = await import('./js/game/flow.js');
-const { openFreeMenu, startFreeGame } = await import('./js/game/free.js');
-const { storyNext, tutorialNext } = await import('./js/ui/story.js');
-const { updateButtons } = await import('./js/ui/menu.js');
-const app = await import('./js/app.js'); // 入口（会自行 bootstrap：桩件里 loadScript 永不回调，属预期）
+const { state } = await import('../js/core/state.js');
+const { buildGraph, haversineKm } = await import('../js/core/router-api.js');
+const { loadTransitData } = await import('../js/data/loader.js');
+const { buildIndex } = await import('../js/data/index-builder.js');
+const { LEVELS } = await import('../js/data/levels.js');
+const { stopToData } = await import('../js/map/stop-marks.js');
+const { initMap } = await import('../js/map/map-init.js');
+const { renderMetroContext, renderStops, toggleShowAllStops } = await import('../js/map/stop-layer.js');
+const { onStopMouseOver, onStopMouseOut } = await import('../js/map/hover.js');
+const { onStopClick, onCandidateStopClick, finishRoute, resetRoute, undoRoute, confirmStart } = await import('../js/game/route.js');
+const { startLevel, showMenu, openStoryMenu, openTowerMenu } = await import('../js/game/session.js');
+const { startTower, resetTowerFromLayer1, towerThreshold } = await import('../js/game/tower.js');
+const { nextLevel, restartLevel } = await import('../js/game/flow.js');
+const { openFreeMenu, startFreeGame } = await import('../js/game/free.js');
+const { storyNext, tutorialNext } = await import('../js/ui/story.js');
+const { updateButtons } = await import('../js/ui/menu.js');
+const app = await import('../js/app.js'); // 入口（会自行 bootstrap：桩件里 loadScript 永不回调，属预期）
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const el = (id) => document.getElementById(id);
@@ -331,6 +332,29 @@ await step('撤回与重置', () => {
   assert.equal(state.showAllStops, false);
 });
 
+await step('手机两阶段选站：第一次点只预览，确认后才开始', () => {
+  const physA = globalThis.__smokeA;
+  state.isTouch = true; // 模拟触摸设备
+  startLevel({
+    id: 'smoke-mobile', series: 0, title: '手机测试', timeLimitMin: 200,
+    origin: { name: physA.name, lng: physA.lng, lat: physA.lat },
+    dest: { name: physA.name, lng: physA.lng + 0.02, lat: physA.lat },
+    goalText: '', success: '', fail: '',
+  }, { skipStory: true });
+
+  onStopClick({ data: stopToData(physA) });
+  assert.equal(state.routeStops.length, 0, '第一次点只预览，不开始路线');
+  assert.ok(state.pendingStart, '已记录待确认起点');
+  assert.ok(state.candidateMarks && state.candidateMarks.data.length > 0, '已显示换乘站（候选网络）');
+
+  confirmStart();
+  assert.equal(state.routeStops.length, 1, '确认后路线才开始');
+  assert.equal(state.pendingStart, null, '确认后清空待确认状态');
+
+  state.isTouch = false; // 还原，避免影响后续步骤
+  resetRoute();
+});
+
 await step('爬塔：开一层并判定阈值', async () => {
   startTower('normal');
   await wait(100);
@@ -341,6 +365,16 @@ await step('爬塔：开一层并判定阈值', async () => {
   assert.equal(towerThreshold(1), 1.0);
   assert.equal(towerThreshold(12), 0.01);
   assert.equal(towerThreshold(99), 0.01, '第 12 层后维持 1%');
+
+  // 退出重进应沿用同一组起终点（防止"无限重开刷起终点"）
+  const savedOrigin = state.ORIGIN.slice();
+  const savedDest = state.DEST.slice();
+  showMenu();
+  startTower('normal');
+  await wait(100);
+  assert.deepEqual(state.ORIGIN, savedOrigin, '退出重进后起点不变');
+  assert.deepEqual(state.DEST, savedDest, '退出重进后终点不变');
+
   resetTowerFromLayer1();
   await wait(100);
   assert.equal(state.towerLayer, 1);

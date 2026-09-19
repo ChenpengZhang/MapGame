@@ -89,3 +89,21 @@ export function loadScript(src) {
     document.head.appendChild(s);
   });
 }
+
+// ============ 设备能力 ============
+
+/**
+ * 是否触摸设备（手机/平板）。
+ * 用多个信号取或：pointer:coarse 是主要信号，其余做兜底；
+ * 全部取不到时按非触摸处理（桌面），保证 Node 桩环境/老浏览器不报错。
+ */
+export function isTouchDevice() {
+  try {
+    if (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) return true;
+  } catch (e) { /* 忽略 */ }
+  if ('ontouchstart' in window) return true;
+  try {
+    if (typeof navigator !== 'undefined' && navigator.maxTouchPoints > 0) return true;
+  } catch (e) { /* 忽略 */ }
+  return false;
+}

@@ -124,9 +124,11 @@ MapGame/
 │   ├── game/              #   玩法层：路线规划 / 时间模型 / 会话 / 爬塔 / 结算
 │   └── ui/                #   表现层：路线面板 / 结果弹窗 / 菜单 / 剧情对话框
 ├── cptond-convert.js      # CPTOND → beijing-transit.json（主数据管线）
-├── test-router.js         # 寻路器 Node 回归测试（node test-router.js）
-├── test-integrity.js      # 数据完整性检查（逻辑站 id 唯一性等）
-├── test-optimal-invariant.js # 「最优 ≤ 玩家」不变式验证
+├── test/                  # 测试脚本（node test/<脚本名> 运行）
+│   ├── test-router.js     #   寻路器 Node 回归测试
+│   ├── test-integrity.js  #   数据完整性：逻辑站 id 唯一、物理站线路映射无缺失
+│   ├── test-optimal-invariant.js # 「最优 ≤ 玩家」不变式验证
+│   └── test-app-smoke.mjs #   前端冒烟测试（模块图 + 主流程，Node 桩环境）
 ├── calibrate-collect.js   # 采高德真实路径规划样本（校准用，需 Web 服务 key）
 ├── calibrate.js           # 成本模型锚点法校准
 ├── benchmark.js           # 本地模型 vs 高德真实耗时（端到端误差）
@@ -146,10 +148,10 @@ MapGame/
 ## 测试
 
 ```bash
-node test-router.js            # 寻路回归测试（故宫→国贸 正常/禁用地铁）
-node test-integrity.js         # 数据完整性：逻辑站 id 唯一、物理站线路映射无缺失
-node test-optimal-invariant.js # 不变式：系统最优 ≤ 玩家可达方案（防「最优比玩家慢」）
-node test-app-smoke.mjs        # 前端冒烟测试（模块图 + 主流程，Node 桩环境，无需浏览器）
+node test/test-router.js            # 寻路回归测试（故宫→国贸 正常/禁用地铁）
+node test/test-integrity.js         # 数据完整性：逻辑站 id 唯一、物理站线路映射无缺失
+node test/test-optimal-invariant.js # 不变式：系统最优 ≤ 玩家可达方案（防「最优比玩家慢」）
+node test/test-app-smoke.mjs        # 前端冒烟测试（模块图 + 主流程，Node 桩环境，无需浏览器）
 node --check js/router.js
 ```
 

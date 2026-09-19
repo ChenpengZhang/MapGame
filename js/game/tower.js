@@ -39,21 +39,35 @@ export function startTower(key) {
   startTowerRound();
 }
 
-/** 从第 1 层重来（清空该畸变的进行中进度，保留最高纪录） */
+/** 从第 1 层重来（清空该畸变的进行中进度与本轮起终点，保留最高纪录） */
 export function resetTowerFromLayer1() {
   state.towerLayer = 1;
   state.towerProgress[state.towerScenarioKey] = 0;
+  state.towerRound[state.towerScenarioKey] = null; // 重来要给新起终点
   state.towerLastPass = false;
   saveTowerState();
   resetRoute();
   startTowerRound();
 }
 
-/** 起一层新的爬塔：随机起终点 + 当前畸变情景 + 显示 HUD */
+/** 起一层新的爬塔：沿用/随机起终点 + 当前畸变情景 + 显示 HUD */
 export async function startTowerRound() {
   // 数据没加载完就先等（否则随机点会重合，见 session.ensureStopsReady 的说明）
   if (!(await ensureStopsReady())) return;
-  const [o, d] = sampleRandomEndpoints();
+
+  // 本轮起终点：同一畸变 + 同一层，退出重进时沿用保存的起终点，防止"无限重开刷起终点"；
+  // 只有真正换轮次（通过进下一层 / 失败重开 / 从第 1 层重来）才会重新随机。
+  const saved = state.towerRound[state.towerScenarioKey];
+  let origin, dest;
+  if (saved && saved.layer === state.towerLayer) {
+    origin = saved.origin;
+    dest = saved.dest;
+  } else {
+    [origin, dest] = sampleRandomEndpoints();
+    state.towerRound[state.towerScenarioKey] = { layer: state.towerLayer, origin, dest };
+    saveTowerState();
+  }
+
   const cfg = TOWER_SCENARIOS[state.towerScenarioKey];
   const thr = towerThreshold(state.towerLayer);
   const level = {
@@ -61,8 +75,8 @@ export async function startTowerRound() {
     mode: 'random',
     title: '无尽模式 · ' + cfg.label,
     goalText: '第 ' + state.towerLayer + ' 层 · 要求比最优慢 ≤ ' + Math.round(thr * 100) + '%',
-    origin: { name: '随机起点', lng: o[0], lat: o[1] },
-    dest: { name: '随机终点', lng: d[0], lat: d[1] },
+    origin: { name: '随机起点', lng: origin[0], lat: origin[1] },
+    dest: { name: '随机终点', lng: dest[0], lat: dest[1] },
   };
   show('tower-hud');
   setText('tower-layer-label', '第 ' + state.towerLayer + ' 层');
@@ -90,12 +104,14 @@ export function showTowerResult() {
     restartLabel = '下一层';
     // 通过后进度推进到下一层（退出时保存）
     state.towerProgress[state.towerScenarioKey] = state.towerLayer + 1;
+    state.towerRound[state.towerScenarioKey] = null; // 本轮结束，清掉起终点
     saveTowerState();
   } else {
     if (state.towerLayer > state.towerBest[state.towerScenarioKey]) {
       state.towerBest[state.towerScenarioKey] = state.towerLayer;
     }
     state.towerProgress[state.towerScenarioKey] = 0; // 失败后清空进度（重新挑战从第 1 层）
+    state.towerRound[state.towerScenarioKey] = null; // 本轮结束，清掉起终点
     saveTowerState();
     title = '💀 止步第 ' + state.towerLayer + ' 层';
     message = '最高纪录：第 ' + state.towerBest[state.towerScenarioKey] + ' 层';

@@ -7,8 +7,8 @@
 // 用与 app.js 相同的成本模型（estimateRideMinutes 那套）算时间，取最小值，
 // 与 router 报的 totalMin 比较。若 playerBest < optimal - 容差，则 bug 仍在。
 
-const R = require('./js/router.js');
-const data = require('./data/beijing-transit.json');
+const R = require('../js/router.js');
+const data = require('../data/beijing-transit.json');
 
 const graph = R.buildGraph(data.lines);
 const MAX_WALK_KM = 1.5;

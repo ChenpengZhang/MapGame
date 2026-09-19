@@ -227,6 +227,7 @@ html, body {
 #reset-btn { background: #334155; }
 #show-all-btn { background: #059669; }
 #tower-restart-btn { background: #7c3aed; }
+#confirm-start-btn { background: #059669; }
 
 .hidden { display: none !important; }
 
@@ -521,6 +522,42 @@ html, body {
   border-radius: 999px; color: #fff; font-size: 14px; letter-spacing: 1px; text-align: center;
   box-shadow: var(--shadow-xl);
 }
+
+/* ==========================================================================
+   手机适配（≤600px）
+   思路：底部让给"路线面板抽屉"，图例/操作条挪到顶部，避免与图例重叠；
+   路线面板改为从底部上来的抽屉，主菜单按钮自适应。
+   ========================================================================== */
+@media (max-width: 600px) {
+  #topbar { padding: 8px 10px; }
+  #topbar .title { font-size: 14px; }
+  #topbar .title .sub { font-size: 11px; }
+  #topbar .status { max-width: 40vw; font-size: 11px; padding: 4px 8px; }
+
+  /* 图例：挪到左上，收起说明文字，只留两个色点 */
+  #legend {
+    left: 10px; top: 58px; bottom: auto;
+    flex-direction: row; align-items: center; gap: 10px;
+    padding: 6px 12px;
+  }
+  #legend .hint { display: none; }
+
+  /* 底部操作条：挪到右上，可换行，避免和图例打架 */
+  .btn-group { right: 10px; top: 58px; bottom: auto; flex-wrap: wrap; justify-content: flex-end; max-width: 74vw; }
+  .btn-group button { padding: 7px 12px; font-size: 12px; }
+  #result-toggle-btn { right: 10px; top: 58px; bottom: auto; padding: 7px 12px; font-size: 12px; }
+  #tower-hud { top: 54px; font-size: 12px; padding: 5px 12px; max-width: 92vw; }
+
+  /* 路线面板 / 信息卡：改成底部抽屉 */
+  #left-col { left: 0; right: 0; top: auto; bottom: 0; max-width: none; gap: 8px; }
+  #route-panel, #infocard { border-radius: var(--r-lg) var(--r-lg) 0 0; }
+  #route-panel { max-height: 42vh; }
+
+  /* 主菜单按钮更贴边，避免太挤 */
+  .main-inner { padding: 16px; }
+  .main-inner h1 { font-size: 34px; }
+  .main-btns button { width: min(88vw, 320px); }
+}
   </style>
 </head>
 <body>
@@ -558,6 +595,7 @@ html, body {
     </div>
 
     <div class="btn-group hidden" id="btn-group">
+      <button id="confirm-start-btn" class="hidden">✅ 确认起点</button>
       <button id="show-all-btn">显示全图站点</button>
       <button id="tower-restart-btn" class="hidden">🔄 从第1层重来</button>
       <button id="undo-btn">上一步</button>

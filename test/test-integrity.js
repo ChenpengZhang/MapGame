@@ -1,8 +1,8 @@
 'use strict';
 
 // 验证：逻辑站 ID 是否发生碰撞（不同簇生成同一个 id，后者覆盖前者）
-const R = require('./js/router.js');
-const data = require('./data/beijing-transit.json');
+const R = require('../js/router.js');
+const data = require('../data/beijing-transit.json');
 const g = R.buildGraph(data.lines);
 
 // 找出所有「映射到同一逻辑站 id、但该逻辑站的 stopByLine 不包含其线路」的情况
