@@ -14,7 +14,7 @@
 import { state } from '../core/state.js';
 import { OPTIMAL_COLOR, OPTIMAL_CASING, TRANSFER_WALK_MIN_M } from '../core/config.js';
 import { getLine, getLogical } from '../data/index-builder.js';
-import { fadeInOverlay, fadeOutOverlay } from './anim.js';
+import { fadeInOverlay, removeOverlay } from './anim.js';
 import { tagRouteOverlay, lineSegmentPath } from './route-layer.js';
 import { activeWalk } from './walk.js';
 import { haversineKm } from '../core/router-api.js';
@@ -104,11 +104,11 @@ function drawOptimalTransferWalk(p1, p2) {
   state.optimalOverlays.push(poly);
 }
 
-/** 淡出并清空最优路线覆盖物 */
+/** 移除并清空最优路线覆盖物（硬移除，避免残留） */
 export function clearOptimalOverlays() {
   const overlays = state.optimalOverlays;
   state.optimalOverlays = [];
-  for (const o of overlays) fadeOutOverlay(o);
+  for (const o of overlays) removeOverlay(o);
 }
 
 /** 清除最优路线（覆盖物 + 结果数据） */

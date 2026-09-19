@@ -21,7 +21,7 @@ import { MAX_WALK_M } from '../core/config.js';
 import { showCenterToast, setStatus, setText, hide, show, $ } from '../core/dom.js';
 import { resolveStop, getLine, getPhys, findStopInLine, distM } from '../data/index-builder.js';
 import { makeMassMarks, stopToData } from '../map/stop-marks.js';
-import { fadeInOverlay, fadeOutOverlay, setMassMarksMap } from '../map/anim.js';
+import { fadeInOverlay, setMassMarksMap, removeOverlay } from '../map/anim.js';
 import { hideBaseStops, updateStopsByZoom } from '../map/stop-layer.js';
 import { addStopMarker, drawRideSegment, drawTransferWalk, rideEndpoint, drawWalkLeg, clearGroupOverlays } from '../map/route-layer.js';
 import { onStopMouseOver, onStopMouseOut } from '../map/hover.js';
@@ -50,8 +50,12 @@ export function onStopClick(e) {
     return;
   }
   if (state.isTouch) {
-    // 手机两阶段：第一次点只预览换乘站，第二次点（确认按钮）才真正开始
-    previewStart({ logical, point: phys.lnglat });
+    // 手机两阶段：第一次点预览换乘站；再次点击同一站 = 确认开始
+    if (state.pendingStart && String(state.pendingStart.logical.id) === String(logical.id)) {
+      confirmStart();
+    } else {
+      previewStart({ logical, point: phys.lnglat });
+    }
   } else {
     startRoute({ logical, point: phys.lnglat });
   }
@@ -70,7 +74,7 @@ function previewStart(d) {
   show('reset-btn');
   setText('reset-btn', '取消');
   updateLegend();
-  setStatus('起点预览：' + d.logical.name + '，点「确认起点」开始规划');
+  setStatus('起点预览：' + d.logical.name + '，再次点击该站确认起点');
 }
 
 /** 手机端两阶段选站 · 第二步：确认（由 app.js 的「确认起点」按钮调用） */
@@ -109,6 +113,11 @@ export function onCandidateStopClick(phys) {
   if (state.showAllStops) { showCenterToast('请关闭全图显示后继续'); return; }
   const logical = resolveStop(phys);
   if (!logical) return;
+  // 手机两阶段预览态：起点也会出现在候选网络里，再次点到它 = 确认
+  if (state.pendingStart && String(logical.id) === String(state.pendingStart.logical.id)) {
+    confirmStart();
+    return;
+  }
   if (!state.routeStops.length || state.finished) return;
 
   const prev = state.routeStops[state.routeStops.length - 1];
@@ -324,12 +333,12 @@ function showCandidateNetwork(stop) {
   state.candidateMarks.on('mouseout', onStopMouseOut);
 }
 
-/** 隐藏并清空候选网络 */
+/** 隐藏并清空候选网络（硬移除，避免淡出回调不触发导致残留） */
 export function clearCandidate() {
   const polylines = state.candidateOverlays;
   state.candidateOverlays = [];
-  for (const o of polylines) fadeOutOverlay(o);
+  for (const o of polylines) removeOverlay(o);
   const mm = state.candidateMarks;
   state.candidateMarks = null;
-  if (mm) fadeOutOverlay(mm);
+  if (mm) removeOverlay(mm);
 }

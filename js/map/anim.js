@@ -93,6 +93,16 @@ export function fadeOutOverlay(o, duration, onRemoved) {
 }
 
 /**
+ * 硬移除覆盖物：直接 setMap(null)，不依赖淡出动画的回调。
+ * 清除类场景（重置路线、切候选网络、清最优）必须用它——
+ * 动画回调在某些环境（后台标签/虚拟时钟）可能不触发，导致图层永久残留。
+ */
+export function removeOverlay(o) {
+  if (!o) return;
+  try { o.setMap(null); } catch (e) { /* 忽略 */ }
+}
+
+/**
  * MassMarks 渲染到一个 <canvas>；setMap 后捕获它，供透明度动画使用。
  * 递归重试是因为 canvas 可能不是同步挂载的（最多 20 帧，约 0.3 秒）。
  */

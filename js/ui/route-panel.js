@@ -21,6 +21,30 @@ import { haversineKm } from '../core/router-api.js';
 import { getLine } from '../data/index-builder.js';
 import { computeTotalMinutes, waitMin, rideStats, estimateRideMinutes, transferPenaltyMin, scoreFor } from '../game/time-model.js';
 
+/** 折叠状态：null 表示尚未按设备初始化（手机默认收起、桌面默认展开） */
+let collapsed = null;
+
+/**
+ * 把折叠状态应用到面板，并（重新）绑定「收起/展开」按钮。
+ * 面板每次重绘都会用 innerHTML 重建，所以按钮的事件要在这里重新挂一次。
+ */
+function applyCollapse(panel) {
+  if (collapsed === null) collapsed = !!state.isTouch;
+  panel.classList.toggle('collapsed', collapsed);
+  const btn = $('rp-toggle-btn');
+  if (btn) {
+    btn.textContent = collapsed ? '展开' : '收起';
+    btn.addEventListener('click', toggleRoutePanel);
+  }
+}
+
+/** 收起/展开路线面板（手机端面板太占地方时用） */
+export function toggleRoutePanel() {
+  collapsed = !collapsed;
+  const panel = $('route-panel');
+  if (panel) applyCollapse(panel);
+}
+
 /** 距离格式化：≥1km 显示一位小数，否则显示米 */
 function fmtDist(km) {
   if (km == null || !(km > 0)) return '';
@@ -59,7 +83,7 @@ export function renderRoutePanel() {
   const panel = $('route-panel');
   if (!panel) return;
   const rows = [];
-  rows.push('<div class="rp-title">路线规划</div>');
+  rows.push('<div class="rp-title"><span>路线规划</span><button type="button" class="rp-toggle" id="rp-toggle-btn">收起</button></div>');
 
   if (!state.routeStops.length) {
     // 纯步行路线（未选任何站点直接点终点）
@@ -71,6 +95,7 @@ export function renderRoutePanel() {
     rows.push('<div class="rp-total">总耗时约 ' + computeTotalMinutes().toFixed(0) + ' 分钟</div>');
     appendOptimalComparison(rows);
     panel.innerHTML = rows.join('');
+    applyCollapse(panel);
     panel.classList.remove('hidden');
     return;
   }
@@ -109,6 +134,7 @@ export function renderRoutePanel() {
   appendOptimalComparison(rows);
 
   panel.innerHTML = rows.join('');
+  applyCollapse(panel);
   panel.classList.remove('hidden');
 }
 

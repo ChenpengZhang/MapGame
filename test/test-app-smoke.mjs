@@ -332,24 +332,48 @@ await step('撤回与重置', () => {
   assert.equal(state.showAllStops, false);
 });
 
-await step('手机两阶段选站：第一次点只预览，确认后才开始', () => {
-  const physA = globalThis.__smokeA;
+await step('手机两阶段选站 + 两局残留检查', async () => {
+  const physA = globalThis.__smokeA, physB = globalThis.__smokeB;
   state.isTouch = true; // 模拟触摸设备
-  startLevel({
+  const start = () => startLevel({
     id: 'smoke-mobile', series: 0, title: '手机测试', timeLimitMin: 200,
     origin: { name: physA.name, lng: physA.lng, lat: physA.lat },
-    dest: { name: physA.name, lng: physA.lng + 0.02, lat: physA.lat },
+    dest: { name: physB.name, lng: physB.lng, lat: physB.lat },
     goalText: '', success: '', fail: '',
   }, { skipStory: true });
 
+  start();
   onStopClick({ data: stopToData(physA) });
   assert.equal(state.routeStops.length, 0, '第一次点只预览，不开始路线');
   assert.ok(state.pendingStart, '已记录待确认起点');
   assert.ok(state.candidateMarks && state.candidateMarks.data.length > 0, '已显示换乘站（候选网络）');
 
-  confirmStart();
-  assert.equal(state.routeStops.length, 1, '确认后路线才开始');
+  // 再次点击同一站 = 确认
+  onStopClick({ data: stopToData(physA) });
+  assert.equal(state.routeStops.length, 1, '再次点击同一站确认后路线才开始');
   assert.equal(state.pendingStart, null, '确认后清空待确认状态');
+
+  // 换乘一步 + 完成第一局
+  onCandidateStopClick(stopToData(physB));
+  assert.equal(state.routeStops.length, 2, '换乘后两站');
+  finishRoute();
+  await wait(400);
+  assert.equal(state.finished, true, '第一局完成');
+  assert.equal(state.candidateMarks, null, '完成后候选站点已清空');
+  assert.equal(state.candidateOverlays.length, 0, '完成后候选线路已清空');
+
+  // 第二局：重新开始，不应残留第一局状态
+  restartLevel();
+  assert.equal(state.routeStops.length, 0, '重开后路线清空');
+  assert.equal(state.finished, false, '重开后 finished 复位');
+  assert.equal(state.candidateMarks, null, '重开后无候选站点残留');
+  assert.equal(state.candidateOverlays.length, 0, '重开后无候选线路残留');
+  assert.equal(state.pendingStart, null, '重开后无预览状态残留');
+
+  // 第二局应能正常重新预览
+  onStopClick({ data: stopToData(physA) });
+  assert.equal(state.routeStops.length, 0, '第二局预览不立即开始');
+  assert.ok(state.pendingStart, '第二局能正常预览起点');
 
   state.isTouch = false; // 还原，避免影响后续步骤
   resetRoute();

@@ -17,7 +17,7 @@
 import { state } from '../core/state.js';
 import { WALK_COLOR, ROUTE_COLOR, ROUTE_CASING, TRANSFER_WALK_MIN_M } from '../core/config.js';
 import { findStopInLine } from '../data/index-builder.js';
-import { fadeInOverlay, fadeOutOverlay } from './anim.js';
+import { fadeInOverlay, removeOverlay } from './anim.js';
 import { activeWalk } from './walk.js';
 import { haversineKm } from '../core/router-api.js';
 
@@ -32,9 +32,9 @@ export function currentGroup() {
   return state.routeOverlayGroups[state.routeOverlayGroups.length - 1];
 }
 
-/** 整组淡出（撤回一步、重置路线时用） */
+/** 整组移除（撤回一步、重置路线时用）；硬移除，避免淡出回调不触发导致残留 */
 export function clearGroupOverlays(g) {
-  for (const o of g) fadeOutOverlay(o);
+  for (const o of g) removeOverlay(o);
 }
 
 // ============ 站点序号图钉 ============

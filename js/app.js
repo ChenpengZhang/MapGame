@@ -29,7 +29,7 @@ import { buildIndex } from './data/index-builder.js';
 import { initMap, setZoomSpeed } from './map/map-init.js';
 import { renderMetroContext, renderStops, toggleShowAllStops } from './map/stop-layer.js';
 import { onStopMouseOver, onStopMouseOut } from './map/hover.js';
-import { onStopClick, resetRoute, undoRoute, confirmStart } from './game/route.js';
+import { onStopClick, onCandidateStopClick, finishRoute, resetRoute, undoRoute, confirmStart } from './game/route.js';
 import { showMenu, openStoryMenu, openTowerMenu, startLevel } from './game/session.js';
 import { openFreeMenu, startFreeGame } from './game/free.js';
 import { startTower, resetTowerFromLayer1 } from './game/tower.js';
@@ -153,6 +153,16 @@ function bindUiEvents() {
 // ============ 启动 ============
 
 state.isTouch = isTouchDevice(); // 判定触摸设备：手机端启用两阶段选站 + 更大的站点热区
+// 自动化测试/调试钩子：暴露只读状态引用 + 关键动作，供浏览器回归探针驱动流程（不影响游戏逻辑）
+if (typeof window !== 'undefined') {
+  window.__MG = {
+    state,
+    startLevel,
+    resetRoute,
+    restartLevel,
+    tap: { stop: onStopClick, candidate: onCandidateStopClick, finish: finishRoute, confirm: confirmStart },
+  };
+}
 bindUiEvents();
 loadStoryProgress();   // 故事模式解锁进度（localStorage）
 loadTowerState();      // 爬塔纪录（localStorage）

@@ -24,7 +24,7 @@ import { state } from '../core/state.js';
 import { METRO_MIN_ZOOM, BUS_MIN_ZOOM, MAX_BUS_RENDER } from '../core/config.js';
 import { setStatus, $ } from '../core/dom.js';
 import { makeMassMarks, stopToData } from './stop-marks.js';
-import { fadeInOverlay, fadeOutOverlay, tweenAlpha, overlayAlpha, captureMassMarksCanvas, ANIM_FADE_OUT_MS } from './anim.js';
+import { fadeInOverlay, tweenAlpha, overlayAlpha, captureMassMarksCanvas, removeOverlay, ANIM_FADE_OUT_MS } from './anim.js';
 import { mapContainer } from './map-init.js';
 
 // ---------- 模块内部状态（只被本文件使用，因此不放进 core/state.js） ----------
@@ -205,11 +205,11 @@ export function renderMetroContext() {
   }
 }
 
-/** 情景切换时重画地铁底图（禁用↔启用） */
+/** 情景切换时重画地铁底图（禁用↔启用）；硬移除旧底图，避免残留 */
 export function applyScenario() {
   const old = state.metroBase;
   state.metroBase = [];
-  for (const p of old) fadeOutOverlay(p);
+  for (const p of old) removeOverlay(p);
   if (!state.scenario.noMetro) renderMetroContext();
   updateStopsByZoom();
 }

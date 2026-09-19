@@ -164,7 +164,18 @@ html, body {
 #route-panel::-webkit-scrollbar { width: 6px; }
 #route-panel::-webkit-scrollbar-thumb { background: rgba(255,255,255,.18); border-radius: 3px; }
 #route-panel::-webkit-scrollbar-track { background: transparent; }
-#route-panel .rp-title { font-weight: 700; font-size: 13px; margin-bottom: 4px; color: var(--ink-strong); }
+#route-panel .rp-title {
+  font-weight: 700; font-size: 13px; margin-bottom: 4px; color: var(--ink-strong);
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+}
+#route-panel .rp-toggle {
+  border: 1px solid var(--ring); background: var(--bg-soft); color: var(--ink-muted);
+  font-size: 11px; font-weight: 600; padding: 2px 10px; border-radius: 999px; cursor: pointer;
+}
+#route-panel .rp-toggle:hover { color: var(--ink-strong); border-color: var(--ring-strong); }
+/* 折叠态：只保留标题行，隐藏其余内容 */
+#route-panel.collapsed > *:not(:first-child) { display: none; }
+#route-panel.collapsed { max-height: 44px; overflow: hidden; }
 #route-panel .rp-total { color: var(--accent); font-weight: 700; }
 #route-panel .rp-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin: 2px 0; }
 #route-panel .rp-desc { flex: 1; min-width: 0; }
