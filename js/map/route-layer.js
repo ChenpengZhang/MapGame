@@ -134,6 +134,22 @@ export function drawTransferWalk(p1, p2) {
   currentGroup().push(poly);
 }
 
+/**
+ * 步行换乘段（实验性，设置里开启）：下车步行到下一个不共享线路的站。
+ * 与 drawTransferWalk 不同，这一段【计入时间】（按步行速度），画得更醒目（紫色粗虚线）。
+ */
+export function drawWalkTransfer(p1, p2) {
+  if (!p1 || !p2) return;
+  const poly = new AMap.Polyline({
+    path: [p1, p2], strokeColor: WALK_COLOR, strokeWeight: 4, strokeOpacity: 0.95,
+    strokeStyle: 'dashed', dashArray: [12, 8], lineJoin: 'round', zIndex: 388,
+  });
+  poly.setMap(state.map);
+  tagRouteOverlay(poly, 'player', 388);
+  fadeInOverlay(poly);
+  currentGroup().push(poly);
+}
+
 // ============ 折线取段工具（最优路线层也复用） ============
 
 /**

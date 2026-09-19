@@ -40,6 +40,9 @@ export const state = {
   scenario: { noMetro: false, busSpeedFactor: 1.0, walkSpeedFactor: 1.0 },
   // 情景模式（关卡或自由模式可加载）：noMetro 禁用地铁 / busSpeedFactor 公交速度系数 / walkSpeedFactor 步行速度系数
 
+  walkTransfer: false,          // 步行换乘开关（设置里开启；开启后玩家换乘可步行到 >300m 的另一站，按步行速度计时）
+  forceWalk: false,             // 规划中的"强制步行"（勾选后即使两站共线也步行过去，临时状态，重置路线时清空）
+
   storyUnlocked: 1,             // 故事模式已解锁关卡数（1 = 仅第 1 关）
   storyActive: false,           // 剧情/教学进行中，禁止地图操作
   mapLocked: false,             // 剧情期间锁定地图拖拽/缩放
@@ -59,7 +62,7 @@ export const state = {
 
   // ---------- 玩家路线链 ----------
   routeStops: [],               // [S1, S2, ...]：{logical, point}
-  routeRides: [],               // [line1, line2, ...]（S[i]→S[i+1] 乘 rides[i]）
+  routeRides: [],               // [line1, line2, ...]（S[i]→S[i+1] 乘 rides[i]；null 表示步行换乘段）
   walkToFirstMin: 0,            // 起点→首站步行分钟
   walkToDestMin: 0,             // 末站→终点步行分钟
   finished: false,              // 玩家是否已点击终点完成规划

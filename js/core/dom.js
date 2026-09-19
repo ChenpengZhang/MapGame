@@ -57,10 +57,27 @@ export function showError(html) {
 export function showLoading(text) {
   setText('loading-text', text || '正在计算最优路线…');
   show('loading-overlay');
+  hide('loading-progress'); // 默认不带进度条，需要时用 setLoadingProgress 打开
 }
 
 export function hideLoading() {
   hide('loading-overlay');
+  hide('loading-progress');
+}
+
+/**
+ * 更新加载遮罩里的进度条（0~1）。
+ * 首次调用自动显示进度条；传 null / 不传则隐藏（还原成纯转圈样式）。
+ * @param {number|null} [fraction] 0~1 的进度；null 表示隐藏进度条
+ */
+export function setLoadingProgress(fraction) {
+  if (fraction == null) {
+    hide('loading-progress');
+    return;
+  }
+  show('loading-progress');
+  const bar = $('loading-progress-bar');
+  if (bar) bar.style.width = Math.round(Math.max(0, Math.min(1, fraction)) * 100) + '%';
 }
 
 /** 地图中央的短提示气泡（例如"请关闭全图显示后继续"），1.6 秒后自动消失 */

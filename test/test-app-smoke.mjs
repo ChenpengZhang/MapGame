@@ -102,9 +102,10 @@ globalThis.localStorage = {
   removeItem: (k) => { store.delete(k); },
 };
 
-/** fetch 桩：默认把全量数据当 404（走 sample 兜底），MG_FULL=1 时读真实全量数据 */
+/** fetch 桩：默认把全量数据当 404（走 sample 兜底），MG_FULL=1 时读真实全量数据。
+ *  与真实服务器一致：先剥掉 URL 里的 ?v= 查询串（版本号只用于缓存，不影响文件路径）。 */
 globalThis.fetch = async (url) => {
-  const u = String(url);
+  const u = String(url).split('?')[0];
   if (u.includes('beijing-transit.json') && !USE_FULL) {
     return { ok: false, status: 404, json: async () => { throw new Error('404'); } };
   }

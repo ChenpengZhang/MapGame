@@ -20,8 +20,9 @@ import {
   BUS_VMAX_KMH, BUS_ACCEL_MPS2,
   METRO_WAIT_MIN, BUS_WAIT_MIN,
   METRO_METRO_TRANSFER_MIN, BUS_BUS_TRANSFER_MIN, BUS_METRO_TRANSFER_MIN,
+  WALK_SPEED_M_PER_MIN,
 } from '../core/config.js';
-import { stopIndexInLine } from '../data/index-builder.js';
+import { stopIndexInLine, distM } from '../data/index-builder.js';
 
 /**
  * 公交车段行驶分钟（梯形加速：0→缓加速→线路巡航速度→匀速，路程=∫v dt）。
@@ -115,13 +116,26 @@ export function transferPenaltyMin(lineA, lineB) {
 /**
  * 玩家当前路线的总耗时（分钟）。
  * 完成（finished）后才计入"末站→终点"的步行时间，未完成时只算到已选站点。
+ * 路线链中 routeRides[i] === null 表示"步行换乘段"（下车步行到下一站，按步行速度计时）。
  */
 export function computeTotalMinutes() {
   let total = state.walkToFirstMin;
   for (let i = 0; i < state.routeRides.length; i++) {
-    total += waitMin(state.routeRides[i]); // 等车
-    total += estimateRideMinutes(state.routeRides[i], state.routeStops[i].logical, state.routeStops[i + 1].logical);
-    if (i > 0) total += transferPenaltyMin(state.routeRides[i - 1], state.routeRides[i]); // 换乘
+    const ride = state.routeRides[i];
+    if (ride === null) {
+      // 步行换乘段：上一站实际停靠点 → 下一站，直线距离 / 步行速度
+      const p1 = state.routeStops[i].point;
+      const p2 = state.routeStops[i + 1].point;
+      const dM = distM({ lng: p1[0], lat: p1[1] }, { lng: p2[0], lat: p2[1] });
+      total += dM / (WALK_SPEED_M_PER_MIN * state.scenario.walkSpeedFactor);
+      continue;
+    }
+    total += waitMin(ride); // 等车
+    total += estimateRideMinutes(ride, state.routeStops[i].logical, state.routeStops[i + 1].logical);
+    if (i > 0) {
+      const prevRide = state.routeRides[i - 1];
+      if (prevRide !== null) total += transferPenaltyMin(prevRide, ride); // 换乘（步行段不计固定惩罚，已按实际步行计时）
+    }
   }
   if (state.finished) total += state.walkToDestMin;
   return total;

@@ -16,6 +16,7 @@
 import { state } from '../core/state.js';
 import { setStatus } from '../core/dom.js';
 import { haversineKm } from '../core/router-api.js';
+import { ensureGameDataReady, isGameDataReady } from './data-ready.js';
 import { TUTORIAL_COMMON, TUTORIAL_COMMON_TOUCH } from '../data/levels.js';
 import { drawEndpoints, setMapLocked } from '../map/map-init.js';
 import { applyScenario } from '../map/stop-layer.js';
@@ -43,6 +44,13 @@ export function beginGameplay(level) {
  *        skipStory 跳过剧情直接开玩；scenario 覆盖关卡自带情景（自由模式勾选的情景走这里）
  */
 export function startLevel(level, opts) {
+  // 数据懒加载：首次点开始时数据可能还没下载（~19MB）。
+  // 若未就绪 → 触发按需加载，加载完再真正开始本关（递归调用一次）。
+  if (!isGameDataReady()) {
+    setStatus('正在下载交通数据（首次约 19MB）…');
+    ensureGameDataReady().then((ready) => { if (ready) startLevel(level, opts); });
+    return;
+  }
   opts = opts || {};
   state.currentLevel = level;
   state.gameMode = level.mode || 'standard'; // 固定关卡=standard；随机=random
@@ -137,18 +145,17 @@ export function randomPoint() {
 }
 
 /**
- * 等数据加载完再继续（最多等 15 秒）。
+ * 确保交通数据已就绪（自由模式/爬塔在抽随机点前调用）。
  * 数据没加载完就抽随机点会拿到空数据 → 两点重合；
  * 早期版本因此出现过"必须点两次才能开始"的 bug，这里保留这道防线。
+ * 现在是主动触发懒加载（幂等），而不是被动轮询等 bootstrap 加载。
  * @returns {Promise<boolean>} 数据是否就绪
  */
 export async function ensureStopsReady() {
   if (state.physStops.length) return true;
   setStatus('数据加载中，请稍候…');
-  for (let i = 0; i < 75 && !state.physStops.length; i++) {
-    await new Promise((r) => setTimeout(r, 200));
-  }
-  if (!state.physStops.length) { setStatus('数据加载失败，请刷新重试'); return false; }
+  const ready = await ensureGameDataReady();
+  if (!ready) { setStatus('数据加载失败，请刷新重试'); return false; }
   return true;
 }
 

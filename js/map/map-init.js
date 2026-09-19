@@ -17,7 +17,7 @@ import { MAP_CENTER } from '../core/config.js';
 import { setStatus, $ } from '../core/dom.js';
 import { loadWalkCache } from './walk.js';
 
-/** 创建地图并做首屏准备（数据加载由 app.js 的 loadGameData 接着做） */
+/** 创建地图并做首屏准备（交通数据懒加载，由 game/data-ready.js 在进入游戏时触发） */
 export function initMap() {
   state.map = new AMap.Map('map', { center: MAP_CENTER, zoom: 11, viewMode: '2D', scrollWheel: false });
   setupZoomInertia();

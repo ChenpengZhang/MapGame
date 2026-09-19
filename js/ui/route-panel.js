@@ -17,6 +17,7 @@
 
 import { state } from '../core/state.js';
 import { $ } from '../core/dom.js';
+import { WALK_SPEED_M_PER_MIN } from '../core/config.js';
 import { haversineKm } from '../core/router-api.js';
 import { getLine } from '../data/index-builder.js';
 import { computeTotalMinutes, waitMin, rideStats, estimateRideMinutes, transferPenaltyMin, scoreFor } from '../game/time-model.js';
@@ -107,19 +108,29 @@ export function renderRoutePanel() {
   ));
 
   for (let i = 0; i < state.routeRides.length; i++) {
-    const line = state.routeRides[i];
-    const from = state.routeStops[i].logical, to = state.routeStops[i + 1].logical;
-    rows.push(lineRowHTML(line.name, waitMin(line)));
-    const st = rideStats(line, from, to);
+    const ride = state.routeRides[i];
+    const from = state.routeStops[i], to = state.routeStops[i + 1];
+    if (ride === null) {
+      // 步行换乘段
+      const dKm = haversineKm(from.point, to.point);
+      const min = (dKm * 1000) / (WALK_SPEED_M_PER_MIN * state.scenario.walkSpeedFactor);
+      rows.push(walkRowHTML(from.logical.name, to.logical.name, dKm, min));
+      continue;
+    }
+    rows.push(lineRowHTML(ride.name, waitMin(ride)));
+    const st = rideStats(ride, from.logical, to.logical);
     rows.push(rideRowHTML(
-      from.name, to.name,
+      from.logical.name, to.logical.name,
       st ? st.segments : null,
       st && st.hasDist ? st.distanceKm : null,
-      estimateRideMinutes(line, from, to)
+      estimateRideMinutes(ride, from.logical, to.logical)
     ));
     if (i < state.routeRides.length - 1) {
-      const tp = transferPenaltyMin(line, state.routeRides[i + 1]);
-      rows.push(transferRowHTML(tp > 0 ? '换乘' : '同站换乘', tp));
+      const nextRide = state.routeRides[i + 1];
+      if (nextRide !== null) {
+        const tp = transferPenaltyMin(ride, nextRide);
+        rows.push(transferRowHTML(tp > 0 ? '换乘' : '同站换乘', tp));
+      }
     }
   }
 
@@ -173,6 +184,8 @@ function appendOptimalComparison(rows) {
   const s = scoreFor(gapRatio);
   const gapTxt = gapRatio > 0.001
     ? ('比最优慢 ' + (gapRatio * 100).toFixed(0) + '%（+' + gap.toFixed(0) + ' 分钟）')
-    : '与最优持平！';
+    : gapRatio < -0.001
+      ? ('比最优快 ' + (-gapRatio * 100).toFixed(0) + '%（-' + (-gap).toFixed(0) + ' 分钟）')
+      : '与最优持平！';
   rows.push('<div style="color:' + s.color + ';font-weight:700;">评分：' + s.label + ' ' + s.stars + ' · ' + gapTxt + '</div>');
 }

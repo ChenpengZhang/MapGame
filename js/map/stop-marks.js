@@ -11,30 +11,41 @@
  * 其中 style=0 表示地铁（大点、红色）、style=1 表示公交（小点、蓝色）。
  */
 
-/** 地铁点颜色 / 公交点颜色 */
+import { WALK_COLOR } from '../core/config.js';
+
+/** 地铁点颜色 / 公交点颜色 / 步行可达点颜色（与步行标线同色，区分"只能步行换乘过去"的站） */
 const METRO_DOT_COLOR = '#e74c3c';
 const BUS_DOT_COLOR = '#3498db';
+const WALK_DOT_COLOR = WALK_COLOR;
 
 let _icons = null;
 
-/** 地铁/公交圆点图标（懒生成一次，转成 dataURL 复用） */
+/** 地铁/公交/步行可达圆点图标（懒生成一次，转成 dataURL 复用） */
 function getIcons() {
-  if (!_icons) _icons = { metroIcon: circleIcon(METRO_DOT_COLOR, 10), busIcon: circleIcon(BUS_DOT_COLOR, 7) };
+  if (!_icons) {
+    _icons = {
+      metroIcon: circleIcon(METRO_DOT_COLOR, 10),
+      busIcon: circleIcon(BUS_DOT_COLOR, 7),
+      walkIcon: circleIcon(WALK_DOT_COLOR, 7),
+    };
+  }
   return _icons;
 }
 
 /**
  * 造一个空的站点图层（MassMarks）。数据用 setData 填充。
  * __baseOpacity 供 anim.js 的淡入淡出还原透明度用。
+ * style：0=地铁（大点红）、1=公交（小点蓝）、2=步行可达（小点紫）。
  */
 export function makeMassMarks(data) {
-  const { metroIcon, busIcon } = getIcons();
+  const { metroIcon, busIcon, walkIcon } = getIcons();
   const mm = new AMap.MassMarks(data, {
     opacity: 0.9,
     zIndex: 110,
     style: [
       { url: metroIcon, size: new AMap.Size(10, 10), anchor: new AMap.Pixel(5, 5) },
       { url: busIcon, size: new AMap.Size(7, 7), anchor: new AMap.Pixel(3.5, 3.5) },
+      { url: walkIcon, size: new AMap.Size(7, 7), anchor: new AMap.Pixel(3.5, 3.5) },
     ],
   });
   mm.__baseOpacity = 0.9;
@@ -44,11 +55,13 @@ export function makeMassMarks(data) {
 /**
  * 物理点 → MassMarks 数据。
  * 事件回调里的 e.data 就是这里的对象（因此带上 logicalId，便于反查逻辑站）。
+ * @param {object} p 物理点
+ * @param {boolean} walkable 是否"步行可达站"（style=2，紫色）
  */
-export function stopToData(p) {
+export function stopToData(p, walkable) {
   return {
     lnglat: [p.lng, p.lat],
-    style: p.mode === 'metro' ? 0 : 1,
+    style: walkable ? 2 : (p.mode === 'metro' ? 0 : 1),
     id: p.id,
     name: p.name,
     mode: p.mode,

@@ -242,12 +242,13 @@
       this._group.clearLayers();
       for (const d of this._data) {
         const metro = d.style === 0;
+        const walk = d.style === 2; // 步行可达站（紫色，与步行标线同色）
         // 入口：GCJ-02 lnglat → WGS-84（仅渲染用；d 本身保持 GCJ-02 供事件回传）
         const ll = gcj2leaflet([d.lnglat[0], d.lnglat[1]]);
         const dot = L.circleMarker(ll, {
           radius: metro ? 5 : 3.5,
           color: '#fff', weight: 1,
-          fillColor: metro ? '#e74c3c' : '#3498db',
+          fillColor: metro ? '#e74c3c' : walk ? '#6c5ce7' : '#3498db',
           fillOpacity: this._base,
           opacity: this._base,
           interactive: false,

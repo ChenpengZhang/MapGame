@@ -7,6 +7,7 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
+const zlib = require('zlib');
 const { exec } = require('child_process');
 
 const PORT = Number(process.env.PORT) || 8080;
@@ -35,9 +36,29 @@ const MIME = {
   '.woff': 'font/woff',
 };
 
+// 适合 gzip 的文本类型（二进制/已压缩格式跳过，避免徒劳且可能变大）
+const GZIP_EXTS = new Set(['.html', '.js', '.css', '.json', '.svg']);
+// 内存缓存 gzip 结果：本地开发反复刷新时避免每次都重压 19MB 数据（key = 文件路径 + mtime）
+const gzipCache = new Map();
+
+// 缓存策略：
+//   - 带 ?v=N 的资源（数据文件 beijing-transit.json?v=1、app.js?v=5 等）→ 一年强缓存：
+//     版本号一变 URL 就变，浏览器自动拿新文件，不会用旧缓存；
+//   - HTML 入口 → no-store：保证每次刷新都拿到最新的版本号引用（app.js?v=N、数据?v=N）；
+//   - 其余无版本号的 JS 模块/CSS 等 → no-store：开发期改了就立刻生效，量小无所谓。
+function cacheControlFor(url) {
+  const q = (url || '').indexOf('?');
+  if (q >= 0) {
+    const query = url.slice(q + 1);
+    if (/(^|&)v=/.test(query)) return 'public, max-age=31536000, immutable';
+  }
+  return 'no-store';
+}
+
 http
   .createServer((req, res) => {
-    let urlPath = decodeURIComponent((req.url || '/').split('?')[0]);
+    const rawUrl = req.url || '/';
+    let urlPath = decodeURIComponent(rawUrl.split('?')[0]);
     if (urlPath === '/') urlPath = '/index.html';
 
     const filePath = path.normalize(path.join(ROOT, urlPath));
@@ -46,14 +67,39 @@ http
       return res.end('Forbidden');
     }
 
-    fs.readFile(filePath, (err, buf) => {
-      if (err) {
+    fs.stat(filePath, (statErr, stat) => {
+      if (statErr) {
         res.writeHead(404);
         return res.end('Not Found: ' + urlPath);
       }
-      const ext = path.extname(filePath).toLowerCase();
-      res.writeHead(200, { 'Content-Type': MIME[ext] || 'application/octet-stream', 'Cache-Control': 'no-store' });
-      res.end(buf);
+      fs.readFile(filePath, (err, buf) => {
+        if (err) {
+          res.writeHead(404);
+          return res.end('Not Found: ' + urlPath);
+        }
+        const ext = path.extname(filePath).toLowerCase();
+        const headers = { 'Content-Type': MIME[ext] || 'application/octet-stream', 'Cache-Control': cacheControlFor(rawUrl) };
+
+        // gzip：仅文本类型 + 客户端支持时启用（浏览器都带 Accept-Encoding: gzip）
+        const accept = String(req.headers['accept-encoding'] || '');
+        if (GZIP_EXTS.has(ext) && /\bgzip\b/.test(accept) && buf.length > 1024) {
+          const ck = filePath + ':' + stat.mtimeMs + ':' + stat.size;
+          let gz = gzipCache.get(ck);
+          if (!gz) {
+            gz = zlib.gzipSync(buf, { level: 9 });
+            if (gzipCache.size > 64) gzipCache.clear(); // 简单防膨胀：超过 64 项清空重建
+            gzipCache.set(ck, gz);
+          }
+          headers['Content-Encoding'] = 'gzip';
+          headers['Vary'] = 'Accept-Encoding';
+          res.writeHead(200, headers);
+          res.end(gz);
+          return;
+        }
+
+        res.writeHead(200, headers);
+        res.end(buf);
+      });
     });
   })
   .on('error', (err) => {

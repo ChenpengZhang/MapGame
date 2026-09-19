@@ -82,3 +82,15 @@ export function saveAmapKey(key) {
 export function saveAmapSecurity(code) {
   writeText(KEY_AMAP_SECURITY, String(code || '').trim());
 }
+
+// ============ 步行换乘开关 ============
+
+const KEY_WALK_TRANSFER = 'mg_walk_transfer';
+
+export function loadWalkTransfer() {
+  return readText(KEY_WALK_TRANSFER, '') === '1';
+}
+
+export function saveWalkTransfer(on) {
+  writeText(KEY_WALK_TRANSFER, on ? '1' : '0');
+}

@@ -239,6 +239,17 @@ html, body {
 #show-all-btn { background: #059669; }
 #tower-restart-btn { background: #7c3aed; }
 
+/* 规划中的"强制步行"开关（与步行标线同色） */
+#force-walk-row {
+  display: flex; align-items: center; gap: 6px;
+  padding: 9px 16px; border: 1px solid var(--ring); border-radius: 999px;
+  font-size: 13px; font-weight: 600; color: #fff; cursor: pointer; user-select: none;
+  background: #6c5ce7; box-shadow: var(--shadow-sm);
+  transition: transform .15s cubic-bezier(.4,0,.2,1), box-shadow .15s, filter .15s;
+}
+#force-walk-row:hover { transform: translateY(-1px); box-shadow: var(--shadow-lg); filter: brightness(1.08); }
+#force-walk-row input { width: 15px; height: 15px; accent-color: #fff; cursor: pointer; }
+
 .hidden { display: none !important; }
 
 /* ==========================================================================
@@ -266,6 +277,17 @@ html, body {
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 .loading-text { color: var(--ink-muted); margin-top: 14px; font-size: 14px; letter-spacing: 1px; }
+/* 下载进度条（加载遮罩内，仅在有下载进度时显示） */
+.progress-track {
+  width: 220px; height: 6px; margin-top: 16px;
+  border-radius: 999px; overflow: hidden;
+  background: var(--primary-soft);
+}
+.progress-bar {
+  width: 0%; height: 100%; border-radius: 999px;
+  background: var(--accent);
+  transition: width .12s ease-out;
+}
 
 /* ==========================================================================
    主菜单
@@ -610,6 +632,10 @@ html, body {
     <div class="btn-group hidden" id="btn-group">
       <button id="show-all-btn">显示全图站点</button>
       <button id="tower-restart-btn" class="hidden">🔄 从第1层重来</button>
+      <label id="force-walk-row" class="hidden">
+        <input type="checkbox" id="force-walk-toggle">
+        <span>强制步行</span>
+      </label>
       <button id="undo-btn">上一步</button>
       <button id="reset-btn">取消</button>
     </div>
@@ -618,6 +644,9 @@ html, body {
       <div class="loading-card">
         <div class="spinner"></div>
         <div class="loading-text" id="loading-text">正在计算最优路线…</div>
+        <div class="progress-track hidden" id="loading-progress">
+          <div class="progress-bar" id="loading-progress-bar"></div>
+        </div>
       </div>
     </div>
 
@@ -732,6 +761,16 @@ html, body {
           <div class="settings-hint">数值越大，滚轮缩放越快（0.5 为默认）</div>
         </div>
 
+        <label style="margin-top:14px;display:flex;align-items:center;gap:8px;cursor:pointer;">
+          <input type="checkbox" id="walk-transfer-toggle" style="width:16px;height:16px;">
+          <span>步行换乘（实验性）</span>
+        </label>
+        <div class="settings-hint" style="margin-top:4px;">
+          开启后，换乘时若两站相距 300m~1.5km，可以步行前往并按步行速度计时。<br>
+          ⚠️ 由于算法复杂度限制，系统「最优」不计算远距离步行换乘，<br>
+          玩家可能规划出<b>比系统最优还快</b>的路线。
+        </div>
+
         <label style="margin-top:14px;">高德地图 Key（可选）</label>
         <div style="margin-top:4px;">
           <input type="text" id="amap-key-input" placeholder="jsApiKey（留空则用免 Key 的 OSM 地图）" style="width:100%;padding:7px;font-size:13px;">
@@ -758,6 +797,6 @@ html, body {
   -->
   <script src="js/router.js?v=2"></script>
   <script src="js/amap-polyfill.js"></script>
-  <script src="js/app.js?v=4" type="module"></script>
+  <script src="js/app.js?v=5" type="module"></script>
 </body>
 </html>

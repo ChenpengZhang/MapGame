@@ -19,11 +19,17 @@
 /** 地图初始中心（GCJ-02，与高德一致；OSM 后端由 amap-polyfill.js 在渲染边界统一换算） */
 export const MAP_CENTER = [116.397, 39.909];
 
+/**
+ * 数据文件版本号：重跑数据管线（cptond-convert.js）更新数据后，把这里 +1，
+ * 浏览器缓存才会失效并重新下载（URL 带 ?v=N，版本号一变就是全新资源）。
+ */
+export const DATA_VERSION = 1;
+
 /** 唯一数据源：GCJ-02（路由/关卡/交互全部用同一坐标系，两端结果一致） */
-export const DATA_FULL = 'data/beijing-transit.json';
+export const DATA_FULL = 'data/beijing-transit.json?v=' + DATA_VERSION;
 
 /** 全量数据缺失时的演示兜底数据 */
-export const DATA_SAMPLE = 'data/sample.json';
+export const DATA_SAMPLE = 'data/sample.json?v=' + DATA_VERSION;
 
 // ============ 站点渲染阈值 ============
 
@@ -77,6 +83,10 @@ export const MERGE_DISTANCE_M = 300;
 
 /** 起终点步行上限：不允许超过 1.5km（超过则禁止该站点作为起终点） */
 export const MAX_WALK_M = 1500;
+
+/** 步行换乘上限（米）：换乘时两站相距超过合并距离（MERGE_DISTANCE_M）但不超过此值，
+ *  可步行前往并按步行速度计时。仅当设置里开启「步行换乘」时生效。 */
+export const WALK_TRANSFER_MAX_M = 1500;
 
 /** 步行速度（米/分钟）：步行一律用直线距离 / 该速度估计 */
 export const WALK_SPEED_M_PER_MIN = 75;

@@ -50,12 +50,14 @@ export function showPanel(id) {
 
 // ============ 设置面板 ============
 
-/** 打开设置面板并回填已保存的高德 Key */
+/** 打开设置面板并回填已保存的高德 Key 与步行换乘开关 */
 export function openSettingsPanel() {
   const keyInput = $('amap-key-input');
   const secInput = $('amap-sec-input');
+  const walkToggle = $('walk-transfer-toggle');
   if (keyInput) keyInput.value = loadAmapKey();
   if (secInput) secInput.value = loadAmapSecurity();
+  if (walkToggle) walkToggle.checked = !!state.walkTransfer;
   show('settings-panel');
   refreshMenuChrome();
 }
@@ -98,6 +100,8 @@ export function updateFreeButton() {
 export function updateButtons() {
   // 爬塔时显示"从第1层重来"，其它模式隐藏
   toggleHidden('tower-restart-btn', !state.towerActive);
+  // "强制步行"只在【步行换乘开启 + 规划中 + 未完成】时出现
+  toggleHidden('force-walk-row', !(state.walkTransfer && state.routeStops.length > 0 && !state.finished));
   if (state.finished) {
     hide('btn-group');
   } else {

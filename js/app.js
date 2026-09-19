@@ -3,9 +3,9 @@
  *
  * 【这个文件只做三件事】
  *   1) 引导（bootstrap）：按"有没有配高德 Key"决定加载哪一个地图 SDK，
- *      然后初始化地图、加载交通数据、建索引与寻路图、渲染首屏；
- *   2) 组装（loadGameData）：把"数据 → 索引 → 寻路图 → 图层"按顺序接起来；
- *   3) 事件绑定（bindUiEvents）：把界面按钮接到各层的函数上——全项目唯一写
+ *      然后初始化地图。交通数据不在这里加载——改为玩家进入某个模式菜单时
+ *      按需下载（见 game/data-ready.js 的 ensureGameDataReady，幂等懒加载）；
+ *   2) 事件绑定（bindUiEvents）：把界面按钮接到各层的函数上——全项目唯一写
  *      addEventListener 的地方。
  *
  * 【它刻意不做什么】
@@ -21,15 +21,11 @@
  */
 
 import { state } from './core/state.js';
-import { $, hide, show, setStatus, showError, showLoading, hideLoading, loadScript, isTouchDevice, preventPagePinch } from './core/dom.js';
-import { buildGraph } from './core/router-api.js';
-import { loadAmapKey, loadAmapSecurity, saveAmapKey, saveAmapSecurity } from './core/storage.js';
-import { loadTransitData } from './data/loader.js';
-import { buildIndex } from './data/index-builder.js';
+import { $, hide, show, setStatus, showError, showLoading, hideLoading, showCenterToast, loadScript, isTouchDevice, preventPagePinch } from './core/dom.js';
+import { loadAmapKey, loadAmapSecurity, saveAmapKey, saveAmapSecurity, loadWalkTransfer, saveWalkTransfer } from './core/storage.js';
 import { initMap, setZoomSpeed } from './map/map-init.js';
-import { renderMetroContext, renderStops, toggleShowAllStops } from './map/stop-layer.js';
-import { onStopMouseOver, onStopMouseOut } from './map/hover.js';
-import { onStopClick, onCandidateStopClick, finishRoute, resetRoute, undoRoute, confirmStart } from './game/route.js';
+import { toggleShowAllStops } from './map/stop-layer.js';
+import { onStopClick, onCandidateStopClick, finishRoute, resetRoute, undoRoute, confirmStart, setForceWalk } from './game/route.js';
 import { showMenu, openStoryMenu, openTowerMenu, startLevel } from './game/session.js';
 import { openFreeMenu, startFreeGame } from './game/free.js';
 import { startTower, resetTowerFromLayer1 } from './game/tower.js';
@@ -60,41 +56,14 @@ async function bootstrap() {
     }
     setCityLabel('北京');
     initMap();
-    loadGameData();
+    hideLoading(); // 地图就绪即收起遮罩；交通数据改为进入游戏时按需下载（见 game/data-ready.js）
   } catch (e) {
     hideLoading();
     showError('初始化失败：' + (e && e.message ? e.message : e));
   }
 }
 
-// ============ 2. 组装：数据 → 索引 → 寻路图 → 图层 ============
-
-/**
- * 加载交通数据并渲染首屏。
- * （重构前这段写在 initMap 里，导致"地图初始化"顺带承担了数据职责，故拆开。）
- */
-async function loadGameData() {
-  try {
-    const { data, source } = await loadTransitData();
-    buildIndex(data);                                        // 建物理站/逻辑站索引
-    state.routerGraph = buildGraph(data.lines);              // 本地寻路图（供最优路线计算）
-    renderMetroContext();                                    // 灰色地铁底图
-    renderStops({                                            // 基础站点层（按视野渲染）
-      onClick: onStopClick,
-      onMouseOver: onStopMouseOver,
-      onMouseOut: onStopMouseOut,
-    });
-    setStatus(`已加载 ${state.linesMap.size} 条线路 / ${state.physStops.length} 个站点 · ${source} · 选择关卡开始游戏`);
-    hideLoading(); // 数据渲染完成，收起启动加载弹窗
-  } catch (e) {
-    // 重构前这里没有兜底：数据加载失败会一直卡在"正在加载地图…"，玩家看不到原因
-    hideLoading();
-    showError('交通数据加载失败：' + (e && e.message ? e.message : e));
-    console.error(e);
-  }
-}
-
-// ============ 3. 事件绑定（全项目唯一的 addEventListener 集中地） ============
+// ============ 2. 事件绑定（全项目唯一的 addEventListener 集中地） ============
 
 /** 绑定的简写：元素不存在时静默跳过（避免某个按钮被删掉就整页白屏） */
 function on(id, handler, evt) {
@@ -130,6 +99,17 @@ function bindUiEvents() {
   on('settings-btn', openSettingsPanel);
   on('settings-close', closeSettingsPanel);
   on('zoom-speed-slider', (e) => setZoomSpeed(parseFloat(e.target.value) || 0.5), 'input');
+  on('walk-transfer-toggle', () => {
+    const on = !!$('walk-transfer-toggle').checked;
+    state.walkTransfer = on;
+    saveWalkTransfer(on);
+    showCenterToast(on
+      ? '已开启步行换乘：玩家可能规划出比系统最优更快的路线'
+      : '已关闭步行换乘');
+  }, 'change');
+  on('force-walk-toggle', () => {
+    setForceWalk($('force-walk-toggle').checked);
+  }, 'change');
   on('amap-save-btn', () => {
     saveAmapKey($('amap-key-input').value);
     saveAmapSecurity($('amap-sec-input').value);
@@ -152,6 +132,7 @@ function bindUiEvents() {
 // ============ 启动 ============
 
 state.isTouch = isTouchDevice(); // 判定触摸设备：手机端启用两阶段选站 + 更大的站点热区
+state.walkTransfer = loadWalkTransfer(); // 步行换乘开关（持久化在 localStorage）
 preventPagePinch();             // 禁用页面级双指缩放（地图自身的双指缩放保留）
 // 自动化测试/调试钩子：暴露只读状态引用 + 关键动作，供浏览器回归探针驱动流程（不影响游戏逻辑）
 if (typeof window !== 'undefined') {

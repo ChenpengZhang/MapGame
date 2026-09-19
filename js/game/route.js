@@ -17,13 +17,13 @@
  */
 
 import { state } from '../core/state.js';
-import { MAX_WALK_M } from '../core/config.js';
+import { MAX_WALK_M, MERGE_DISTANCE_M, WALK_TRANSFER_MAX_M } from '../core/config.js';
 import { showCenterToast, setStatus, setText, hide, show, $ } from '../core/dom.js';
 import { resolveStop, getLine, getPhys, findStopInLine, distM } from '../data/index-builder.js';
 import { makeMassMarks, stopToData } from '../map/stop-marks.js';
 import { fadeInOverlay, setMassMarksMap, removeOverlay } from '../map/anim.js';
 import { hideBaseStops, updateStopsByZoom } from '../map/stop-layer.js';
-import { addStopMarker, drawRideSegment, drawTransferWalk, rideEndpoint, drawWalkLeg, clearGroupOverlays } from '../map/route-layer.js';
+import { addStopMarker, drawRideSegment, drawTransferWalk, drawWalkTransfer, rideEndpoint, drawWalkLeg, clearGroupOverlays } from '../map/route-layer.js';
 import { onStopMouseOver, onStopMouseOut, clearHighlight, renderHighlight } from '../map/hover.js';
 import { clearOptimal } from '../map/optimal-layer.js';
 import { haversineKm } from '../core/router-api.js';
@@ -81,6 +81,7 @@ function previewStart(d) {
   hide('undo-btn');
   hide('show-all-btn');
   hide('tower-restart-btn');
+  hide('force-walk-row'); // 尚未开始规划，不显示"强制步行"
   show('reset-btn');
   setText('reset-btn', '取消');
   setStatus('已高亮 ' + d.logical.name + '，再次点击确认起点');
@@ -158,12 +159,37 @@ function confirmCandidate(logical) {
   commitCandidate(logical, state.routeStops[state.routeStops.length - 1]);
 }
 
+/**
+ * 切换"强制步行"临时开关（由 app.js 绑定复选框时调用）。
+ * 切换后重渲染候选网络，让站点颜色即时反映"现在点任意站都会步行"。
+ */
+export function setForceWalk(on) {
+  state.forceWalk = !!on;
+  if (state.routeStops.length && !state.finished) {
+    showCandidateNetwork(state.routeStops[state.routeStops.length - 1].logical);
+  }
+}
+
 /** 确定换乘到某候选站（手机第二次点击 / 桌面点击都走这里） */
 function commitCandidate(logical, prev) {
+  // 强制步行：即使两站共线，也优先步行过去（距离需 ≤ 上限；失败则回退到乘车）
+  if (state.walkTransfer && state.forceWalk) {
+    if (commitWalkTransfer(logical, prev, true)) return;
+  }
   const shared = sharedLines(prev.logical, logical);
-  if (!shared.length) return;
+  if (shared.length) {
+    commitRide(logical, prev, shared[0]);
+    return;
+  }
+  // 无共有线路：非强制时，若开启步行换乘且距离在 (合并距离, 上限] 之间，则步行过去
+  //（force 已失败时不重复尝试，避免同一距离弹两次 toast）
+  if (state.walkTransfer && !state.forceWalk) {
+    commitWalkTransfer(logical, prev, false);
+  }
+}
 
-  const line = shared[0]; // 站数更少优先（同站数时地铁优先）
+/** 正常乘车换乘：两站有共有线路，沿该线接一段乘车 */
+function commitRide(logical, prev, line) {
   // 到达点 = 该线路上的物理站坐标（乘车段终点，也是下一步步行的起点）
   const physStop = findStopInLine(line, logical);
   const point = physStop ? [physStop.lng, physStop.lat] : [logical.lng, logical.lat];
@@ -179,13 +205,47 @@ function commitCandidate(logical, prev) {
   // 连接「上一条线在 prev 的下车点」↔「本条线在 prev 的上车点」，两者相距较远才画。
   if (state.routeRides.length >= 2) {
     const prevLine = state.routeRides[state.routeRides.length - 2];
-    drawTransferWalk(rideEndpoint(prevLine, prev.logical), rideEndpoint(line, prev.logical));
+    if (prevLine) drawTransferWalk(rideEndpoint(prevLine, prev.logical), rideEndpoint(line, prev.logical));
   }
 
   clearHighlight(); // 清掉预览悬浮高亮
   showCandidateNetwork(cur.logical);
   renderRoutePanel();
   setStatus(ridingHint());
+}
+
+/**
+ * 步行换乘（实验性，设置里开启）：两站无共有线路（或强制步行）时，
+ * 玩家下车步行到下一站，时间按步行速度计算（不计固定换乘惩罚）。
+ * @param {boolean} force 强制步行：即使两站共线也步行；非强制时要求距离 > 合并距离
+ * @returns {boolean} 是否成功步行换乘
+ */
+function commitWalkTransfer(logical, prev, force) {
+  const dM = distM(
+    { lng: prev.point[0], lat: prev.point[1] },
+    { lng: logical.lng, lat: logical.lat },
+  );
+  if (dM > WALK_TRANSFER_MAX_M) {
+    showCenterToast('步行距离 ' + Math.round(dM) + ' 米，超过上限 ' + WALK_TRANSFER_MAX_M + ' 米，无法步行换乘');
+    return false;
+  }
+  if (!force && dM <= MERGE_DISTANCE_M) {
+    showCenterToast('两站无共有线路，无法换乘（步行距离 ' + Math.round(dM) + ' 米）');
+    return false;
+  }
+
+  const cur = { logical, point: [logical.lng, logical.lat] };
+  state.routeOverlayGroups.push([]);
+  state.routeRides.push(null); // null = 步行换乘段（非乘车）
+  state.routeStops.push(cur);
+  addStopMarker(state.routeStops.length, cur.point);
+  drawWalkTransfer(prev.point, cur.point);
+
+  clearHighlight();
+  showCandidateNetwork(cur.logical);
+  renderRoutePanel();
+  setStatus(ridingHint());
+  return true;
 }
 
 // ============ 终点：完成规划 ============
@@ -243,6 +303,9 @@ export function resetRoute() {
   state.finished = false;
   state.walkToFirstMin = 0;
   state.walkToDestMin = 0;
+  state.forceWalk = false;    // 重置"强制步行"临时开关
+  const fwt = $('force-walk-toggle');
+  if (fwt) fwt.checked = false;
   for (const g of state.routeOverlayGroups) clearGroupOverlays(g);
   state.routeOverlayGroups = [];
   clearCandidate();
@@ -335,6 +398,7 @@ function showCandidateNetwork(stop) {
   const lineIdSet = new Set(lines.map((l) => String(l.id)));
   const curPt = { lng: stop.lng, lat: stop.lat };
   const onLogicals = [];
+  const addedLogical = new Set(); // 已纳入的逻辑站 id（避免步行可达站与沿途站重复）
   for (const ls of state.logicalStops) {
     const ids = [];
     for (const lid of ls.line_ids) {
@@ -342,8 +406,28 @@ function showCandidateNetwork(stop) {
       const pid = ls.stopByLine[lid];
       if (pid) ids.push(pid);
     }
-    if (ids.length) onLogicals.push({ ls, ids: Array.from(new Set(ids)) });
+    if (ids.length) {
+      onLogicals.push({ ls, ids: Array.from(new Set(ids)), walkable: false });
+      addedLogical.add(ls.id);
+    }
   }
+
+  // 步行换乘开启时，额外纳入「从当前站步行可达（>合并距离 且 ≤ 上限）的其它逻辑站」，
+  // 用紫色点区分，玩家点击这些站会触发步行换乘（下车走过去）。
+  if (state.walkTransfer) {
+    for (const ls of state.logicalStops) {
+      if (ls.id === stop.id || addedLogical.has(ls.id)) continue;
+      const dM = distM(curPt, { lng: ls.lng, lat: ls.lat });
+      if (dM <= MERGE_DISTANCE_M || dM > WALK_TRANSFER_MAX_M) continue;
+      const ids = [];
+      for (const lid of ls.line_ids) {
+        const pid = ls.stopByLine[lid];
+        if (pid) ids.push(pid);
+      }
+      if (ids.length) onLogicals.push({ ls, ids: Array.from(new Set(ids)), walkable: true });
+    }
+  }
+
   onLogicals.sort((a, b) => {
     const ha = a.ls.line_ids.length >= 2 ? 0 : 1; // 多线换乘枢纽优先
     const hb = b.ls.line_ids.length >= 2 ? 0 : 1;
@@ -352,15 +436,16 @@ function showCandidateNetwork(stop) {
   });
 
   const points = [];
-  for (const { ids } of onLogicals) {
+  for (const { ids, walkable } of onLogicals) {
     for (const pid of ids) {
       const p = getPhys(pid);
-      if (p) points.push(p);
+      // 强制步行时，所有候选站（含地铁/公交沿途站）都标紫——点任意站都会步行过去
+      if (p) points.push({ p, walkable: state.forceWalk ? true : walkable });
     }
     if (points.length >= MAX_CANDIDATE_POINTS) break;
   }
 
-  state.candidateMarks = makeMassMarks(points.map(stopToData));
+  state.candidateMarks = makeMassMarks(points.map(({ p, walkable }) => stopToData(p, walkable)));
   setMassMarksMap(state.candidateMarks, state.map);
   fadeInOverlay(state.candidateMarks);
   state.candidateMarks.on('click', (e) => {
