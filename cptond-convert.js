@@ -103,6 +103,96 @@ function hashId(base) {
   return 'L_' + crypto.createHash('md5').update(base).digest('hex').slice(0, 12);
 }
 
+// 同名线路的分支 key：用「站点集合」区分不同支段（比只比端点更稳）。
+// 同一物理线路的两个方向，站点集合完全一致 → 合并为一条；
+// 分叉的两个支段（如广州3号线主线 vs 北延段）站点集合不同 → 拆成两条。
+// 坑：只比端点会误拆——北京「首都机场线」两个方向的端点一个写 3号航楼、一个写 2号航楼，
+// 但站点集合完全相同（北新桥/东直门/三元桥/3号航楼/2号航楼），其实是一条线。
+function stationSetKey(stops) {
+  const ids = new Set();
+  for (const s of stops) {
+    ids.add(s.id ? 'I:' + String(s.id) : 'N:' + String(s.name || '').trim());
+  }
+  return [...ids].sort().join(',');
+}
+
+// 短交路/快车等服务变体：它们不是独立线路或支线，只是同一物理线路上的运营模式
+// （如「地铁10号线(夜班)」「地铁2号线(8号线)晨曦特快」「地铁16号线大站车」），
+// 若当成分支处理会把一条线误拆成多条。分支检测前先把这些 route_cn 排除。
+function isServiceVariant(cn) {
+  return /夜班|大站车|快车|特快|晨曦|区间|直达|高峰/.test(cn);
+}
+
+// 两个站是否同一个物理站：优先按 stop_id（CPTOND 在汇合站复用同一 id），
+// 无 id 时按「同名 + 坐标接近」兜底，避免同名不同站误判。
+function sameStation(a, b) {
+  if (a.id && b.id && String(a.id) === String(b.id)) return true;
+  if (String(a.name || '').trim() === String(b.name || '').trim()) {
+    return haversine(a.lng, a.lat, b.lng, b.lat) < 0.5; // 500m 内视为同一站
+  }
+  return false;
+}
+
+// 在路径点序列里找离某站最近的下标（用于几何拼接的切断点）
+function nearestPathIndex(points, stop) {
+  let best = 0, bestD = Infinity;
+  for (let i = 0; i < points.length; i++) {
+    const d = (points[i][0] - stop.lng) ** 2 + (points[i][1] - stop.lat) ** 2;
+    if (d < bestD) { bestD = d; best = i; }
+  }
+  return best;
+}
+
+// 分叉贯通（坑4）：把「被截断的支段」沿主干延伸到主干另一端终点。
+// 例：广州3号线北延段在数据里只到「体育西路」，但实际列车会继续开到「海傍」，
+// 乘客在体育西路无需换乘，故应拼成 机场北 → 体育西路 → 海傍 的完整服务。
+// 判定：支段某一端是「另一支段的内部站」（非端点），即该支段在此被截断。
+function spliceBranches(resolved) {
+  for (let i = 0; i < resolved.length; i++) {
+    const cur = resolved[i];
+    if (!cur.stops.length) continue;
+    // 只检查 cur 的两个端点：哪个端点是另一支段的内部站（汇合站）
+    let junction = null; // { host, hostIdx, isHead }
+    const ends = [
+      { isHead: true, idx: 0 },
+      { isHead: false, idx: cur.stops.length - 1 },
+    ];
+    for (const end of ends) {
+      const cs = cur.stops[end.idx];
+      for (let j = 0; j < resolved.length; j++) {
+        if (i === j) continue;
+        const host = resolved[j];
+        if (!host.stops.length) continue;
+        // 该站是 host 的端点 → 背靠背，不是贯通；跳过
+        if (sameStation(cs, host.stops[0]) || sameStation(cs, host.stops[host.stops.length - 1])) continue;
+        const hj = host.stops.findIndex((s) => sameStation(cs, s));
+        if (hj >= 0) { junction = { host, hostIdx: hj, isHead: end.isHead }; break; }
+      }
+      if (junction) break;
+    }
+    if (!junction) continue;
+
+    const { host, hostIdx, isHead } = junction;
+    // 若汇合站在首端，先反转到末端，统一成「外端 → 汇合站」方向
+    if (isHead && cur.stops.length > 1) {
+      cur.stops = cur.stops.slice().reverse();
+      if (cur.rawPath) cur.rawPath = cur.rawPath.slice().reverse();
+    }
+    // 主干在汇合站之后的站点（不含汇合站本身）
+    const hostTail = host.stops.slice(hostIdx + 1);
+    if (hostTail.length) cur.stops = cur.stops.concat(hostTail);
+    // 拼接几何：cur.rawPath + host.rawPath 从汇合站之后的部分
+    if (cur.rawPath && host.rawPath && host.stops[hostIdx]) {
+      const jp = nearestPathIndex(host.rawPath, host.stops[hostIdx]);
+      cur.rawPath = cur.rawPath.concat(host.rawPath.slice(jp + 1));
+    }
+    // 贯通后端点已变化，重算首尾站名并标记
+    cur.spliced = true;
+    cur.front = String(cur.stops[0] ? cur.stops[0].name : cur.front);
+    cur.terminal = String(cur.stops[cur.stops.length - 1] ? cur.stops[cur.stops.length - 1].name : cur.terminal);
+  }
+}
+
 // 两坐标点球面距离（km）
 function haversine(lng1, lat1, lng2, lat2) {
   const R = 6371;
@@ -196,76 +286,136 @@ function convertCity(cityKey) {
   const lines = [];
   let orphanRoutes = 0;
   for (const [base, cns] of baseGroups) {
-    // 选最优方向：优先有几何的、站点多的
-    let best = null;
-    let bestScore = -Infinity;
-    for (const cn of cns) {
-      const route = routeByCn.get(cn);
-      const stops = stopGroups.get(cn) || [];
-      const nPts = route && route.geom && route.geom.points ? route.geom.points.length : 0;
-      const score = (route ? 1e9 : 0) + stops.length * 1000 + nPts;
-      if (score > bestScore) { bestScore = score; best = { cn, route, stops }; }
-    }
-    if (!best) continue;
-
-    if (best.route && best.stops.length === 0) orphanRoutes++;
-
-    // 排序 + 去重（同一站点可能因换向/区间重复）
-    const sorted = best.stops.slice().sort((a, b) => a.seq - b.seq);
-    const seen = new Set();
-    const stops = [];
-    for (const s of sorted) {
-      if (!s.id || seen.has(s.id)) continue;
-      seen.add(s.id);
-      stops.push(s);
-    }
-    // 幽灵站剔除（坑2）：按线路名 + 站名
-    const ghostNames = ghostMap[base];
-    if (ghostNames && ghostNames.length) {
-      for (const g of ghostNames) {
-        const idx = stops.findIndex((s) => (s.name || '').includes(g));
-        if (idx >= 0) stops.splice(idx, 1);
-      }
-    }
-    // 逐站距离（优先 CPTOND segments 真实值，缺失用 haversine 兜底）
-    for (let i = 0; i < stops.length; i++) {
-      let d = null;
-      if (i < stops.length - 1) {
-        const key = stops[i].id + '|' + stops[i + 1].id;
-        d = segDist.get(key);
-        if (d == null) d = haversine(stops[i].lng, stops[i].lat, stops[i + 1].lng, stops[i + 1].lat);
-      }
-      stops[i].d = d == null ? null : Number(d.toFixed(3));
-    }
-
-    const attrs = best.route ? best.route.attrs : {};
-    const mode = guessMode(attrs.route_type, attrs.type_en);
-
-    let path;
-    if (best.route && best.route.geom && best.route.geom.points) {
-      path = decimate(best.route.geom.points, PATH_MAX_POINTS).map((p) => gcj(p[0], p[1]));
-    } else {
-      path = stops.map((s) => gcj(s.lng, s.lat));
-    }
-
-    lines.push({
-      id: hashId(base),
-      name: base,
-      mode,
-      front: String(attrs.s_stop_cn || (stops[0] ? stops[0].name : '')),
-      terminal: String(attrs.e_stop_cn || (stops.length ? stops[stops.length - 1].name : '')),
-      start_time: String(attrs.start_time || ''),
-      end_time: String(attrs.end_time || ''),
-      stops: stops.map((s) => {
-        const [lng, lat] = gcj(s.lng, s.lat);
-        // 坑1：CPTOND 里"临时站"等占位站会在不同位置复用同一 stop_id，
-        // 按 id 去重会把它们当成同一站造成"虚空换乘"。这里把 id 改成"原始id+坐标"，
-        // 保证物理站在 (id,坐标) 上唯一。
-        const sid = s.id ? String(s.id) + '@' + lng.toFixed(5) + ',' + lat.toFixed(5) : null;
-        return { id: sid, name: s.name, lng, lat, seq: s.seq, d: s.d };
-      }),
-      path,
+    // 是否地铁：只有地铁才做「分支拆分」+「分叉贯通」。地铁端点命名一致、可靠；
+    // 公交站点名有大量别名/错字（如「时代广汽」vs「时代广动」），
+    // 按端点对拆分会把同一公交的两个方向误判成两条假支段，故公交沿用旧的「合并所有方向选最优」。
+    const isMetro = cns.some((cn) => {
+      const r = routeByCn.get(cn);
+      return r && guessMode(r.attrs.route_type, r.attrs.type_en) === 'metro';
     });
+
+    let branches;
+    if (isMetro) {
+      // 坑3：同名地铁可能包含多个不连通支段（广州3号线主线 vs 北延段、12号线西段 vs 南段）。
+      // 先过滤「短交路/快车」等服务变体（夜班/大站车/特快…），再按「起点|终点」无序对拆分支。
+      const real = cns.filter((cn) => !isServiceVariant(cn));
+      const pool = real.length ? real : cns; // 全部都是变体时退回保留，避免整线消失
+      const branchGroups = new Map(); // stationSetKey -> [{cn, route, stops}]
+      for (const cn of pool) {
+        const route = routeByCn.get(cn);
+        const stops = stopGroups.get(cn) || [];
+        const key = stationSetKey(stops);
+        if (!branchGroups.has(key)) branchGroups.set(key, []);
+        branchGroups.get(key).push({ cn, route, stops });
+      }
+      branches = [...branchGroups.values()];
+    } else {
+      branches = [cns.map((cn) => ({ cn, route: routeByCn.get(cn), stops: stopGroups.get(cn) || [] }))];
+    }
+
+    // 主线（站点最多的支段）保持原名 base；其余支段追加「起点—终点」后缀以区分。
+    branches.sort((a, b) => {
+      const maxStops = (arr) => arr.reduce((m, e) => Math.max(m, e.stops.length), 0);
+      return maxStops(b) - maxStops(a);
+    });
+
+    // 第一步：把每个支段解析成「有序去重站点 + 原始几何」（WGS，尚未抽稀/转 GCJ）。
+    const resolved = [];
+    for (const entries of branches) {
+      // 选最优方向：优先有几何的、站点多的
+      let best = null;
+      let bestScore = -Infinity;
+      for (const e of entries) {
+        const nPts = e.route && e.route.geom && e.route.geom.points ? e.route.geom.points.length : 0;
+        const score = (e.route ? 1e9 : 0) + e.stops.length * 1000 + nPts;
+        if (score > bestScore) { bestScore = score; best = e; }
+      }
+      if (!best) continue;
+
+      if (best.route && best.stops.length === 0) orphanRoutes++;
+
+      // 排序 + 去重（同一站点可能因换向/区间重复）
+      const sorted = best.stops.slice().sort((a, b) => a.seq - b.seq);
+      const seen = new Set();
+      const stops = [];
+      for (const s of sorted) {
+        if (!s.id || seen.has(s.id)) continue;
+        seen.add(s.id);
+        stops.push(s);
+      }
+
+      const attrs = best.route ? best.route.attrs : {};
+      resolved.push({
+        attrs,
+        stops,
+        rawPath: best.route && best.route.geom && best.route.geom.points ? best.route.geom.points : null,
+        front: String(attrs.s_stop_cn || (stops[0] ? stops[0].name : '')),
+        terminal: String(attrs.e_stop_cn || (stops.length ? stops[stops.length - 1].name : '')),
+        spliced: false,
+      });
+    }
+
+    // 第二步：分叉贯通（坑4）——把被截断的支段沿主干延伸到主干另一端
+    //（如广州3号线北延段只到「体育西路」，实际列车继续开到「海傍」，乘客无需换乘）。
+    if (isMetro && resolved.length >= 2) spliceBranches(resolved);
+
+    // 第三步：逐支段构建最终线路。
+    let branchIndex = 0;
+    for (const r of resolved) {
+      const stops = r.stops;
+      // 幽灵站剔除（坑2）：按线路名 + 站名
+      const ghostNames = ghostMap[base];
+      if (ghostNames && ghostNames.length) {
+        for (const g of ghostNames) {
+          const idx = stops.findIndex((s) => (s.name || '').includes(g));
+          if (idx >= 0) stops.splice(idx, 1);
+        }
+      }
+      // 逐站距离（优先 CPTOND segments 真实值，缺失用 haversine 兜底）
+      for (let i = 0; i < stops.length; i++) {
+        let d = null;
+        if (i < stops.length - 1) {
+          const key = stops[i].id + '|' + stops[i + 1].id;
+          d = segDist.get(key);
+          if (d == null) d = haversine(stops[i].lng, stops[i].lat, stops[i + 1].lng, stops[i + 1].lat);
+        }
+        stops[i].d = d == null ? null : Number(d.toFixed(3));
+      }
+
+      const attrs = r.attrs;
+      const mode = guessMode(attrs.route_type, attrs.type_en);
+      const front = r.front;
+      const terminal = r.terminal;
+      // 只有主支保持 base 名；额外支段必须用唯一名，否则 linesMap 会因 id 冲突被覆盖。
+      const name = branchIndex === 0 ? base : base + '（' + front + '—' + terminal + '）';
+
+      let path;
+      if (r.rawPath) {
+        path = decimate(r.rawPath, PATH_MAX_POINTS).map((p) => gcj(p[0], p[1]));
+      } else {
+        path = stops.map((s) => gcj(s.lng, s.lat));
+      }
+
+      lines.push({
+        id: hashId(name),
+        name,
+        mode,
+        front,
+        terminal,
+        start_time: String(attrs.start_time || ''),
+        end_time: String(attrs.end_time || ''),
+        stops: stops.map((s, idx) => {
+          const [lng, lat] = gcj(s.lng, s.lat);
+          // 坑1：CPTOND 里"临时站"等占位站会在不同位置复用同一 stop_id，
+          // 按 id 去重会把它们当成同一站造成"虚空换乘"。这里把 id 改成"原始id+坐标"，
+          // 保证物理站在 (id,坐标) 上唯一。
+          const sid = s.id ? String(s.id) + '@' + lng.toFixed(5) + ',' + lat.toFixed(5) : null;
+          return { id: sid, name: s.name, lng, lat, seq: idx + 1, d: s.d };
+        }),
+        path,
+      });
+      branchIndex++;
+    }
   }
 
   const metroCount = lines.filter((l) => l.mode === 'metro').length;

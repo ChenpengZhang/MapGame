@@ -16,10 +16,13 @@ import { resolveStop, getLine } from '../data/index-builder.js';
 import { hide, $ } from '../core/dom.js';
 
 let hoverTimer = null;
+let infoCollapsed = null; // 信息卡线路列表折叠态：null = 未初始化（手机默认收起）
+let infoLineCount = 0;
 
-/** MassMarks 的 mouseover 回调：防抖后渲染高亮 */
+/** MassMarks 的 mouseover 回调：防抖后渲染高亮（仅桌面；手机端高亮由点击流程管理） */
 export function onStopMouseOver(e) {
   if (state.storyActive) return; // 剧情/教学期间禁止交互
+  if (state.isTouch) return;     // 触摸设备：合成 mouseover 会与两阶段点击打架
   const d = resolveStop(e && e.data);
   if (!d) return;
   // 防抖：快速划过密集站点时只处理最后停留的那个，避免反复创建/销毁大量折线
@@ -30,8 +33,9 @@ export function onStopMouseOver(e) {
   }, 45);
 }
 
-/** MassMarks 的 mouseout 回调：取消防抖并清掉高亮 */
+/** MassMarks 的 mouseout 回调：取消防抖并清掉高亮（仅桌面；手机端不因 mouseout 取消预选） */
 export function onStopMouseOut() {
+  if (state.isTouch) return; // 触摸设备：缩放/点按钮会触发 mouseout，不能据此取消预选
   if (hoverTimer) { clearTimeout(hoverTimer); hoverTimer = null; }
   clearHighlight();
 }
@@ -75,7 +79,23 @@ export function clearHighlight() {
   if (card) card.classList.add('hidden');
 }
 
-/** 信息卡内容：站名（含地铁/公交）+ 途经线路小标签 */
+/** 取消手机端两阶段预选（清 pending + 清高亮），但不清已确认的路线 */
+export function cancelPreview() {
+  state.pendingStart = null;
+  state.pendingCandidate = null;
+  clearHighlight();
+}
+
+/** 展开/收起信息卡里的"途经线路"列表 */
+export function toggleInfoLines() {
+  infoCollapsed = !infoCollapsed;
+  const card = $('infocard');
+  if (card) card.classList.toggle('collapsed', infoCollapsed);
+  const btn = $('info-toggle');
+  if (btn) btn.textContent = infoCollapsed ? ('展开 ' + infoLineCount + ' 条线路') : '收起';
+}
+
+/** 信息卡内容：站名（含地铁/公交）+ 途经线路小标签（大站可折叠） */
 function showInfoCard(d, lines) {
   const stopEl = $('info-stop');
   if (stopEl) stopEl.textContent = d.name + (d.mode === 'metro' ? '（地铁）' : '（公交）');
@@ -92,8 +112,20 @@ function showInfoCard(d, lines) {
     }
   }
 
+  infoLineCount = lines.length;
+  if (infoCollapsed === null) infoCollapsed = !!state.isTouch; // 手机默认收起，桌面默认展开
+  const btn = $('info-toggle');
+  if (btn) {
+    btn.classList.toggle('hidden', lines.length <= 1); // 只有一条线路时无需折叠按钮
+    btn.textContent = infoCollapsed ? ('展开 ' + lines.length + ' 条线路') : '收起';
+    btn.onclick = toggleInfoLines; // 就近绑定，避免去动 app.js（信息卡每次重绘都会重新挂一次，幂等）
+  }
+  const card = $('infocard');
+  if (card) {
+    card.classList.toggle('collapsed', infoCollapsed);
+    card.classList.remove('hidden');
+  }
+
   const walkEl = $('info-walk');
   if (walkEl) walkEl.textContent = '';
-  const card = $('infocard');
-  if (card) card.classList.remove('hidden');
 }

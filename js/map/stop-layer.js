@@ -26,6 +26,7 @@ import { setStatus, $ } from '../core/dom.js';
 import { makeMassMarks, stopToData } from './stop-marks.js';
 import { fadeInOverlay, captureMassMarksCanvas, removeOverlay } from './anim.js';
 import { mapContainer } from './map-init.js';
+import { cancelPreview } from './hover.js';
 
 // ---------- 模块内部状态（只被本文件使用，因此不放进 core/state.js） ----------
 let metroMarks = null;        // 地铁站点层（MassMarks）
@@ -64,6 +65,13 @@ export function renderStops(handlers) {
   state.map.on('zoomchange', updateStopsByZoom);
   state.map.on('zoomend', () => { updateStopsByZoom(); scheduleRefreshStops(); });
   state.map.on('moveend', scheduleRefreshStops);
+  // 手机端：点击地图空白处（非站点/路线）取消两阶段预选；缩放/点按钮不会走这里
+  state.map.on('click', (e) => {
+    if (!state.isTouch) return;
+    const t = e && e.originalEvent && e.originalEvent.target;
+    const onInteractive = t && t.closest ? t.closest('.leaflet-interactive') : null;
+    if (!onInteractive) cancelPreview();
+  });
 }
 
 // ============ 视野内取点与抽稀 ============
@@ -175,13 +183,14 @@ export function hideBaseStops() {
 
 // ============ 规划中的"全图显示站点"开关 ============
 
-/** 切换"全图显示站点"（开启时点击站点不会继续规划，避免误操作） */
+/** 切换"全图显示站点"（开启时仍可预览站点，但确定/继续规划会被阻止；切换时取消手机端预选） */
 export function toggleShowAllStops() {
+  cancelPreview();
   state.showAllStops = !state.showAllStops;
   const btn = $('show-all-btn');
   if (btn) btn.textContent = state.showAllStops ? '关闭全图显示' : '显示全图站点';
   updateStopsByZoom();
-  setStatus(state.showAllStops ? '全图显示中——点击站点不会继续规划' : '继续点击沿途站点换乘，或点击「终」完成');
+  setStatus(state.showAllStops ? '全图显示中——可预览站点，确定前请先关闭' : '继续点击沿途站点换乘，或点击「终」完成');
 }
 
 // ============ 地铁底图 ============

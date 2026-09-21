@@ -93,13 +93,20 @@ export function startLevel(level, opts) {
 
 /** 回主菜单：退出当前会话（爬塔中途退出会保存进度） */
 export function showMenu() {
+  // 先记下爬塔状态：resetRoute 会清掉 finished，必须在它之前取
+  const tower = state.towerActive
+    ? { key: state.towerScenarioKey, layer: state.towerLayer, finished: state.finished }
+    : null;
   resetRoute();
   hideStoryAndTutorial();
   setMapLocked(false);
-  // 爬塔中途退出：保存当前层与最佳纪录
-  if (state.towerActive) {
-    if (state.towerLayer > state.towerBest[state.towerScenarioKey]) state.towerBest[state.towerScenarioKey] = state.towerLayer;
-    state.towerProgress[state.towerScenarioKey] = state.towerLayer;
+  // 爬塔退出：保存最佳纪录；进度只在"未完成的中途退出"时记为当前层。
+  // 已完成（通过→已推进到下一层 / 失败→已清空）时，进度已由 showTowerResult 正确更新，这里不再覆盖。
+  if (tower) {
+    if (tower.layer > state.towerBest[tower.key]) state.towerBest[tower.key] = tower.layer;
+    if (!tower.finished) {
+      state.towerProgress[tower.key] = tower.layer;
+    }
     saveTowerState();
   }
   state.towerActive = false;

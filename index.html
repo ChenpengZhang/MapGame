@@ -222,9 +222,17 @@ html, body {
 #route-panel .rp-stops { color: var(--primary); font-weight: 600; }
 #route-panel .rp-km { color: var(--success); font-weight: 600; }
 #route-panel .rp-time { color: var(--ink); font-weight: 600; }
-#infocard .stop-name { font-weight: 700; font-size: 14px; margin-bottom: 6px; color: var(--ink-strong); }
-#infocard .line-list { display: flex; flex-wrap: wrap; gap: 5px; }
+#infocard .stop-name { font-weight: 700; font-size: 14px; color: var(--ink-strong); }
+#infocard .infocard-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+#infocard .line-list { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
 #infocard .line-tag { padding: 2px 8px; border-radius: 999px; font-size: 11px; color: #fff; font-weight: 600; box-shadow: var(--shadow-sm); }
+#infocard.collapsed .line-list { display: none; }
+#info-toggle {
+  border: 1px solid var(--ring); background: var(--bg-soft); color: var(--ink-muted);
+  font-size: 11px; font-weight: 600; padding: 2px 10px; border-radius: 999px; cursor: pointer;
+  white-space: nowrap;
+}
+#info-toggle:hover { color: var(--ink-strong); border-color: var(--ring-strong); }
 #info-walk { margin-top: 6px; color: var(--ink-muted); font-size: 12px; }
 
 /* ==========================================================================
@@ -617,19 +625,14 @@ html, body {
   /* 手机端隐藏"缩放速度"设置（滚轮惯性缩放只在桌面生效） */
   #zoom-speed-row { display: none; }
 
-  /* 图例：挪到左上，收起说明文字，只留两个色点 */
-  #legend {
-    left: 10px; top: 58px; bottom: auto;
-    flex-direction: row; align-items: center; gap: 10px;
-    padding: 6px 12px;
-  }
-  #legend .hint { display: none; }
+  /* 手机端去掉公交/地铁图例（太占空间） */
+  #legend { display: none; }
 
-  /* 底部操作条：挪到右上，可换行，避免和图例打架 */
-  .btn-group { right: 10px; top: 58px; bottom: auto; flex-wrap: wrap; justify-content: flex-end; max-width: 74vw; }
+  /* 顶部 HUD 与底部操作条：保持一致的上下间距（HUD 不再贴着顶栏） */
+  #tower-hud { top: 62px; font-size: 12px; padding: 5px 12px; max-width: 92vw; }
+  .btn-group { right: 10px; top: 104px; bottom: auto; flex-wrap: wrap; justify-content: flex-end; max-width: 74vw; }
   .btn-group button { padding: 7px 12px; font-size: 12px; }
-  #result-toggle-btn { right: 10px; top: 58px; bottom: auto; padding: 7px 12px; font-size: 12px; }
-  #tower-hud { top: 54px; font-size: 12px; padding: 5px 12px; max-width: 92vw; }
+  #result-toggle-btn { right: 10px; top: 104px; bottom: auto; padding: 7px 12px; font-size: 12px; }
 
   /* 路线面板 / 信息卡：改成底部抽屉 */
   #left-col { left: 0; right: 0; top: auto; bottom: 0; max-width: none; gap: 8px; }
@@ -671,7 +674,10 @@ html, body {
     <div id="left-col">
       <div id="route-panel" class="hidden"></div>
       <div id="infocard" class="hidden">
-        <div class="stop-name" id="info-stop"></div>
+        <div class="infocard-head">
+          <span class="stop-name" id="info-stop"></span>
+          <button type="button" id="info-toggle" class="hidden">展开</button>
+        </div>
         <div class="line-list" id="info-lines"></div>
         <div id="info-walk"></div>
       </div>

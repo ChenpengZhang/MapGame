@@ -389,6 +389,41 @@ await step('手机两阶段选站 + 两局残留检查', async () => {
   resetRoute();
 });
 
+await step('全图显示下可预览、但确定被阻止', () => {
+  const physA = globalThis.__smokeA;
+  state.isTouch = true;
+  startLevel({
+    id: 'smoke-showall', series: 0, title: '全图显示', timeLimitMin: 200,
+    origin: { name: physA.name, lng: physA.lng, lat: physA.lat },
+    dest: { name: physA.name, lng: physA.lng + 0.02, lat: physA.lat },
+    goalText: '', success: '', fail: '',
+  }, { skipStory: true });
+
+  toggleShowAllStops();
+  assert.equal(state.showAllStops, true, '开启全图显示');
+
+  // 全图显示下第一次点 = 仍可预览（高亮），不开始
+  onStopClick({ data: stopToData(physA) });
+  assert.ok(state.pendingStart, '全图显示下仍可预览起点');
+  assert.equal(state.routeStops.length, 0, '预览不立即开始');
+
+  // 全图显示下再次点同一站 = 确定被阻止
+  onStopClick({ data: stopToData(physA) });
+  assert.ok(state.pendingStart, '全图显示下确定被阻止，待确认状态保留');
+  assert.equal(state.routeStops.length, 0, '全图显示下确定未生效');
+
+  // 关闭全图显示后：先取消预览，再点一次预览、再点一次确定
+  toggleShowAllStops();
+  assert.equal(state.showAllStops, false, '关闭全图显示');
+  assert.equal(state.pendingStart, null, '切换后清空预览');
+  onStopClick({ data: stopToData(physA) });
+  onStopClick({ data: stopToData(physA) });
+  assert.equal(state.routeStops.length, 1, '关闭全图显示后确定恢复');
+
+  state.isTouch = false;
+  resetRoute();
+});
+
 await step('爬塔：开一层并判定阈值', async () => {
   startTower('normal');
   await wait(100);
@@ -412,6 +447,28 @@ await step('爬塔：开一层并判定阈值', async () => {
   resetTowerFromLayer1();
   await wait(100);
   assert.equal(state.towerLayer, 1);
+});
+
+await step('爬塔：通过后返回主页进度不丢、中途退出记录当前层', async () => {
+  // 场景 1：通过第 1 层后直接返回主页（模拟 showTowerResult 已把进度推进到第 2 层）
+  startTower('normal');
+  await wait(100);
+  state.finished = true;            // 本局已完成
+  state.towerProgress.normal = 2;   // showTowerResult 通过时已设置
+  showMenu();
+  assert.equal(state.towerProgress.normal, 2, '通过后返回主页，进度应保留在第 2 层');
+
+  // 场景 2：中途退出（未完成）应记录当前层
+  startTower('normal');
+  await wait(100);
+  state.towerLayer = 3;
+  state.finished = false;           // 未完成
+  state.towerProgress.normal = 0;   // 先清空，模拟无进度
+  showMenu();
+  assert.equal(state.towerProgress.normal, 3, '中途退出应记录当前层第 3 层');
+
+  resetTowerFromLayer1();           // 清理，避免影响后续步骤
+  await wait(100);
 });
 
 await step('自由模式：勾选晴雨情景开局', async () => {

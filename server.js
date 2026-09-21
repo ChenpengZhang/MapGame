@@ -61,6 +61,13 @@ http
     let urlPath = decodeURIComponent(rawUrl.split('?')[0]);
     if (urlPath === '/') urlPath = '/index.html';
 
+    // 屏蔽敏感目录/文件（.git / node_modules / .env*）：防止整仓库 clone 后这些被直接访问
+    const segs = urlPath.split('/');
+    if (segs.some((s) => s === '.git' || s === 'node_modules' || s.startsWith('.env'))) {
+      res.writeHead(403);
+      return res.end('Forbidden');
+    }
+
     const filePath = path.normalize(path.join(ROOT, urlPath));
     if (!filePath.startsWith(ROOT + path.sep)) {
       res.writeHead(403);
