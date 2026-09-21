@@ -169,15 +169,21 @@ const RANDOM_OFFSET_MAX_M = 1500; // 上限 1.5km，保证起终点步行不超�
  * 且点永不远离站点（步行可控）。
  */
 export function randomPoint() {
+  return randomPointWithComp().point;
+}
+
+/** 抽一个随机点，同时返回它所在的连通分量（供 sampleRandomEndpoints 校验主分量） */
+function randomPointWithComp() {
   const city = cityById(state.currentCityId) || cityById('beijing');
-  if (!state.physStops.length) return city.center.slice();
+  if (!state.physStops.length) return { point: city.center.slice(), comp: null };
   const stop = state.physStops[Math.floor(Math.random() * state.physStops.length)];
+  const comp = state.componentOf.get(stop.logicalId) ?? null;
   const angle = Math.random() * 2 * Math.PI;
   const dist = RANDOM_OFFSET_MIN_M + Math.random() * (RANDOM_OFFSET_MAX_M - RANDOM_OFFSET_MIN_M);
   const dLat = (dist * Math.cos(angle)) / 111000; // 1° 纬度 ≈ 111km
   const mPerDegLng = 111320 * Math.cos(stop.lat * Math.PI / 180); // 经度每度米数，随纬度变化
   const dLng = (dist * Math.sin(angle)) / mPerDegLng;
-  return [stop.lng + dLng, stop.lat + dLat];
+  return { point: [stop.lng + dLng, stop.lat + dLat], comp };
 }
 
 /**
@@ -197,11 +203,19 @@ export async function ensureStopsReady() {
 
 /**
  * 抽一对随机起终点（迭代重抽并带次数上限，保证两点拉开距离、且不会栈溢出）。
+ * 起终点必须落在「主连通分量」上：否则会抽到轮渡/离岛这类孤岛点，导致无解。
  * @returns {[number,number][]} [起点, 终点]
  */
 export function sampleRandomEndpoints() {
-  let o = randomPoint();
-  let d = randomPoint();
-  for (let i = 0; i < 50 && haversineKm(o, d) < 3; i++) d = randomPoint();
-  return [o, d];
+  const main = state.mainComponent;
+  for (let attempt = 0; attempt < 200; attempt++) {
+    const o = randomPointWithComp();
+    const d = randomPointWithComp();
+    // 有连通分量信息时，起终点必须在主分量上；没有（数据未就绪）则跳过校验
+    if (main && (o.comp !== main || d.comp !== main)) continue;
+    if (haversineKm(o.point, d.point) < 3) continue;
+    return [o.point, d.point];
+  }
+  // 兜底：极端情况抽不到（几乎不可能），退回任意两点
+  return [randomPoint(), randomPoint()];
 }

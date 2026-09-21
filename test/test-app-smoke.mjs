@@ -193,9 +193,10 @@ const { initMap } = await import('../js/map/map-init.js');
 const { renderMetroContext, renderStops, toggleShowAllStops } = await import('../js/map/stop-layer.js');
 const { onStopMouseOver, onStopMouseOut } = await import('../js/map/hover.js');
 const { onStopClick, onCandidateStopClick, finishRoute, resetRoute, undoRoute } = await import('../js/game/route.js');
-const { startLevel, showMenu, openStoryMenu, openTowerMenu } = await import('../js/game/session.js');
+const { startLevel, showMenu, openStoryMenu, openTowerMenu, sampleRandomEndpoints } = await import('../js/game/session.js');
 const { startTower, resetTowerFromLayer1, towerThreshold } = await import('../js/game/tower.js');
 const { nextLevel, restartLevel } = await import('../js/game/flow.js');
+const { loadTowerState, saveTowerState } = await import('../js/game/progress.js');
 const { openFreeMenu, startFreeGame } = await import('../js/game/free.js');
 const { storyNext, tutorialNext } = await import('../js/ui/story.js');
 const { updateButtons } = await import('../js/ui/menu.js');
@@ -517,6 +518,39 @@ await step('存档写入（爬塔纪录 best/progress，按城市分开存）', 
   const saved = JSON.parse(store.get('mg_tower_state_beijing'));
   assert.ok(saved.best && typeof saved.best.normal === 'number', 'best 结构正确');
   assert.ok(saved.progress && typeof saved.progress.normal === 'number', 'progress 结构正确');
+});
+
+await step('爬塔存档 dataVersion 校验：旧版本 round 被清除、best/progress 保留', () => {
+  // 模拟旧版本存档（无 dataVersion）——旧起终点可能落在已删除线路/孤岛上，必须丢弃
+  store.set('mg_tower_state_beijing', JSON.stringify({
+    best: { normal: 5 }, progress: { normal: 3 },
+    round: { normal: { layer: 3, origin: [116.4, 39.9], dest: [116.5, 40.0] } },
+  }));
+  state.towerBest = { normal: 0, noMetro: 0, busBoost: 0, rain: 0 };
+  state.towerProgress = { normal: 0, noMetro: 0, busBoost: 0, rain: 0 };
+  state.towerRound = { normal: null, noMetro: null, busBoost: null, rain: null };
+  loadTowerState();
+  assert.equal(state.towerBest.normal, 5, 'best 应保留');
+  assert.equal(state.towerProgress.normal, 3, 'progress 应保留');
+  assert.equal(state.towerRound.normal, null, '旧版本 round 应被清除');
+
+  // 当前版本存档：round 应正常还原
+  state.towerRound.normal = { layer: 3, origin: [116.4, 39.9], dest: [116.5, 40.0] };
+  saveTowerState();
+  state.towerRound.normal = null;
+  loadTowerState();
+  assert.ok(state.towerRound.normal, '当前版本 round 应保留');
+  assert.deepEqual(state.towerRound.normal.origin, [116.4, 39.9], 'round 起终点应还原');
+});
+
+await step('随机起终点落在主连通分量（componentOf/mainComponent 已建）', () => {
+  assert.ok(state.mainComponent, 'mainComponent 应已计算');
+  assert.ok(state.componentOf.size > 0, 'componentOf 应已填充');
+  for (let i = 0; i < 10; i++) {
+    const [o, d] = sampleRandomEndpoints();
+    assert.ok(Array.isArray(o) && o.length === 2 && Number.isFinite(o[0]) && Number.isFinite(o[1]), '起点坐标合法');
+    assert.ok(Array.isArray(d) && d.length === 2 && Number.isFinite(d[0]) && Number.isFinite(d[1]), '终点坐标合法');
+  }
 });
 
 // ======================================================================

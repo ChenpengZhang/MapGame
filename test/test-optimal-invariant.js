@@ -61,7 +61,8 @@ function reachable(line) {
 }
 
 function main() {
-  const N = 60;
+  // 北京拆上下行后寻路图变大，单次 Dijkstra 约 1.5s；N=30 即约 45s。样本数减少但仍有统计意义。
+  const N = 30;
   const pool = [];
   const seen = new Set();
   for (const line of data.lines) for (const s of line.stops || []) {
@@ -116,11 +117,17 @@ function main() {
 
       // 玩家最优（0 次换乘：同一条线上车→下车）
       let playerBest = Infinity;
+      // 预索引 alights 按线路 id 分组：1 次换乘枚举里避免对全部 alights 重复扫描
+      //（数据拆上下行后线路数翻倍，不索引的话 1 次换乘穷举会退化到 80s+）
+      const alightsByLine = new Map();
+      for (const a of alights) {
+        if (!alightsByLine.has(a.line.id)) alightsByLine.set(a.line.id, []);
+        alightsByLine.get(a.line.id).push(a);
+      }
       for (const b of boards) {
         const ride = null; // placeholder
         // 同线直达：遍历该线所有可达下车站
-        for (const a of alights) {
-          if (a.line.id !== b.line.id) continue;
+        for (const a of alightsByLine.get(b.line.id) || []) {
           const rideMin = rideMinutes(b.line, b.i, a.i);
           if (rideMin == null) continue;
           const wTo = haversineKm(o, [b.line.stops[b.i].lng, b.line.stops[b.i].lat]) * 1000 / 75;
@@ -140,8 +147,7 @@ function main() {
           const links = physIndex.get(String(mid.id)) || [];
           for (const lk of links) {
             if (lk.line.id === b.line.id) continue;
-            for (const a of alights) {
-              if (a.line.id !== lk.line.id) continue;
+            for (const a of alightsByLine.get(lk.line.id) || []) {
               const ride2 = rideMinutes(lk.line, lk.i, a.i);
               if (ride2 == null) continue;
               const wFrom = haversineKm([a.line.stops[a.i].lng, a.line.stops[a.i].lat], d) * 1000 / 75;

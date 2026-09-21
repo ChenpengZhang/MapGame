@@ -166,6 +166,24 @@ export function buildIndex(data) {
     id: p.id, name: p.name, lng: p.lng, lat: p.lat,
     mode: p.mode, logicalId: p2l.get(p.id),
   }));
+
+  // 计算连通分量：把「共享线路」的逻辑站归并，用于随机起终点时避免落在孤岛（轮渡/离岛线）上。
+  // union-find 约 O(N α(N))：北京 ~1.5 万逻辑站实测几十毫秒，数据加载时算一次即可。
+  const compUf = new Map(logicalList.map((s) => [s.id, s.id]));
+  const compFind = (x) => { let r = x; while (compUf.get(r) !== r) r = compUf.get(r); while (compUf.get(x) !== x) { const nx = compUf.get(x); compUf.set(x, r); x = nx; } return r; };
+  const compUnion = (a, b) => { const ra = compFind(a), rb = compFind(b); if (ra !== rb) compUf.set(ra, rb); };
+  for (const line of state.linesMap.values()) {
+    const logs = new Set();
+    for (const st of line.stops || []) { const lg = p2l.get(String(st.id)); if (lg) logs.add(lg); }
+    const arr = [...logs];
+    for (let i = 1; i < arr.length; i++) compUnion(arr[0], arr[i]);
+  }
+  const compSize = new Map();
+  for (const s of logicalList) { const r = compFind(s.id); compSize.set(r, (compSize.get(r) || 0) + 1); }
+  let mainComp = null, mainSize = 0;
+  for (const [r, n] of compSize) if (n > mainSize) { mainSize = n; mainComp = r; }
+  state.componentOf = new Map(logicalList.map((s) => [s.id, compFind(s.id)]));
+  state.mainComponent = mainComp;
 }
 
 // ============ 查询（各层只读用） ============

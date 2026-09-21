@@ -20,7 +20,7 @@
  * 数据文件版本号：重跑数据管线（cptond-convert.js）更新数据后，把这里 +1，
  * 浏览器缓存才会失效并重新下载（URL 带 ?v=N，版本号一变就是全新资源）。
  */
-export const DATA_VERSION = 5;
+export const DATA_VERSION = 6;
 
 // 注：地图初始中心、数据文件路径、城市列表都按城市区分，见 data/cities.js。
 

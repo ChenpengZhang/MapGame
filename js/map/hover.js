@@ -45,9 +45,12 @@ export function renderHighlight(d) {
   clearHighlight();
 
   const shown = [];
+  const seen = new Set(); // 公交上下行同名（拆成两条单向线），只画一次、信息卡只显示一次
   for (const id of d.line_ids || []) {
     const line = getLine(id);
     if (!line || !line.path || line.path.length < 2) continue;
+    if (seen.has(line.name)) continue;
+    seen.add(line.name);
     const isMetro = line.mode === 'metro';
     const poly = new AMap.Polyline({
       path: line.path, strokeColor: line.color, strokeWeight: isMetro ? 5 : 3,

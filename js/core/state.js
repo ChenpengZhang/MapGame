@@ -26,6 +26,8 @@ export const state = {
   physToLogical: new Map(),     // 物理 stop_id -> 逻辑站 id
   physById: new Map(),          // 物理 stop_id -> 物理点
   logicalPhysMap: new Map(),    // 逻辑站 id -> [物理 stop_id]（当前未参与计算，保留备用）
+  componentOf: new Map(),       // 逻辑站 id -> 连通分量根 id（随机起终点时避免落在孤岛）
+  mainComponent: null,          // 主连通分量（最大分量）的根 id
 
   // ---------- 寻路图 ----------
   routerGraph: null,            // 本地寻路图（router-api.buildGraph 的结果）

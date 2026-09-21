@@ -1,0 +1,14 @@
+{
+  "name": "mapgame",
+  "version": "1.0.0",
+  "description": "一个「规划最快公交/地铁路线」的单机游戏。看看你有多接近最快时间。",
+  "main": "benchmark.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node test/test-app-smoke.mjs && node test/test-interaction.mjs && node test/test-user-journey.mjs && node test/test-data-quality.mjs && node test/test-directed-router.js && node test/test-router.js && node test/test-optimal-invariant.js && node test/test-walk-transfer.mjs && node test/test-integrity.js",
+    "test:e2e": "node test/e2e/user-journey.mjs"
+  },
+  "devDependencies": {
+    "playwright": "^1.63.0"
+  }
+}

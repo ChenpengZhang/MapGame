@@ -330,6 +330,44 @@ function pointInBoundary(lng, lat, polygons) {
   return false;
 }
 
+// 边界容差（度）：DataV 行政区边界是简化多边形，紧贴边界的「机场」站点会被误裁
+//（北京大兴机场约在界外 600m）。只给机场/航站楼这类边界设施开容差，避免把跨市公交的
+// 边站重新放进来（广佛/燕郊等边境密集区如果普遍开容差，会把邻市站点又捞回来形成孤岛）。
+const EDGE_STOP_TOLERANCE_DEG = 0.008;
+const EDGE_STOP_RE = /机场|航站楼/;
+
+/** 点到线段的距离（度） */
+function distToSegment(px, py, ax, ay, bx, by) {
+  const dx = bx - ax, dy = by - ay;
+  const len2 = dx * dx + dy * dy;
+  let t = len2 ? ((px - ax) * dx + (py - ay) * dy) / len2 : 0;
+  t = Math.max(0, Math.min(1, t));
+  const qx = ax + t * dx, qy = ay + t * dy;
+  return Math.sqrt((px - qx) * (px - qx) + (py - qy) * (py - qy));
+}
+
+/** 点到 MultiPolygon 边界的最短距离（度） */
+function distToBoundary(lng, lat, polygons) {
+  let best = Infinity;
+  for (const rings of polygons) {
+    for (const ring of rings) {
+      const n = ring.length;
+      for (let i = 0; i < n; i++) {
+        const a = ring[i], b = ring[(i + 1) % n];
+        const d = distToSegment(lng, lat, a[0], a[1], b[0], b[1]);
+        if (d < best) best = d;
+      }
+    }
+  }
+  return best;
+}
+
+/** 站点是否保留：严格在边界内；机场/航站楼在界外但离边界 ≤ 容差的也保留（大兴机场） */
+function stopInBoundary(s, polygons) {
+  if (pointInBoundary(s.lng, s.lat, polygons)) return true;
+  return EDGE_STOP_RE.test(String(s.name || '')) && distToBoundary(s.lng, s.lat, polygons) <= EDGE_STOP_TOLERANCE_DEG;
+}
+
 /** 读取并转换城市边界：DataV GeoJSON（GCJ-02）→ WGS-84 的 MultiPolygon（供裁剪源数据） */
 function loadBoundary(cityKey) {
   const file = BOUNDARY_FILES[cityKey];
@@ -343,9 +381,10 @@ function loadBoundary(cityKey) {
 /** 把一条线的站点/几何裁剪到边界内；返回 { stops, rawPath }（可能为空） */
 function clipToBoundary(stops, rawPath, boundary) {
   if (!boundary) return { stops, rawPath };
-  const inStops = stops.filter((s) => pointInBoundary(s.lng, s.lat, boundary));
+  const inStops = stops.filter((s) => stopInBoundary(s, boundary));
   let inPath = null;
   if (rawPath) {
+    // 路径几何严格裁剪（不给容差）：站点已含机场特例，路径差几百米只是视觉上的小缺口
     const pts = rawPath.filter((p) => pointInBoundary(p[0], p[1], boundary));
     if (pts.length >= 2) inPath = pts;
   }
