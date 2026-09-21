@@ -11,6 +11,7 @@
 
 import { state } from '../core/state.js';
 import { readText, writeText, readJSON, writeJSON } from '../core/storage.js';
+import { DATA_VERSION } from '../core/config.js';
 import { LEVELS } from '../data/levels.js';
 
 /**
@@ -44,11 +45,16 @@ export function saveStoryProgress() {
 export function loadTowerState() {
   const v = readJSON(towerKey()) || {};
   const b = v.best || {}, p = v.progress || {}, r = v.round || {};
+  // 数据版本变更后，旧存档里的随机起终点可能落在「已删除的线路 / 孤岛」上
+  //（边界裁剪、删未完工线都会让站点变），此时丢弃 round（下次开局重新随机），
+  // best/progress 只是层数，与站点无关，仍保留。
+  const roundValid = v.dataVersion === DATA_VERSION;
   for (const k of Object.keys(state.towerBest)) {
     const bn = parseInt(b[k], 10);
     if (bn > 0) state.towerBest[k] = bn;
     const pn = parseInt(p[k], 10);
     if (pn > 0) state.towerProgress[k] = pn;
+    if (!roundValid) continue;
     // 校验本轮起终点结构，忽略旧版/损坏的存档，避免污染状态
     const round = r[k];
     if (round && typeof round.layer === 'number' &&
@@ -58,7 +64,7 @@ export function loadTowerState() {
   }
 }
 
-/** 写存档：best + progress + round（按当前城市分开存） */
+/** 写存档：best + progress + round + dataVersion（按当前城市分开存） */
 export function saveTowerState() {
-  writeJSON(towerKey(), { best: state.towerBest, progress: state.towerProgress, round: state.towerRound });
+  writeJSON(towerKey(), { best: state.towerBest, progress: state.towerProgress, round: state.towerRound, dataVersion: DATA_VERSION });
 }

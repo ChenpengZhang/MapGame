@@ -185,6 +185,7 @@
         id: lid,
         name: line.name,
         mode: line.mode === 'metro' ? 'metro' : 'bus',
+        oneWay: line.oneWay === true, // 单向线（公交上下行、环线）只沿 seq 前进方向乘车
         busVmaxKmh: busVmaxForLine(line), // 公交线路巡航速度（城区慢/郊区快）
         stops: (line.stops || []).map((st) => ({
           id: String(st.id),
@@ -387,12 +388,14 @@
       const stops = line.stops;
       const idx = line.stopIndex ? line.stopIndex.get(physId) : undefined;
       if (idx != null) {
+        // 前进方向（seq 递增）：所有线路都允许
         if (idx + 1 < stops.length) relaxRide(idx, idx + 1);
-        if (idx - 1 >= 0) relaxRide(idx, idx - 1);
-        // 环线：首尾相邻，补闭环边（走站少的那边）
+        // 反向：仅双向线（非 oneWay）允许
+        if (!line.oneWay && idx - 1 >= 0) relaxRide(idx, idx - 1);
+        // 环线：首尾相邻，补闭环边；单向环线只补「末站→首站」这个前进方向
         if (line.isLoop) {
-          if (idx === 0) relaxRide(0, stops.length - 1, line.wrapDistKm);
-          else if (idx === stops.length - 1) relaxRide(stops.length - 1, 0, line.wrapDistKm);
+          if (!line.oneWay && idx === 0) relaxRide(0, stops.length - 1, line.wrapDistKm);
+          if (idx === stops.length - 1) relaxRide(stops.length - 1, 0, line.wrapDistKm);
         }
       }
 
@@ -432,7 +435,7 @@
     return { dist, parent };
   }
 
-  // 两逻辑站在某线路上的段统计（段数/距离/乘车时间）；环线时选站少/时间少的那边
+  // 两逻辑站在某线路上的段统计（段数/距离/乘车时间）
   function rideStatsBetween(graph, line, fromLogicalId, toLogicalId, opts) {
     const fl = graph.logicalById.get(fromLogicalId);
     const tl = graph.logicalById.get(toLogicalId);
@@ -442,7 +445,6 @@
     const ia = line.stopIndex ? line.stopIndex.get(fp) : undefined;
     const ib = line.stopIndex ? line.stopIndex.get(tp) : undefined;
     if (ia == null || ib == null || ia === ib) return { stops: 0, distanceKm: 0, rideMin: 0 };
-    const lo = Math.min(ia, ib), hi = Math.max(ia, ib);
 
     function rangeStats(a, b) {
       let dist = 0, rideMin = 0;
@@ -453,9 +455,30 @@
       return { segs: b - a, dist, rideMin };
     }
 
-    // 方向1：线性 lo→hi
+    // 单向线：只按前进方向（seq 递增）走。Dijkstra 只产生前进乘车段，故 ia<=ib；
+    // 环线在 ia>ib 时走「ia→末站→首站→ib」的绕环。
+    if (line.oneWay) {
+      let best;
+      if (ia < ib) {
+        best = rangeStats(ia, ib);
+      } else if (line.isLoop) {
+        const seg1 = rangeStats(ia, stops.length - 1);
+        const seg2 = rangeStats(0, ib);
+        best = {
+          segs: seg1.segs + 1 + seg2.segs,
+          dist: seg1.dist + line.wrapDistKm + seg2.dist,
+          rideMin: seg1.rideMin + segmentRideMin(line, line.wrapDistKm, opts) + seg2.rideMin,
+        };
+      } else {
+        // 理论不可达（反向），兜底返回 0 避免崩溃
+        return { stops: 0, distanceKm: 0, rideMin: 0 };
+      }
+      return { stops: best.segs, distanceKm: best.dist, rideMin: best.rideMin + best.segs * dwellOf(line, opts) };
+    }
+
+    // 双向线：保持原逻辑（环线选站少/时间少的那边）
+    const lo = Math.min(ia, ib), hi = Math.max(ia, ib);
     const d1 = rangeStats(lo, hi);
-    // 方向2：绕环 hi→…→末站→首站→…→lo（仅环线）
     let d2 = null;
     if (line.isLoop && line.wrapDistKm > 0) {
       const seg1 = rangeStats(hi, stops.length - 1);
@@ -466,7 +489,6 @@
         rideMin: seg1.rideMin + segmentRideMin(line, line.wrapDistKm, opts) + seg2.rideMin,
       };
     }
-
     const best = (d2 && d2.rideMin < d1.rideMin) ? d2 : d1;
     return {
       stops: best.segs,

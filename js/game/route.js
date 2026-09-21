@@ -19,7 +19,7 @@
 import { state } from '../core/state.js';
 import { MAX_WALK_M, MERGE_DISTANCE_M, WALK_TRANSFER_MAX_M } from '../core/config.js';
 import { showCenterToast, setStatus, setText, hide, show, $ } from '../core/dom.js';
-import { resolveStop, getLine, getPhys, findStopInLine, distM } from '../data/index-builder.js';
+import { resolveStop, getLine, getPhys, findStopInLine, stopIndexInLine, distM } from '../data/index-builder.js';
 import { makeMassMarks, stopToData } from '../map/stop-marks.js';
 import { fadeInOverlay, setMassMarksMap, removeOverlay } from '../map/anim.js';
 import { hideBaseStops, updateStopsByZoom } from '../map/stop-layer.js';
@@ -362,7 +362,7 @@ function allowedLines(lineIds) {
   return (lineIds || []).map((id) => getLine(id)).filter((l) => l && (!state.scenario.noMetro || l.mode !== 'metro'));
 }
 
-/** 两站共有的可用线路，按"站数少优先，同站数地铁优先"排序 */
+/** 两站共有的可用线路，按"站数少优先，同站数地铁优先"排序；单向线只认前进方向 */
 function sharedLines(s1, s2) {
   const set1 = new Set(s1.line_ids || []);
   const shared = [];
@@ -371,6 +371,8 @@ function sharedLines(s1, s2) {
     const line = getLine(id);
     if (!line) continue;
     if (state.scenario.noMetro && line.mode === 'metro') continue;
+    // 单向线（公交上下行/环线）：反向不可乘车，直接排除
+    if (!rideStats(line, s1, s2)) continue;
     shared.push(line);
   }
   // 站数更少优先：避免地铁环线绕远、公交坐慢车；站数相同时地铁优先
@@ -386,9 +388,28 @@ function sharedLines(s1, s2) {
 }
 
 /**
+ * 候选网络里要画的折线：单向线只画「当前站 → 线终点」的前进段（不画反向边），
+ * 双向线画整条；单向环线画整圈（前进方向绕一圈回到本站）。
+ */
+function forwardLinePath(line, stop) {
+  if (!line.oneWay) return line.path;
+  if (line.isLoop) return line.path; // 单向环线：前进 = 整圈
+  const phys = findStopInLine(line, stop);
+  if (!phys || !line.path || line.path.length < 2) return line.path;
+  let idx = 0, bd = Infinity;
+  for (let i = 0; i < line.path.length; i++) {
+    const dx = line.path[i][0] - phys.lng, dy = line.path[i][1] - phys.lat;
+    const d = dx * dx + dy * dy;
+    if (d < bd) { bd = d; idx = i; }
+  }
+  return line.path.slice(idx);
+}
+
+/**
  * 亮出候选网络：当前站可换乘的线路（浅色折线）+ 这些线路沿途的站点。
  * 沿途站点 = 只显示候选线路上真实经过的物理站（不显示合并进来的公交/地铁"小弟"）。
  * 例如地铁线过菜户营，只显示红色的地铁点；除非真有从当前站出发的公交线也过菜户营。
+ * 单向线（公交上下行）只显示"前进方向"的下游站，不显示反向站（不画反向边）。
  * 仍按"换乘枢纽优先 + 就近优先"排序并设上限，避免海量点拖慢地图。
  */
 function showCandidateNetwork(stop) {
@@ -397,14 +418,22 @@ function showCandidateNetwork(stop) {
 
   for (const line of lines) {
     if (!line.path || line.path.length < 2) continue;
+    const path = forwardLinePath(line, stop);
+    if (!path || path.length < 2) continue;
     const poly = new AMap.Polyline({
-      path: line.path, strokeColor: line.color,
+      path, strokeColor: line.color,
       strokeWeight: line.mode === 'metro' ? 4 : 2.5, strokeOpacity: 0.7,
       lineJoin: 'round', zIndex: 180,
     });
     poly.setMap(state.map);
     fadeInOverlay(poly);
     state.candidateOverlays.push(poly);
+  }
+
+  // 预计算当前站在各单向线上的序号（过滤上游站用）
+  const curIdxByLine = new Map();
+  for (const line of lines) {
+    if (line.oneWay && !line.isLoop) curIdxByLine.set(String(line.id), stopIndexInLine(line, stop));
   }
 
   const lineIdSet = new Set(lines.map((l) => String(l.id)));
@@ -415,6 +444,15 @@ function showCandidateNetwork(stop) {
     const ids = [];
     for (const lid of ls.line_ids) {
       if (!lineIdSet.has(lid)) continue;
+      const line = getLine(lid);
+      // 单向非环线：只纳下游站（>= 当前站序号），跳过上游（反向边）
+      if (line && line.oneWay && !line.isLoop) {
+        const curIdx = curIdxByLine.get(lid);
+        if (curIdx != null && curIdx >= 0) {
+          const lsIdx = stopIndexInLine(line, ls);
+          if (lsIdx >= 0 && lsIdx < curIdx) continue;
+        }
+      }
       const pid = ls.stopByLine[lid];
       if (pid) ids.push(pid);
     }

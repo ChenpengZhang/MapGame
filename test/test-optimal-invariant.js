@@ -33,8 +33,9 @@ function busSegMin(distM, vmaxKmh) {
   if (distM < dA) return Math.sqrt((2 * distM) / BUS_ACCEL) / 60;
   return (tA + (distM - dA) / vmax) / 60;
 }
-// 与 app.js estimateRideMinutes 同源
+// 与 app.js estimateRideMinutes 同源（单向线只沿前进方向，反向返回 null）
 function rideMinutes(line, iFrom, iTo) {
+  if (line.oneWay && !line.isLoop && iFrom > iTo) return null; // 单向公交不可反向
   const lo = Math.min(iFrom, iTo), hi = Math.max(iFrom, iTo);
   let rideMin = 0, segs = 0;
   for (let i = lo; i < hi; i++) {

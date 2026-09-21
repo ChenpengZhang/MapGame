@@ -36,7 +36,9 @@ export function buildIndex(data) {
 
   for (const line of data.lines || []) {
     const id = String(line.id);
-    line.color = colorForLine(id);
+    // 颜色按 name 取色：公交上下行是两条线但同名，必须同色（展示成一条线）
+    line.color = colorForLine(line.name);
+    line.oneWay = line.oneWay === true; // 单向线（公交上下行/环线）只沿 seq 前进方向乘车
     line.busVmaxKmh = busVmaxForLine(line); // 公交线路巡航速度（城区慢/郊区快）
     // 地铁环线（内环/外环）首尾相邻，补上闭环距离，供"走站少的那边"
     // 注意：名称含"区间"的是短途/区间线（如 300路外环区间），首末站不相邻，不是闭环，不能按环线处理
@@ -268,10 +270,10 @@ export function sharesLine(a, b) {
   return false;
 }
 
-/** 线路配色：按 id 哈希取色（同一线路颜色稳定，重启不变） */
-export function colorForLine(id) {
+/** 线路配色：按 name 哈希取色（同一条线路的上下行同名 → 同色，重启不变） */
+export function colorForLine(name) {
   let h = 0;
-  const s = String(id);
+  const s = String(name);
   for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
   return LINE_PALETTE[h % LINE_PALETTE.length];
 }

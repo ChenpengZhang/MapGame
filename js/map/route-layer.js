@@ -166,8 +166,15 @@ export function lineSegmentPath(line, stopA, stopB) {
   const i0 = Math.min(ia, ib), i1 = Math.max(ia, ib);
 
   let sub;
-  // 环线：闭合路径上有两条弧，选较短的那条（走站少的那边）
-  if (line.isLoop && (line.path.length - i1) + i0 < i1 - i0) {
+  if (line.oneWay) {
+    // 单向线：按前进方向（seq 递增）取段；环线在 A.seq > B.seq 时走绕环（A→末站→首站→B）
+    if (line.isLoop && a.seq > b.seq) {
+      sub = line.path.slice(ia).concat(line.path.slice(0, ib + 1));
+    } else {
+      sub = line.path.slice(i0, i1 + 1);
+    }
+  } else if (line.isLoop && (line.path.length - i1) + i0 < i1 - i0) {
+    // 双向环线：闭合路径上有两条弧，选较短的那条（走站少的那边）
     sub = line.path.slice(i1).concat(line.path.slice(0, i0 + 1));
   } else {
     sub = line.path.slice(i0, i1 + 1);

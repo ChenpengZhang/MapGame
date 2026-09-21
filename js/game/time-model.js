@@ -46,7 +46,8 @@ export function segmentRideMinutes(line, distMeters) {
 
 /**
  * 乘车统计：站数 / 距离 / 纯行驶分钟（不含停站与等车）。
- * 环线（内环/外环）会同时算"线性"和"绕环"两个方向，取时间短的那个。
+ * 单向线（公交上下行/环线）只按前进方向走，反向返回 null（不可乘车）。
+ * 双向线（地铁）仍按 min(线性, 绕环) 取短边。
  * @returns {{distanceKm:number, segments:number, hasDist:boolean, rideMin:number}|null}
  */
 export function rideStats(line, from, to) {
@@ -54,7 +55,6 @@ export function rideStats(line, from, to) {
   const ib = stopIndexInLine(line, to);
   if (ia < 0 || ib < 0) return null;
   if (ia === ib) return { distanceKm: 0, segments: 0, hasDist: false, rideMin: 0 };
-  const lo = Math.min(ia, ib), hi = Math.max(ia, ib);
   const N = line.stops.length;
 
   function rangeStats(a, b) {
@@ -70,9 +70,31 @@ export function rideStats(line, from, to) {
     return { dist, hasDist, rideMin, segs: b - a };
   }
 
-  // 方向1：线性 lo→hi
+  // 单向线：只沿 seq 前进方向乘车
+  if (line.oneWay) {
+    let best;
+    if (ia < ib) {
+      best = rangeStats(ia, ib);
+    } else if (line.isLoop) {
+      // 环线绕环（ia → 末站 → 首站 → ib）
+      const seg1 = rangeStats(ia, N - 1);
+      const seg2 = rangeStats(0, ib);
+      best = {
+        dist: seg1.dist + line.wrapDistKm + seg2.dist,
+        hasDist: true,
+        rideMin: seg1.rideMin + segmentRideMinutes(line, line.wrapDistKm * 1000) + seg2.rideMin,
+        segs: seg1.segs + 1 + seg2.segs,
+      };
+    } else {
+      // 反向不可达
+      return null;
+    }
+    return { distanceKm: best.dist, segments: best.segs, hasDist: best.hasDist, rideMin: best.rideMin };
+  }
+
+  // 双向线：线性 vs 绕环（仅环线），取时间短的那个
+  const lo = Math.min(ia, ib), hi = Math.max(ia, ib);
   const d1 = rangeStats(lo, hi);
-  // 方向2：绕环（仅环线）
   let d2 = null;
   if (line.isLoop && line.wrapDistKm > 0) {
     const seg1 = rangeStats(hi, N - 1);
