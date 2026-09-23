@@ -4,7 +4,7 @@
 // 用法：node benchmark.js
 // 跑两版参数：① 当前默认参数；② calibrate.js 锚点法校准后的参数。
 
-const router = require('./js/router.js');
+const router = require('./shared/router.js');
 
 const data = require('./data/beijing-transit.json');
 const samples = require('./data/calibrate-samples.json').samples;

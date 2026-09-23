@@ -10,13 +10,13 @@ import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
 globalThis.window = globalThis;
-globalThis.window.TransitRouter = require('../js/router.js');
+globalThis.window.TransitRouter = require('../shared/router.js');
 globalThis.document = { getElementById: () => null, createElement: () => ({}), head: {}, body: {}, querySelectorAll: () => [], addEventListener() {} };
 globalThis.localStorage = { getItem: () => null, setItem() {}, removeItem() {} };
 
-const { state } = await import('../js/core/state.js');
-const { computeTotalMinutes } = await import('../js/game/time-model.js');
-const { haversineKm } = await import('../js/core/router-api.js');
+const { state } = await import('../frontend/js/core/state.js');
+const { computeTotalMinutes } = await import('../frontend/js/game/time-model.js');
+const { haversineKm } = await import('../frontend/js/core/router-api.js');
 
 const S1 = { logical: { id: 'a', name: '甲站' }, point: [116.4000, 39.9000] };
 const S2 = { logical: { id: 'b', name: '乙站' }, point: [116.4000, 39.9067] }; // 约 745m 北

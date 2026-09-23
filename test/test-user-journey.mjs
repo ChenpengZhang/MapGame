@@ -8,21 +8,21 @@ import { installAllStubs, elements, created, store } from './stubs.mjs';
 
 installAllStubs({ useFull: true }); // 全量 beijing-transit.json（故事关卡坐标都在北京，需真实站点）
 
-const { state } = await import('../js/core/state.js');
-const { buildGraph } = await import('../js/core/router-api.js');
-const { loadTransitData } = await import('../js/data/loader.js');
-const { buildIndex } = await import('../js/data/index-builder.js');
-const { LEVELS } = await import('../js/data/levels.js');
-const { stopToData } = await import('../js/map/stop-marks.js');
-const { initMap } = await import('../js/map/map-init.js');
-const { renderMetroContext, renderStops } = await import('../js/map/stop-layer.js');
-const { onStopMouseOver, onStopMouseOut } = await import('../js/map/hover.js');
-const { onStopClick, onCandidateStopClick, finishRoute } = await import('../js/game/route.js');
-const { startLevel, showMenu, openStoryMenu, openTowerMenu } = await import('../js/game/session.js');
-const { nextLevel, restartLevel } = await import('../js/game/flow.js');
-const { openFreeMenu } = await import('../js/game/free.js');
-const { storyNext, tutorialNext } = await import('../js/ui/story.js');
-const app = await import('../js/app.js'); // 入口（bootstrap：桩件里 loadScript 永不回调，属预期）
+const { state } = await import('../frontend/js/core/state.js');
+const { buildGraph } = await import('../frontend/js/core/router-api.js');
+const { loadTransitData } = await import('../frontend/js/data/loader.js');
+const { buildIndex } = await import('../frontend/js/data/index-builder.js');
+const { LEVELS } = await import('../frontend/js/data/levels.js');
+const { stopToData } = await import('../frontend/js/map/stop-marks.js');
+const { initMap } = await import('../frontend/js/map/map-init.js');
+const { renderMetroContext, renderStops } = await import('../frontend/js/map/stop-layer.js');
+const { onStopMouseOver, onStopMouseOut } = await import('../frontend/js/map/hover.js');
+const { onStopClick, onCandidateStopClick, finishRoute } = await import('../frontend/js/game/route.js');
+const { startLevel, showMenu, openStoryMenu, openTowerMenu } = await import('../frontend/js/game/session.js');
+const { nextLevel, restartLevel } = await import('../frontend/js/game/flow.js');
+const { openFreeMenu } = await import('../frontend/js/game/free.js');
+const { storyNext, tutorialNext } = await import('../frontend/js/ui/story.js');
+const app = await import('../frontend/js/app.js'); // 入口（bootstrap：桩件里 loadScript 永不回调，属预期）
 
 const el = (id) => elements.get(id);
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -37,8 +37,9 @@ console.log('\n=== 完整用户旅程测试（进入 → 选关 → 游玩 → �
 // ============ 1. 进入界面 + 数据就绪 ============
 await step('进入界面：加载数据、建索引、铺地图、显示主菜单', async () => {
   const { data } = await loadTransitData();
-  buildIndex(data);
-  state.routerGraph = buildGraph(data.lines);
+  const graph = buildGraph(data.lines);
+  buildIndex(data, graph);
+  assert.equal(state.routerGraph, graph, '前端索引与最优路线共用同一份寻路图');
   initMap();
   renderMetroContext();
   renderStops({ onClick: onStopClick, onMouseOver: onStopMouseOver, onMouseOut: onStopMouseOut });
@@ -65,7 +66,7 @@ await step('跳过剧情 → 跳过教学 → 交还操作权', () => {
   assert.equal(state.storyActive, false, '剧情结束后解锁地图');
   for (let i = 0; i < 4; i++) tutorialNext();
   assert.ok(el('tutorial-bubble').classList.contains('hidden'), '教学气泡已收起');
-  assert.equal(el('status').textContent, lv.goalText, '状态栏已显示关卡目标');
+  assert.equal(el('tower-layer-label').textContent,'≤ 80 分钟','故事时限已在中央浮层显示');
 });
 
 // ============ 4. 规划路线（起点 → 换乘 → 终点）+ 结算 ============

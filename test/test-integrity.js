@@ -1,7 +1,7 @@
 'use strict';
 
 // 验证：逻辑站 ID 是否发生碰撞（不同簇生成同一个 id，后者覆盖前者）
-const R = require('../js/router.js');
+const R = require('../shared/router.js');
 const data = require('../data/beijing-transit.json');
 const g = R.buildGraph(data.lines);
 

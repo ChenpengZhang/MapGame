@@ -1,0 +1,91 @@
+// Run from the repo root; requires TEST_DATABASE_URL ending in _test and Playwright + Chrome.
+import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
+import { spawn } from 'node:child_process';
+import pg from 'pg';
+import { authOptions,createAuth } from '../src/infrastructure/auth.js';
+import { migrate } from '../src/infrastructure/migrate.js';
+import { Repository } from '../src/infrastructure/repository.js';
+import { Transit } from '../src/infrastructure/transit.js';
+import { GameService } from '../src/application/game-service.js';
+import { createApp } from '../src/http/app.js';
+import router from '../../shared/router.js';
+const {chromium}=await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
+assert.match(new URL(process.env.TEST_DATABASE_URL).pathname,/_test$/);
+const pool=new pg.Pool({connectionString:process.env.TEST_DATABASE_URL});
+const origin='http://localhost:18082',base=origin+'/mapgame/';
+const config={PUBLIC_ORIGIN:origin,NODE_ENV:'test',BETTER_AUTH_SECRET:randomUUID()+randomUUID()};
+const mail=[],sendMail=async message=>{mail.push(message);};
+let apiServer,staticServer,browser,userId;
+try {
+  await migrate(pool,authOptions(config,pool,sendMail));
+  const repository=new Repository(pool),transit=new Transit();
+  apiServer=createApp({auth:createAuth(config,pool,sendMail),repository,game:new GameService(repository,transit),config}).listen(0,'127.0.0.1');
+  await new Promise(resolve=>apiServer.once('listening',resolve));
+  staticServer=spawn(process.execPath,['server.js'],{cwd:new URL('../../',import.meta.url),stdio:'ignore',env:{...process.env,PORT:'18082',NO_OPEN:'1',MAPGAME_API_PORT:String(apiServer.address().port)}});
+  for(let i=0;i<100;i++){try{if((await fetch(base)).ok)break;}catch{}await new Promise(r=>setTimeout(r,100));}
+  browser=await chromium.launch({channel:process.env.E2E_BROWSER || 'chrome',headless:true});
+  const page=await browser.newPage({viewport:{width:1280,height:900}});
+  page.setDefaultTimeout(30000);
+  await page.goto(base);
+  await page.waitForFunction(()=>document.querySelector('#account-button').textContent.includes('登录'));
+  assert.ok(await page.isVisible('#free-btn'));
+  await page.click('#account-button');await page.click('#account-register');
+  const email=`browser-${randomUUID()}@example.com`,password='Browser-password-1234';
+  await page.fill('#account-nickname','浏览器验证');await page.fill('#account-email',email);await page.fill('#account-password',password);await page.fill('#account-register-confirm',password);await page.click('#account-submit');
+  await page.waitForFunction(()=>document.querySelector('#account-title').textContent==='验证邮箱');
+  userId=(await pool.query('SELECT id FROM "user" WHERE email=$1',[email])).rows[0].id;
+  await page.fill('#account-otp',mail.findLast(m=>m.kind==='email-verification').otp);await page.click('#account-submit');
+  await page.waitForFunction(()=>document.querySelector('#account-title').textContent==='登录');
+  await page.fill('#account-password',password);await page.click('#account-submit');
+  await page.waitForFunction(()=>document.querySelector('#account-button').textContent.includes('浏览器验证'));
+  console.log('✓ Guest menu, registration, email verification and login');
+  await page.click('#free-btn');await page.click('#free-start-btn');
+  await page.waitForFunction(()=>window.__MG?.state.onlineRound && window.__MG.state.currentLevel?.id==='random',null,{timeout:90000});
+  const cloud=await page.evaluate(()=>({run:window.__MG.state.onlineRound.run,stage:window.__MG.state.onlineRound.stage}));
+  const puzzle=cloud.stage.puzzle,{graph}=await transit.load(puzzle.city);
+  const optimal=await router.findOptimalRoute(graph,puzzle.origin,puzzle.destination,puzzle.options,async(a,b)=>({min:router.haversineKm(a,b)*1000/(75*puzzle.options.walkSpeedFactor)}));
+  const rides=optimal.legs.filter(leg=>leg.type==='ride');
+  // Supply a valid computed route to the game state, then exercise the actual frontend serializer and save UI.
+  await page.evaluate(async rides=>{
+    const s=window.__MG.state;
+    s.routeRides=rides.map(leg=>s.routerGraph.lineById.get(leg.lineId));
+    s.routeStops=[{logical:s.logicalById.get(rides[0].fromLogicalId)},...rides.map(leg=>({logical:s.logicalById.get(leg.toLogicalId)}))];
+  },rides);
+  const forged=await page.request.post(base+'api/runs/'+cloud.run.id+'/submit',{headers:{origin},data:{stageId:cloud.stage.id,requestId:randomUUID(),route:[{lineId:"'; DROP TABLE game_runs; --",fromStopId:'fake',toStopId:'fake'}]}});
+  assert.equal(forged.status(),400);
+  assert.equal((await pool.query('SELECT count(*) FROM round_submissions WHERE round_id=$1',[cloud.stage.id])).rows[0].count,'0');
+  let first=true;const requests=[];
+  await page.route('**/runs/*/submit',async route=>{
+    requests.push(route.request().postDataJSON());
+    if(first){first=false;const response=await route.fetch();assert.equal(response.status(),200);await route.abort();}else await route.continue();
+  });
+  await page.evaluate(async()=>{const {emit,EVENTS}=await import('./js/core/bus.js');emit(EVENTS.ROUTE_FINISHED);});
+  await page.waitForSelector('#result-retry:not(.hidden)');await page.click('#result-retry');
+  await page.waitForFunction(()=>document.querySelector('#result-title').textContent.includes('完成'));
+  assert.equal(requests.length,2);assert.deepEqual(requests[0],requests[1]);
+  assert.deepEqual(Object.keys(requests[0]).sort(),['requestId','route','stageId']);
+  assert.equal((await pool.query('SELECT count(*) FROM round_submissions WHERE round_id=$1',[cloud.stage.id])).rows[0].count,'1');
+  await page.evaluate(async()=>{(await import('./js/game/session.js')).showMenu();});
+  await page.click('#account-button');await page.click('#history-button');await page.waitForFunction(()=>document.querySelector('#history-list').textContent.includes('随机模式'));
+  await page.click('#history-close');await page.click('#account-button');await Promise.all([page.waitForEvent('load'),page.click('#logout-button')]);await page.waitForFunction(()=>document.querySelector('#account-button').textContent.includes('登录'));
+  console.log('✓ Real transit route verified, lost response retried once, history saved and logout');
+  await page.click('#account-button');await page.click('#account-forgot');await page.fill('#account-email',email);await page.click('#account-submit');
+  await page.waitForFunction(()=>document.querySelector('#account-title').textContent==='输入验证码');
+  await page.fill('#account-otp',mail.findLast(m=>m.kind==='forget-password').otp);await page.click('#account-submit');
+  await page.waitForFunction(()=>document.querySelector('#account-title').textContent==='设置新密码');
+  await page.fill('#account-new-password','Changed-password-1234');await page.fill('#account-confirm-password','Changed-password-1234');await page.click('#account-submit');
+  await page.waitForFunction(()=>document.querySelector('#account-message').textContent.includes('密码已重置'));
+  await page.fill('#account-password','Changed-password-1234');await page.click('#account-submit');await page.waitForFunction(()=>document.querySelector('#account-button').textContent.includes('浏览器验证'));
+  await page.setViewportSize({width:390,height:844});
+  await page.click('#account-button');await page.click('#history-button');
+  const card=await page.locator('#history-dialog .account-card').boundingBox();
+  assert.ok(card.x>=0 && card.x+card.width<=390);
+  await page.screenshot({path:'/tmp/mapgame-account-mobile.png'});
+  console.log('✓ Password reset page, login with new password and mobile dialog layout');
+} finally {
+  await browser?.close();staticServer?.kill();
+  if(apiServer)await new Promise(resolve=>apiServer.close(resolve));
+  if(userId)await pool.query('DELETE FROM "user" WHERE id=$1',[userId]);
+  await pool.end();
+}

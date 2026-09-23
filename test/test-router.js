@@ -4,7 +4,7 @@
 // 用法：node test/test-router.js
 // 用直线距离×步行速度模拟步行时间，验证寻路算法本身。
 
-const router = require('../js/router.js');
+const router = require('../shared/router.js');
 
 const data = require('../data/beijing-transit.json');
 

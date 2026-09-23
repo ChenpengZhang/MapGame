@@ -17,7 +17,7 @@ import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
-const R = require('../js/router.js');
+const R = require('../shared/router.js');
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const CITIES = ['beijing', 'shanghai', 'shenzhen', 'guangzhou'];

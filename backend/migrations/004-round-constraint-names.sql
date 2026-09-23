@@ -1,0 +1,17 @@
+-- PostgreSQL preserves constraint names when a table or column is renamed.
+-- Finish the stage -> round vocabulary migration so schema inspection is clear.
+ALTER TABLE run_rounds RENAME CONSTRAINT run_stages_pkey TO run_rounds_pkey;
+ALTER TABLE run_rounds RENAME CONSTRAINT run_stages_run_id_fkey TO run_rounds_run_id_fkey;
+ALTER TABLE run_rounds RENAME CONSTRAINT run_stages_run_id_stage_no_key TO run_rounds_run_id_round_no_key;
+ALTER TABLE run_rounds RENAME CONSTRAINT run_stages_stage_no_check TO run_rounds_round_no_check;
+ALTER TABLE run_rounds RENAME CONSTRAINT run_stages_optimal_duration_ms_check TO run_rounds_optimal_duration_ms_check;
+ALTER TABLE run_rounds RENAME CONSTRAINT run_stages_puzzle_check TO run_rounds_puzzle_check;
+ALTER TABLE run_rounds RENAME CONSTRAINT run_stages_status_check TO run_rounds_status_check;
+
+ALTER TABLE round_submissions RENAME CONSTRAINT run_submissions_pkey TO round_submissions_pkey;
+ALTER TABLE round_submissions RENAME CONSTRAINT run_submissions_stage_id_fkey TO round_submissions_round_id_fkey;
+ALTER TABLE round_submissions RENAME CONSTRAINT run_submissions_stage_id_key TO round_submissions_round_id_key;
+ALTER TABLE round_submissions RENAME CONSTRAINT run_submissions_request_id_key TO round_submissions_request_id_key;
+ALTER TABLE round_submissions RENAME CONSTRAINT run_submissions_route_check TO round_submissions_route_check;
+ALTER TABLE round_submissions RENAME CONSTRAINT run_submissions_duration_ms_check TO round_submissions_duration_ms_check;
+ALTER TABLE round_submissions RENAME CONSTRAINT run_submissions_elapsed_ms_check TO round_submissions_elapsed_ms_check;

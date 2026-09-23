@@ -25,7 +25,7 @@
 
 ## 特性
 
-- **本地寻路**：不依赖任何网络，`js/router.js` 在「逻辑站 × 线路」状态空间上做 Dijkstra，支持一些有意思的畸变待你探索。
+- **本地寻路**：不依赖任何网络，`shared/router.js` 在「逻辑站 × 线路」状态空间上做 Dijkstra，支持一些有意思的畸变待你探索。
 - **故事模式**：6 个带剧情（Galgame 对话框 + 教学泡泡）的关卡，逐关解锁。
 - **自由模式**：随机起终点，可勾选情景。
 - **无尽模式（爬塔）**：随机起终点，每层要求「比最优慢 ≤ 固定百分比」，从 100% 逐层收紧到 1%；4 个畸变按钮分别记录成绩，支持中途退出续玩。
@@ -60,7 +60,9 @@
 ```bash
 node server.js
 ```
-浏览器打开 **http://localhost:8080**（会自动打开）。
+浏览器打开 **http://localhost:8080/**（会自动打开）。也支持 **http://localhost:8080/mapgame/**，用于验证线上子路径。
+
+前端文件在 `frontend/`，通过服务器映射后 URL 仍是 `js/`、`fonts/`、`shared/`、`data/`，不用在地址中加 `frontend/`。
 
 地图默认用 **Leaflet + OpenStreetMap**（免费、免 Key、开箱即用），无需任何配置。
 
@@ -76,6 +78,23 @@ node server.js
 
 > Key 只保存在**浏览器本地缓存（localStorage）**里，不会以任何形式上传。
 > 填 Key 保存后刷新 → 用高德底图；把 Key 清空再保存 → 回到免 Key 的 OSM 地图。
+
+---
+
+## 网页发布（/mapgame/）
+
+在仓库根目录执行：
+
+```bash
+npm run build:web
+```
+
+将生成的 **`dist/mapgame/` 整个目录**部署到网站的 `/mapgame/`，例如 `/var/www/zcpenguin/mapgame/`。
+产物包含页面、前端 JS、字体、共享寻路器和游戏交通数据，不包含后端、数据库配置、原始数据或测试。
+不要只上传 `frontend/`，否则会缺少 `shared/router.js` 和交通数据；也不要将整个仓库当作网站根目录。
+Nginx API 代理和静态目录示例见 [`backend/deploy/nginx.conf.example`](backend/deploy/nginx.conf.example)。
+
+本地 `npm start` 和 Release 启动脚本保持不变。`npm run test:paths` 检查根路径、`/mapgame/`、资源引用和发行包资源是否完整。
 
 ---
 
@@ -119,37 +138,29 @@ node cptond-convert.js
 
 ```
 MapGame/
-├── server.js              # 本地静态服务器（node server.js）
-├── build-release.js       # 发布打包脚本（node build-release.js）
-├── .github/workflows/     # GitHub Actions 自动发版（push v* 标签触发）
-├── index.html             # 主界面 + 各菜单/弹窗
-├── js/                    # 前端源码（分层，详见 docs/前端架构.md）
-│   ├── app.js             #   入口：引导 + 组装 + 事件绑定（组合根，~130 行）
-│   ├── router.js          #   本地寻路器（Dijkstra，Node/浏览器通用，不参与分层）
-│   ├── amap-polyfill.js   #   Leaflet+OSM 免 Key 地图后端（模拟高德 API，不参与分层）
-│   ├── core/              #   基础层：常量 / 状态 / DOM工具 / 事件总线 / 存储 / 寻路器适配
-│   ├── data/              #   数据层：关卡剧本 / 数据加载 / 站点索引
-│   ├── map/               #   地图渲染层：动画 / 站点图层 / 路线图层 / 步行
-│   ├── game/              #   玩法层：路线规划 / 时间模型 / 会话 / 爬塔 / 结算
-│   └── ui/                #   表现层：路线面板 / 结果弹窗 / 菜单 / 剧情对话框
-├── cptond-convert.js      # CPTOND → beijing-transit.json（主数据管线）
-├── test/                  # 测试脚本（node test/<脚本名> 运行）
-│   ├── test-router.js     #   寻路器 Node 回归测试
-│   ├── test-integrity.js  #   数据完整性：逻辑站 id 唯一、物理站线路映射无缺失
-│   ├── test-optimal-invariant.js # 「最优 ≤ 玩家」不变式验证
-│   └── test-app-smoke.mjs #   前端冒烟测试（模块图 + 主流程，Node 桩环境）
-├── calibrate-collect.js   # 采高德真实路径规划样本（校准用，需 Web 服务 key）
-├── calibrate.js           # 成本模型锚点法校准
-├── benchmark.js           # 本地模型 vs 高德真实耗时（端到端误差）
-├── lib/shp.js             # 最小 shapefile 读取器（零依赖）
-├── fonts/                 # ChillRoundF（寒蝉全圆体，SIL OFL 1.1，本地打包）
-├── data/
-│   ├── sample.json         # 演示数据（开箱即用）
-│   ├── beijing-transit.json        # 全量数据（GCJ-02，唯一数据源）
-│   └── cptond/             # CPTOND 原始 shapefile（含北京/其它城市地铁，gitignore）
-└── docs/
-    ├── 技术方案.md        # 早期竞品调研 + 可行性 + 架构
-    └── 数据管线与城市迁移指南.md  # 数据管线 + 踩坑记录 + 新城市迁移清单
+├── frontend/              # 前端源码（浏览器 ES modules）
+│   ├── index.html         # 游戏页面、菜单与弹窗
+│   ├── favicon.svg
+│   ├── fonts/             # 本地字体
+│   └── js/                # app.js + core/data/map/game/ui 分层
+├── backend/               # Node.js / PostgreSQL 后端（DDD）
+│   ├── src/               # domain/application/infrastructure/http
+│   ├── migrations/        # 数据库迁移
+│   └── .env.example       # 配置模板，真实 .env 不入 Git
+├── shared/router.js       # 浏览器与后端共用的寻路和基础计时函数
+├── data/                  # 四城交通数据、sample.json、原始数据（原始数据不入 Git）
+├── lib/shp.js             # 数据转换工具使用的 SHP/DBF 解析器
+├── scripts/assets.js      # 源码文件到公开 URL 的统一映射
+├── server.js              # 本地静态服务器
+├── build-web.js           # 生成 dist/mapgame/ 静态发布目录
+├── build-release.js       # 便携 Node + 游戏资源的桌面发行包
+├── cptond-convert.js      # 交通数据转换
+├── calibrate*.js          # 数据采样与计时模型校准
+├── benchmark.js           # 模型对照
+├── test/                  # 前端流程、数据、寻路与路径回归测试
+├── screenshots/           # README 配图
+├── .github/workflows/     # Release 自动打包
+└── docs/                  # 架构、技术方案与数据管线文档
 ```
 
 ---
@@ -161,8 +172,12 @@ node test/test-router.js            # 寻路回归测试（故宫→国贸 正�
 node test/test-integrity.js         # 数据完整性：逻辑站 id 唯一、物理站线路映射无缺失
 node test/test-optimal-invariant.js # 不变式：系统最优 ≤ 玩家可达方案（防「最优比玩家慢」）
 node test/test-app-smoke.mjs        # 前端冒烟测试（模块图 + 主流程，Node 桩环境，无需浏览器）
-node --check js/router.js
+node --check shared/router.js
+npm run test:paths               # 根路径、/mapgame/、静态产物与发行包资源
 ```
+
+真实浏览器流程测试使用 `npm run test:e2e`，默认验证 `/mapgame/`。可用 `E2E_BASE_PATH=/` 切换为根路径，
+用 `E2E_BROWSER=chrome` 选择已安装的 Chrome（默认 Edge）；需先 `npm ci` 安装 Playwright。
 
 ### 成本模型校准（可选，需高德「Web服务」key）
 
@@ -186,7 +201,7 @@ node benchmark.js                     # 端到端：本地模型 vs 高德真实
 
 两个地图后端共用同一份 **GCJ-02 数据**，全程无偏移、路由一致：
 
-- **未配置 Key** → `js/amap-polyfill.js` 用 Leaflet 模拟高德 API，底图为 OSM；坐标换算（GCJ-02→WGS-84）全部在该兼容层的渲染边界完成，app.js 无感知；
+- **未配置 Key** → `frontend/js/amap-polyfill.js` 用 Leaflet 模拟高德 API，底图为 OSM；坐标换算（GCJ-02→WGS-84）全部在该兼容层的渲染边界完成，app.js 无感知；
 - **设置里填了高德 Key** → 加载真实高德 JS API，底图为高德，直接用 GCJ-02，零换算、零改动。
 
 但：推荐使用高德地图底图游玩。响应更自然，国内细节更完整，没有地图合规问题。
@@ -202,7 +217,28 @@ node benchmark.js                     # 端到端：本地模型 vs 高德真实
 - 北京加入公交间隔信息
 - 加入更多城市
 - 更多游戏模式
-- 玩家注册和登录，关卡闯关数据永久保存
+- 玩家注册和登录、已验证游玩记录保存（已实现）
 - 关卡自定义模式和上传，删除，管理
 - 交通数据进一步压缩加快加载速度
 - 加入排位和每日挑战模式
+
+## 后端开发
+
+账户认证、每日挑战、服务端爬塔存档和排行榜 API 位于 [`backend/`](backend/README.md)，采用 DDD 分层的 Node.js / PostgreSQL 单体服务。
+部署路径为 `/mapgame/api/`；数据库和 SMTP 凭据通过环境变量配置，不提交 Git。
+主页已接入登录、注册、邮箱验证、密码找回和最近 50 条游玩记录。无需登录也能玩，游客数据仅留在浏览器；登录后，故事、随机与爬塔由服务器发题，完成后验证路线并入库，游客旧层数不会导入。
+
+本地完整启动（Node.js 22.13+，推荐 24）：
+```sh
+cd backend
+npm ci
+cp .env.example .env # 首次配置；已有 .env 不要覆盖
+# 填入本机 PostgreSQL 连接和随机认证密钥
+cd ..
+npm run dev
+```
+访问 `http://localhost:8080/mapgame/`；开发服务器将 API 转发至本机 3001 端口。`PUBLIC_ORIGIN` 应与浏览器地址一致。仅体验游客玩法仍可运行 `npm start`。
+
+启动后自动创建缺失的数据库、执行增量迁移，已有数据保留。开发邮件写入 `backend/.mail-preview/`；正式注册和密码找回需配置 SMTP。详情见后端 README。
+
+结算仅提交服务器关卡 ID、幂等请求 ID 和分段路线。乘车与步行换乘由服务器按物理站连续性逐段验证和重算；路线耗时、层数、通过状态与答题用时均不信任客户端。上传失败可保留当前页面重试。答题用时包含网络延迟，不能据此证明真人手速或阻止自动解题。无尽排行榜已接入页面，显示前 20 名及榜外登录玩家的本人名次。

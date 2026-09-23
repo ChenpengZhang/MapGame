@@ -11,7 +11,9 @@ const zlib = require('zlib');
 const { exec } = require('child_process');
 
 const PORT = Number(process.env.PORT) || 8080;
+const API_PORT = Number(process.env.MAPGAME_API_PORT) || 3001;
 const ROOT = __dirname;
+const assets = require('./scripts/assets').publicAssets(ROOT);
 
 // 自动打开浏览器（跨平台）；设置环境变量 NO_OPEN=1 可禁用
 function openBrowser(url) {
@@ -58,7 +60,25 @@ function cacheControlFor(url) {
 http
   .createServer((req, res) => {
     const rawUrl = req.url || '/';
-    let urlPath = decodeURIComponent(rawUrl.split('?')[0]);
+    // Same-origin local development proxy; the upstream is fixed to loopback.
+    if (rawUrl.startsWith('/mapgame/api/')) {
+      const upstream = http.request({hostname:'127.0.0.1',port:API_PORT,path:rawUrl,method:req.method,
+        headers:{...req.headers,'x-forwarded-for':req.socket.remoteAddress,'x-real-ip':req.socket.remoteAddress,'x-forwarded-proto':'http'}}, response=>{
+        res.writeHead(response.statusCode,response.headers);response.pipe(res);
+      });
+      upstream.setTimeout(35000,()=>upstream.destroy());
+      upstream.on('error',()=>{if(!res.headersSent){res.writeHead(503,{'Content-Type':'application/json','Cache-Control':'no-store'});res.end(JSON.stringify({error:'SERVICE_UNAVAILABLE'}));}else res.destroy();});
+      req.on('aborted',()=>upstream.destroy());
+      req.pipe(upstream);return;
+    }
+    let urlPath;
+    try { urlPath = decodeURIComponent(rawUrl.split('?')[0]); }
+    catch { res.writeHead(400); return res.end('Bad Request'); }
+    if (urlPath === '/mapgame') {
+      res.writeHead(308, { Location: '/mapgame/' });
+      return res.end();
+    }
+    if (urlPath.startsWith('/mapgame/')) urlPath = urlPath.slice('/mapgame'.length);
     if (urlPath === '/') urlPath = '/index.html';
 
     // 屏蔽敏感目录/文件（.git / node_modules / .env*）：防止整仓库 clone 后这些被直接访问
@@ -68,11 +88,13 @@ http
       return res.end('Forbidden');
     }
 
-    const filePath = path.normalize(path.join(ROOT, urlPath));
-    if (!filePath.startsWith(ROOT + path.sep)) {
-      res.writeHead(403);
-      return res.end('Forbidden');
+    const normalized = path.posix.normalize(urlPath);
+    const relative = assets.get(normalized);
+    if (!relative) {
+      res.writeHead(404);
+      return res.end('Not Found');
     }
+    const filePath = path.join(ROOT,relative);
 
     fs.stat(filePath, (statErr, stat) => {
       if (statErr) {

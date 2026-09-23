@@ -1,0 +1,22 @@
+# Include inside the existing HTTPS server {} for zcpenguin.com.
+# Run npm run build:web at repository root; copy dist/mapgame/ to /var/www/zcpenguin/mapgame/.
+# Includes js/, fonts/, shared/router.js and game data; excludes backend and secrets.
+# Never use the repository root (containing backend/, .env and node_modules) as a web root.
+location = /mapgame { return 301 /mapgame/; }
+location ^~ /mapgame/api/ {
+    client_max_body_size 64k;
+    client_body_timeout 15s;
+    proxy_pass http://127.0.0.1:3001;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $remote_addr;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_read_timeout 30s;
+    # Auth query strings can contain verification tokens.
+    access_log off;
+}
+location /mapgame/ {
+    root /var/www/zcpenguin;
+    index index.html;
+    try_files $uri $uri/ =404;
+}

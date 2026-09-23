@@ -40,10 +40,13 @@ const TARGETS = {
 // config.json、docs/、.gitignore 等。
 const INCLUDE = [
   'server.js',
-  'index.html',
-  'favicon.svg',
-  'js',                         // app.js / router.js / amap-polyfill.js
-  'fonts',                      // ChillRoundF 字体（SIL OFL，本地打包）
+  'scripts/assets.js',          // Static URL manifest shared with server.js
+  'frontend/index.html',
+  'frontend/css',
+  'frontend/favicon.svg',
+  'frontend/js',
+  'shared/router.js',
+  'frontend/fonts',                      // ChillRoundF 字体（SIL OFL，本地打包）
   'data/beijing-transit.json',  // 北京全量数据（GCJ-02）
   'data/guangzhou-transit.json',// 广州全量数据
   'data/shenzhen-transit.json', // 深圳全量数据
@@ -180,7 +183,7 @@ async function buildOne(target) {
   fs.rmSync(extractDir, { recursive: true, force: true });
 }
 
-(async function main() {
+async function main() {
   fs.mkdirSync(RELEASE_DIR, { recursive: true });
 
   const args = process.argv.slice(2);
@@ -202,7 +205,10 @@ async function buildOne(target) {
     await buildOne(t);
   }
   console.log('\n完成。产物在 release/ 目录。');
-})().catch((e) => {
+}
+
+module.exports = { copyProject, writeLauncher, INCLUDE };
+if (require.main === module) main().catch((e) => {
   console.error(e);
   process.exit(1);
 });

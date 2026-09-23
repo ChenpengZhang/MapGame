@@ -2,7 +2,7 @@
  * test-app-smoke.mjs —— 前端分层拆分后的"无浏览器"冒烟测试
  *
  * 【为什么需要它】
- *   app.js 被拆成 30 个模块后，最大的风险不再是"算法错了"，而是
+ *   app.js 被拆成分层模块后，最大的风险不再是"算法错了"，而是
  *   "某个 import 写错 / 少导出一个函数 / 模块之间有循环依赖"——
  *   这类错误在浏览器里表现为整页白屏，而且很难定位。
  *   本测试在 Node 里用一组最小桩件（document / localStorage / fetch / AMap）
@@ -58,6 +58,7 @@ function makeEl(id) {
     addEventListener(type, fn) { (this.__ev[type] = this.__ev[type] || []).push(fn); },
     dispatch(type, evt) { for (const fn of this.__ev[type] || []) fn(evt || {}); },
     appendChild(c) { this.children.push(c); return c; },
+    replaceChildren(...children) { this.children = children; this.textContent = ''; },
     querySelector() { return makeEl(id + '::child'); },
     querySelectorAll() { return []; },
   };
@@ -181,26 +182,31 @@ globalThis.AMap = {
 // 2. 加载 router.js（UMD → window.TransitRouter），再导入被测模块
 // ======================================================================
 
-globalThis.window.TransitRouter = require('../js/router.js');
+globalThis.window.TransitRouter = require('../shared/router.js');
 
-const { state } = await import('../js/core/state.js');
-const { buildGraph, haversineKm } = await import('../js/core/router-api.js');
-const { loadTransitData } = await import('../js/data/loader.js');
-const { buildIndex } = await import('../js/data/index-builder.js');
-const { LEVELS } = await import('../js/data/levels.js');
-const { stopToData } = await import('../js/map/stop-marks.js');
-const { initMap } = await import('../js/map/map-init.js');
-const { renderMetroContext, renderStops, toggleShowAllStops } = await import('../js/map/stop-layer.js');
-const { onStopMouseOver, onStopMouseOut } = await import('../js/map/hover.js');
-const { onStopClick, onCandidateStopClick, finishRoute, resetRoute, undoRoute } = await import('../js/game/route.js');
-const { startLevel, showMenu, openStoryMenu, openTowerMenu, sampleRandomEndpoints } = await import('../js/game/session.js');
-const { startTower, resetTowerFromLayer1, towerThreshold } = await import('../js/game/tower.js');
-const { nextLevel, restartLevel } = await import('../js/game/flow.js');
-const { loadTowerState, saveTowerState } = await import('../js/game/progress.js');
-const { openFreeMenu, startFreeGame } = await import('../js/game/free.js');
-const { storyNext, tutorialNext } = await import('../js/ui/story.js');
-const { updateButtons } = await import('../js/ui/menu.js');
-const app = await import('../js/app.js'); // 入口（会自行 bootstrap：桩件里 loadScript 永不回调，属预期）
+const { state } = await import('../frontend/js/core/state.js');
+const { account } = await import('../frontend/js/core/account.js');
+const { buildGraph, haversineKm } = await import('../frontend/js/core/router-api.js');
+const { loadTransitData } = await import('../frontend/js/data/loader.js');
+const { buildIndex } = await import('../frontend/js/data/index-builder.js');
+const { LEVELS } = await import('../frontend/js/data/levels.js');
+const { stopToData } = await import('../frontend/js/map/stop-marks.js');
+const { initMap } = await import('../frontend/js/map/map-init.js');
+const { renderMetroContext, renderStops, toggleShowAllStops } = await import('../frontend/js/map/stop-layer.js');
+const { onStopMouseOver, onStopMouseOut } = await import('../frontend/js/map/hover.js');
+const { onStopClick, onCandidateStopClick, finishRoute, resetRoute, undoRoute } = await import('../frontend/js/game/route.js');
+const { startLevel, showMenu,returnHome, openStoryMenu, openTowerMenu, sampleRandomEndpoints } = await import('../frontend/js/game/session.js');
+const { startTower, resetTowerFromLayer1, towerThreshold,openTowerResetConfirm,closeTowerResetConfirm,exitTowerAfterResult } = await import('../frontend/js/game/tower.js');
+const { nextLevel, restartLevel } = await import('../frontend/js/game/flow.js');
+const { clearGuestTowerState,loadTowerState,saveTowerState } = await import('../frontend/js/game/progress.js');
+const { openFreeMenu, startFreeGame } = await import('../frontend/js/game/free.js');
+const { openTowerLeaderboard, closeTowerLeaderboard } = await import('../frontend/js/game/leaderboard.js');
+const { serializeRoute } = await import('../frontend/js/game/online.js');
+const { startTowerTimer,stopTowerTimer } = await import('../frontend/js/game/tower-timer.js');
+const { showResultOverlay } = await import('../frontend/js/ui/result.js');
+const { storyNext, tutorialNext } = await import('../frontend/js/ui/story.js');
+const { updateButtons } = await import('../frontend/js/ui/menu.js');
+const app = await import('../frontend/js/app.js'); // 入口（会自行 bootstrap：桩件里 loadScript 永不回调，属预期）
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const el = (id) => document.getElementById(id);
@@ -245,7 +251,7 @@ console.log(`\n=== 冒烟测试（数据：${USE_FULL ? '全量 beijing-transit.
 // 3. 主流程
 // ======================================================================
 
-await step('模块图加载：30 个模块互相 import 无缺失、无循环求值错误', () => {
+await step('模块图加载：分层模块互相 import 无缺失、无循环求值错误', () => {
   assert.ok(app, 'app.js 已加载');
   assert.equal(typeof onStopClick, 'function');
   assert.equal(typeof startLevel, 'function');
@@ -256,13 +262,14 @@ await step('数据加载 + 索引构建（物理站/逻辑站/线路）', async 
   const { data, source } = await loadTransitData();
   assert.ok(/sample|全量/.test(source), '数据来源说明：' + source);
   fillMissingSegments(data); // 仅测试用：sample.json 缺站间距 d，寻路器需要它才建得出乘车边
-  buildIndex(data);
+  const graph = buildGraph(data.lines);
+  buildIndex(data, graph);
   assert.equal(state.linesMap.size, data.lines.length, '线路数一致');
   assert.ok(state.physStops.length > 0, '物理站已建立');
   assert.ok(state.logicalStops.length > 0, '逻辑站已建立');
   assert.ok(state.physStops.every((p) => state.logicalById.has(p.logicalId)), '每个物理站都能映射到逻辑站');
-  state.routerGraph = buildGraph(data.lines);
-  assert.ok(state.routerGraph, '寻路图已建立');
+  assert.equal(state.routerGraph, graph, '前端索引与最优路线共用同一份寻路图');
+  assert.equal(state.logicalStops.length, graph.logicalById.size, '前端与寻路器的逻辑站数量一致');
 });
 
 await step('首屏图层：地图初始化 + 地铁底图 + 站点层（含视野过滤分支）', () => {
@@ -439,7 +446,8 @@ await step('爬塔：开一层并判定阈值', async () => {
   // 退出重进应沿用同一组起终点（防止"无限重开刷起终点"）
   const savedOrigin = state.ORIGIN.slice();
   const savedDest = state.DEST.slice();
-  showMenu();
+  returnHome();
+  assert.equal(el('center-toast').classList.contains('hidden'),false,'中途回主页时显示计时不暂停提示');
   startTower('normal');
   await wait(100);
   assert.deepEqual(state.ORIGIN, savedOrigin, '退出重进后起点不变');
@@ -494,7 +502,7 @@ await step('剧情 → 教学 → 交还操作权（回调驱动的 UI 流程）
   assert.ok(!el('tutorial-bubble').classList.contains('hidden'), '教学气泡已打开');
   for (let i = 0; i < 4; i++) tutorialNext();
   assert.ok(el('tutorial-bubble').classList.contains('hidden'), '教学气泡已收起');
-  assert.equal(el('status').textContent, lv.goalText, '状态栏已交还给玩家目标');
+  assert.equal(el('tower-layer-label').textContent,'≤ 80 分钟','故事时限已在中央浮层显示');
 });
 
 await step('菜单与关卡衔接：下一关 / 重开 / 回主菜单', () => {
@@ -505,11 +513,58 @@ await step('菜单与关卡衔接：下一关 / 重开 / 回主菜单', () => {
   updateButtons();
   openStoryMenu();
   openTowerMenu();
+  assert.equal(el('tower-guest-notice').classList.contains('hidden'),false,'游客进入无尽模式时显示存档提醒');
+  account.user={id:'test-user',name:'测试玩家'};
+  openTowerMenu();
+  assert.equal(el('tower-guest-notice').classList.contains('hidden'),true,'登录玩家不显示游客提醒');
+  account.user=null;
   openFreeMenu();
   showMenu();
   assert.equal(state.towerActive, false, '已退出爬塔');
   assert.ok(!el('main-menu').classList.contains('hidden'), '主菜单已显示');
   assert.ok(el('result-overlay').classList.contains('hidden'), '结果弹窗已清掉');
+});
+
+await step('无尽排行榜：按层数展示，并显示累计实际用时', async () => {
+  const originalFetch=globalThis.fetch;
+  globalThis.fetch=async url=>String(url).includes('/leaderboard?')
+    ? {ok:true,status:200,json:async()=>({leaders:[{rank:'1',name:'测试玩家',cleared_layers:4,total_elapsed_ms:5421000}],player:{rank:'27',name:'当前玩家',cleared_layers:2,total_elapsed_ms:120000}})}
+    : originalFetch(url);
+  try {
+    openTowerLeaderboard();await wait(0);
+    assert.ok(!el('leaderboard-dialog').classList.contains('hidden'),'排行榜已打开');
+    const row=el('leaderboard-list').children[0];
+    assert.equal(row.children[1].textContent,'测试玩家');
+    assert.equal(row.children[2].textContent,'4 层');
+    assert.equal(row.children[3].textContent,'01:30:21.000');
+    assert.equal(el('leaderboard-list').children[2].children[1].textContent,'当前玩家');
+    assert.equal(el('leaderboard-list').children[2].children[0].textContent,'#27');
+    closeTowerLeaderboard();
+    assert.ok(el('leaderboard-dialog').classList.contains('hidden'),'排行榜已关闭');
+  } finally { globalThis.fetch=originalFetch; }
+});
+
+await step('在线无尽：步行换乘序列化、计时器和通关退出', async () => {
+  state.routeStops=[{physicalStopId:'A'},{physicalStopId:'B'}];state.routeRides=[null];
+  assert.deepEqual(serializeRoute(),[{type:'walk',fromStopId:'A',toStopId:'B'}]);
+  startTowerTimer(Date.now()-65000,120000);
+  assert.equal(el('tower-timer').textContent,'01:05/03:05');
+  stopTowerTimer();
+  openTowerResetConfirm();
+  assert.equal(el('tower-reset-dialog').classList.contains('hidden'),false);
+  closeTowerResetConfirm();
+  assert.equal(el('tower-reset-dialog').classList.contains('hidden'),true);
+  showResultOverlay({showExit:true});
+  assert.equal(el('result-exit').classList.contains('hidden'),false);
+  showResultOverlay({showExit:false});
+  assert.equal(el('result-exit').classList.contains('hidden'),true);
+  state.towerActive=true;state.finished=true;
+  startTowerTimer(Date.now()-1000,120000);
+  exitTowerAfterResult();
+  const frozen=el('tower-timer').textContent;
+  await wait(300);
+  assert.equal(el('tower-timer').textContent,frozen,'通关退出后计时已冻结');
+  assert.equal(el('main-menu').classList.contains('hidden'),false,'通关退出回到主页');
 });
 
 await step('存档写入（爬塔纪录 best/progress，按城市分开存）', () => {
@@ -518,6 +573,7 @@ await step('存档写入（爬塔纪录 best/progress，按城市分开存）', 
   const saved = JSON.parse(store.get('mg_tower_state_beijing'));
   assert.ok(saved.best && typeof saved.best.normal === 'number', 'best 结构正确');
   assert.ok(saved.progress && typeof saved.progress.normal === 'number', 'progress 结构正确');
+  assert.ok(saved.elapsed && typeof saved.elapsed.normal === 'number', 'elapsed 结构正确');
 });
 
 await step('爬塔存档 dataVersion 校验：旧版本 round 被清除、best/progress 保留', () => {
@@ -541,6 +597,13 @@ await step('爬塔存档 dataVersion 校验：旧版本 round 被清除、best/p
   loadTowerState();
   assert.ok(state.towerRound.normal, '当前版本 round 应保留');
   assert.deepEqual(state.towerRound.normal.origin, [116.4, 39.9], 'round 起终点应还原');
+});
+
+await step('登录切换前清除游客无尽记录', () => {
+  store.set('mg_tower_state_shanghai','{}');
+  clearGuestTowerState();
+  assert.equal(store.has('mg_tower_state_beijing'),false);
+  assert.equal(store.has('mg_tower_state_shanghai'),false);
 });
 
 await step('随机起终点落在主连通分量（componentOf/mainComponent 已建）', () => {

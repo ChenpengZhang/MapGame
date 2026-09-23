@@ -26,3 +26,11 @@ desktop.ini
 # ---- 敏感配置（防止未来误传高德 Key）----
 .env
 .env.*
+# Backend local secrets, email previews and database files
+!.env.example
+backend/.mail-preview/
+backend/.pgdata/
+*.pem
+
+# Generated public site
+dist/

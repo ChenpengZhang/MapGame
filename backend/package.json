@@ -1,0 +1,22 @@
+{
+  "name": "mapgame-backend",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "scripts": {
+    "start": "node --env-file=.env src/main.js",
+    "migrate": "node --env-file=.env src/migrate.js",
+    "test": "node --test test/*.test.js"
+  },
+  "dependencies": {
+    "better-auth": "1.7.5",
+    "express": "5.2.1",
+    "express-rate-limit": "8.7.0",
+    "helmet": "8.3.0",
+    "nodemailer": "10.0.10",
+    "pg": "8.23.0",
+    "zod": "4.6.5"
+  }
+}

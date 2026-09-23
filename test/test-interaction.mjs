@@ -83,16 +83,16 @@ globalThis.AMap = {
   LngLat: class { constructor(lng, lat) { this.lng = lng; this.lat = lat; } },
 };
 
-globalThis.window.TransitRouter = require('../js/router.js');
+globalThis.window.TransitRouter = require('../shared/router.js');
 
 // ============ 导入被测模块 ============
-const { state } = await import('../js/core/state.js');
-const { buildIndex, getLine, getLogical } = await import('../js/data/index-builder.js');
-const { renderHighlight, clearHighlight } = await import('../js/map/hover.js');
-const { onStopClick, resetRoute } = await import('../js/game/route.js');
-const { stopToData } = await import('../js/map/stop-marks.js');
-const { initMap } = await import('../js/map/map-init.js');
-const { renderStops } = await import('../js/map/stop-layer.js');
+const { state } = await import('../frontend/js/core/state.js');
+const { buildIndex, getLine, getLogical } = await import('../frontend/js/data/index-builder.js');
+const { renderHighlight, clearHighlight } = await import('../frontend/js/map/hover.js');
+const { onStopClick, resetRoute } = await import('../frontend/js/game/route.js');
+const { stopToData } = await import('../frontend/js/map/stop-marks.js');
+const { initMap } = await import('../frontend/js/map/map-init.js');
+const { renderStops } = await import('../frontend/js/map/stop-layer.js');
 
 let pass = 0, fail = 0;
 function check(name, fn) {

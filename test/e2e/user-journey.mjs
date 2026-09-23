@@ -1,7 +1,7 @@
 // test/e2e/user-journey.mjs —— Playwright 真实浏览器 E2E
 //
 // 用真实浏览器走一遍完整用户流程：启动本地 server → 打开页面 → 主菜单 →
-// 故事模式 → 第 1 关 → 过剧情 → 过教学 → 设置 → 退出回主菜单。
+// 故事模式 → 第 1 关 → 过剧情 → 过教学 → 返回主菜单 → 设置。
 //
 // 运行前需要：
 //   1) npm install（安装 playwright）
@@ -13,10 +13,10 @@
 
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { chromium } from 'playwright';
+const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
 
 const PORT = Number(process.env.PORT) || 8080;
-const BASE = `http://localhost:${PORT}`;
+const BASE = `http://localhost:${PORT}${process.env.E2E_BASE_PATH || '/mapgame/'}`;
 const CHANNEL = process.env.E2E_BROWSER || 'msedge'; // msedge / chrome / chromium
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -41,16 +41,20 @@ async function step(name, fn) {
 console.log('\n=== Playwright 真实浏览器 E2E（完整用户流程）===\n');
 
 // 1. 启动本地 server（测试完杀掉）
-const server = spawn('node', ['server.js'], {
+const server = spawn(process.execPath, ['server.js'], {
+  cwd: new URL('../../', import.meta.url),
   stdio: 'ignore',
   env: { ...process.env, NO_OPEN: '1' },
 });
-await waitForServer(BASE);
-
-const browser = await chromium.launch({ channel: CHANNEL, headless: true });
-const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
-
+let browser;
 try {
+  await waitForServer(BASE);
+  browser = await chromium.launch({ channel: CHANNEL, headless: true });
+  const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+  const missingLocalAssets = [];
+  page.on('response', response => {
+    if (response.url().startsWith(BASE) && !new URL(response.url()).pathname.startsWith('/mapgame/api/') && response.status() >= 400) missingLocalAssets.push(response.url());
+  });
   await step('打开页面 → 主菜单显示（数据懒加载，地图底图异步）', async () => {
     await page.goto(BASE, { waitUntil: 'domcontentloaded' });
     await page.waitForSelector('#main-menu:not(.hidden)', { timeout: 30000 });
@@ -58,6 +62,37 @@ try {
     assert.ok(await page.isVisible('#tower-btn'), '无尽模式按钮可见');
     assert.ok(await page.isVisible('#free-btn'), '随机模式按钮可见');
     assert.ok(await page.isVisible('#settings-btn'), '设置按钮可见');
+  });
+
+  await step('无尽模式 → 排行榜可打开、切换场景并关闭', async () => {
+    await page.click('#tower-btn');
+    await page.waitForSelector('#tower-menu:not(.hidden)');
+    assert.equal(await page.textContent('#tower-guest-notice'),'当前处于游客模式，登录后游玩记录会被清空，请登录以保存游戏进度。');
+    assert.ok(await page.isVisible('#tower-guest-notice'),'游客存档提醒可见');
+    await Promise.all([
+      page.waitForResponse(response => response.url().includes('/api/leaderboard?') && response.status() === 200),
+      page.click('#tower-leaderboard'),
+    ]);
+    await page.waitForSelector('#leaderboard-dialog:not(.hidden)');
+    assert.match(await page.textContent('#leaderboard-title'), /北京无尽排行/);
+    assert.equal(await page.locator('#leaderboard-scenarios button').count(), 4);
+    await Promise.all([
+      page.waitForResponse(response => response.url().includes('/api/leaderboard?') && response.url().includes('scenario=rain') && response.status() === 200),
+      page.locator('#leaderboard-scenarios button').last().click(),
+    ]);
+    assert.ok((await page.textContent('#leaderboard-list'))?.trim(), '排行榜已渲染');
+    await page.click('#leaderboard-close');
+    assert.ok(!(await page.isVisible('#leaderboard-dialog')), '排行榜已关闭');
+    await page.click('#tower-normal');
+    await page.waitForSelector('#mode-hud:not(.hidden)',{timeout:30000});
+    assert.match(await page.textContent('#tower-timer'),/^\d\d:\d\d\/\d\d:\d\d$/);
+    await page.click('#tower-restart-btn');
+    await page.waitForSelector('#tower-reset-dialog:not(.hidden)');
+    assert.equal(await page.textContent('.tower-reset-card p'),'要从第一层重新开始么？');
+    await page.click('#tower-reset-close');
+    await page.click('#menu-btn');
+    await page.waitForSelector('#main-menu:not(.hidden)');
+    assert.equal(await page.textContent('#center-toast .center-toast-inner'),'返回主页计时不会暂停');
   });
 
   await step('点「故事模式」→ 选关菜单显示', async () => {
@@ -80,15 +115,21 @@ try {
     assert.ok(!(await page.isVisible('#story-dialog')), '剧情已放完');
   });
 
-  await step('连点「下一步」跳过教学 → 状态栏显示关卡目标', async () => {
+  await step('连点「下一步」跳过教学 → 中央浮层显示时限', async () => {
     for (let i = 0; i < 10; i++) {
       if (!(await page.isVisible('#tutorial-next'))) break;
       await page.click('#tutorial-next');
       await wait(30);
     }
     assert.ok(!(await page.isVisible('#tutorial-next')), '教学已放完');
-    const status = await page.textContent('#status');
-    assert.ok(status && status.includes('80分钟内到校'), '状态栏已显示第 1 关目标：' + status);
+    assert.equal(await page.textContent('#tower-layer-label'),'≤ 80 分钟');
+    assert.ok(await page.isVisible('#mode-hud'),'故事时限浮层可见');
+  });
+
+  await step('点「🏠」返回主界面 → 主菜单回来', async () => {
+    await page.click('#menu-btn');
+    await page.waitForSelector('#main-menu:not(.hidden)');
+    assert.ok(await page.isVisible('#main-menu'), '主菜单已显示');
   });
 
   await step('点「设置」→ 设置面板打开 → 关闭返回', async () => {
@@ -99,14 +140,11 @@ try {
     assert.ok(!(await page.isVisible('#settings-panel')), '设置面板已关闭');
   });
 
-  await step('点「🏠」返回主界面 → 主菜单回来', async () => {
-    await page.click('#menu-btn');
-    await page.waitForSelector('#main-menu:not(.hidden)');
-    assert.ok(await page.isVisible('#main-menu'), '主菜单已显示');
+  await step('本地资源没有 404 或其他 HTTP 错误', async () => {
+    assert.deepEqual(missingLocalAssets, []);
   });
-
 } finally {
-  await browser.close();
+  await browser?.close();
   server.kill();
 }
 

@@ -6,7 +6,10 @@
   "scripts": {
     "start": "node server.js",
     "test": "node test/test-app-smoke.mjs && node test/test-interaction.mjs && node test/test-user-journey.mjs && node test/test-data-quality.mjs && node test/test-directed-router.js && node test/test-router.js && node test/test-optimal-invariant.js && node test/test-walk-transfer.mjs && node test/test-integrity.js",
-    "test:e2e": "node test/e2e/user-journey.mjs"
+    "test:e2e": "node test/e2e/user-journey.mjs",
+    "build:web": "node build-web.js",
+    "test:paths": "node --test test/test-layout.mjs",
+    "dev": "node scripts/dev.js"
   },
   "devDependencies": {
     "playwright": "^1.63.0"
