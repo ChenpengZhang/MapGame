@@ -2,7 +2,7 @@
  * data/cities.js —— 城市清单（纯数据，不含逻辑）
  *
  * 【用途】主页「选择城市」菜单、数据加载、地图初始中心、故事模式是否可用，都读这里。
- * 【加新城市】1) 用 cptond-convert.js 转出 data/<id>-transit.json；2) 在这里加一行。
+ * 【加新城市】1) 用 scripts/cptond-convert.js 转出 data/<id>-transit.json；2) 在这里加一行。
  *
  * 字段说明：
  *   id        城市标识（同时是数据文件名 data/<id>-transit.json 的前缀）

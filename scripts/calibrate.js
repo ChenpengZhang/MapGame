@@ -3,7 +3,7 @@
 // 成本模型参数校准（锚点法，最终版）
 //
 // 背景：用高德公交路径规划 API 的真实数据，反向校准本地成本模型的参数。
-// 采集：calibrate-collect.js 随机采 100 对起终点 → data/calibrate-samples.json。
+// 采集：scripts/calibrate-collect.js 随机采 100 对起终点 → data/calibrate-samples.json。
 //
 // 方法学结论（关键，避免过拟合/不可辨识）：
 //   1) 高德 transit.duration ≈ Σwalking + Σbuslines.duration，等车/换乘无独立信号，
@@ -20,8 +20,8 @@
 // 经验性检查：5 次随机对半划分，train/test 锚点几乎一致（地铁 ±0.4、公交 ±1、步行 ±1），
 // 无过拟合迹象。
 
-const data = require('./data/beijing-transit.json');
-const samples = require('./data/calibrate-samples.json').samples;
+const data = require('../data/beijing-transit.json');
+const samples = require('../data/calibrate-samples.json').samples;
 
 const localByName = new Map();
 for (const l of data.lines) localByName.set(l.name.trim(), l);

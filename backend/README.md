@@ -76,14 +76,34 @@ PostgreSQL 服务及登录角色必须已存在。默认使用 `DATABASE_URL` �
 开发默认 `MAIL_TRANSPORT=preview`：邮件写入 `backend/.mail-preview/`，文件仅本机用户可读，且已忽略 Git。
 不向外部发送邮件，也不把验证码打印到日志。开发时可在该目录的最新邮件 JSON 中查看 6 位验证码。
 
-生产必须配置 `MAIL_TRANSPORT=smtp`，否则拒绝启动：
+生产必须配置 `MAIL_TRANSPORT=smtp` 或 `ses`，否则拒绝启动。两种方式的取舍：
 
-- 腾讯云邮件推送中已验证的发信域名和发信地址；
+**`smtp`** —— 通用，接任何支持 SMTP 的服务商：
+
+- 服务商中已验证的发信域名和发信地址；
 - `SMTP_HOST`、`SMTP_PORT`、`SMTP_USER`、`SMTP_PASS`、`MAIL_FROM`；
 - 按服务商要求配置 SPF / DKIM 等 DNS，实测 QQ / 163 收件。
 
-465 使用 TLS；其他端口要求 STARTTLS，默认验证证书。连接失败时认证请求报错，客户端可重试重发邮件。
+465 使用 TLS；其他端口要求 STARTTLS，默认验证证书。
+
+> ⚠️ **腾讯云个人实名认证账号已被禁止通过 SMTP 发信**（会直接报错），必须改用下面的 `ses`。
+
+**`ses`** —— 腾讯云邮件推送 API，个人认证账号可用：
+
+- `TENCENT_SECRET_ID`、`TENCENT_SECRET_KEY`（访问管理 CAM 的 API 密钥，建议用只授 SES 发信权限的子账号）；
+- `TENCENT_SES_REGION`（发信域名所在地域，如 `ap-guangzhou` / `ap-hongkong`）；
+- `TENCENT_SES_TEMPLATE_ID`（控制台模板管理里的模板 ID）、`MAIL_FROM`；
+- 腾讯云 API 发信**强制使用模板**（新账号不支持 `SendEmail` 的 `Simple` 字段），正文在控制台维护，
+  变量为 `action` 与 `code`，内容见 [`templates/email/`](templates/email/)。
+
+两种方式连接失败时认证请求都会报错，客户端可重试重发邮件。
 密钥直接填写服务器环境，不要通过 Git 或聊天发送。
+
+自测发信（走的是和注册完全相同的代码路径）：
+
+```sh
+node --env-file=.env scripts/test-mail.mjs 你的邮箱@example.com
+```
 
 ## API
 

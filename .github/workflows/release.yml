@@ -37,7 +37,7 @@ jobs:
           node-version: 20
 
       - name: 打包
-        run: node build-release.js --target ${{ matrix.target }}
+        run: node scripts/build-release.js --target ${{ matrix.target }}
 
       - name: 上传产物到 Release
         uses: softprops/action-gh-release@v2

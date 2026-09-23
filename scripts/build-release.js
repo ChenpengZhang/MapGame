@@ -3,9 +3,9 @@
 // 发布打包脚本：把游戏 + 便携 Node 运行时打包成"解压即玩"的压缩包
 //
 // 用法：
-//   node build-release.js                    # 打包当前平台
-//   node build-release.js --target win-x64    # 显式指定平台
-//   node build-release.js --all               # 打包所有平台（需本机能下载各平台 Node 包）
+//   node scripts/build-release.js                    # 打包当前平台
+//   node scripts/build-release.js --target win-x64    # 显式指定平台
+//   node scripts/build-release.js --all               # 打包所有平台（需本机能下载各平台 Node 包）
 //
 // 输出：release/MapGame-<平台>-<架构>.zip （Windows）或 .tar.gz（macOS/Linux）
 //
@@ -34,10 +34,9 @@ const TARGETS = {
   'linux-x64':   { archive: 'node-' + NODE_VERSION + '-linux-x64.tar.xz',    bin: 'bin/node',           ext: '.tar.gz' },
 };
 
-// 运行时需要的文件/目录（相对项目根）。
-// 开发/构建产物一律不进包：data/cptond（11GB 原始 shapefile）、build-release.js、
-// cptond-convert.js、fetch-data.js、inspect-shp.js、test-router.js、diag-walk.html、
-// config.json、docs/、.gitignore 等。
+// 运行时需要的文件/目录（相对项目根；本脚本已移到 scripts/，ROOT 指向上一级）。
+// 采用白名单复制：下面 INCLUDE 之外一律不进包，例如 data/cptond（11GB 原始 shapefile）、
+// scripts/ 下的开发与构建脚本、docs/、.gitignore、release/、dist/ 等。
 const INCLUDE = [
   'server.js',
   'scripts/assets.js',          // Static URL manifest shared with server.js
@@ -75,7 +74,7 @@ const LAUNCHERS = {
   },
 };
 
-const ROOT = __dirname;
+const ROOT = path.join(__dirname, '..');
 const RELEASE_DIR = path.join(ROOT, 'release');
 const CACHE_DIR = path.join(RELEASE_DIR, '.cache');
 

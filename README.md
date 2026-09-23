@@ -103,7 +103,7 @@ Nginx API 代理和静态目录示例见 [`backend/deploy/nginx.conf.example`](b
 全量数据来自开源数据集 **CPTOND-2025**（[figshare](https://figshare.com/articles/dataset/CPTOND-2025/29377427)，WGS-84）。
 
 ```bash
-node cptond-convert.js
+node scripts/cptond-convert.js
 ```
 生成 `data/beijing-transit.json`（约 2213 条线路、5.7 万站记录、18.9MB，含 WGS-84→GCJ-02 转换、双向合并、逐站距离、路径抽稀、幽灵站剔除等）。
 
@@ -150,13 +150,15 @@ MapGame/
 ├── shared/router.js       # 浏览器与后端共用的寻路和基础计时函数
 ├── data/                  # 四城交通数据、sample.json、原始数据（原始数据不入 Git）
 ├── lib/shp.js             # 数据转换工具使用的 SHP/DBF 解析器
-├── scripts/assets.js      # 源码文件到公开 URL 的统一映射
+├── scripts/               # 构建/发布/数据管线/校准脚本 + 资源映射
+│   ├── assets.js          # 源码文件到公开 URL 的统一映射
+│   ├── dev.js             # 一键起前后端
+│   ├── build-web.js       # 生成 dist/mapgame/ 静态发布目录
+│   ├── build-release.js   # 便携 Node + 游戏资源的桌面发行包
+│   ├── cptond-convert.js  # 交通数据转换
+│   ├── calibrate*.js      # 数据采样与计时模型校准
+│   └── benchmark.js       # 模型对照
 ├── server.js              # 本地静态服务器
-├── build-web.js           # 生成 dist/mapgame/ 静态发布目录
-├── build-release.js       # 便携 Node + 游戏资源的桌面发行包
-├── cptond-convert.js      # 交通数据转换
-├── calibrate*.js          # 数据采样与计时模型校准
-├── benchmark.js           # 模型对照
 ├── test/                  # 前端流程、数据、寻路与路径回归测试
 ├── screenshots/           # README 配图
 ├── .github/workflows/     # Release 自动打包
@@ -185,9 +187,9 @@ npm run test:paths               # 根路径、/mapgame/、静态产物与发行
 
 ```bash
 $env:AMAP_WEB_KEY="你的Web服务key"    # 仅存环境变量，不进代码/仓库
-node calibrate-collect.js 100         # 采 100 对随机起终点 → data/calibrate-samples.json
-node calibrate.js                     # 锚点法校准（含 train/test 稳定性检查）
-node benchmark.js                     # 端到端：本地模型 vs 高德真实耗时
+node scripts/calibrate-collect.js 100 # 采 100 对随机起终点 → data/calibrate-samples.json
+node scripts/calibrate.js             # 锚点法校准（含 train/test 稳定性检查）
+node scripts/benchmark.js             # 端到端：本地模型 vs 高德真实耗时
 ```
 
 > 校准结论：地铁巡航速度 35 km/h 基本准确；公交长段实测约 21 km/h、步行约 65 m/min 偏低。

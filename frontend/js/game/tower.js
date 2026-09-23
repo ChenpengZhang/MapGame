@@ -91,7 +91,7 @@ export async function startTowerRound() {
   };
   show('mode-hud');show('mode-hud-secondary');show('tower-timer');
   setText('tower-layer-label', '第 ' + state.towerLayer + ' 层');
-  setText('tower-threshold-label', '≤ ' + Math.round(thr * 100) + '%');
+  setText('tower-threshold-label', '时间 ≤ 最速' + Math.round(thr * 100) + '%');
   startLevel(level, { skipStory: true, scenario: cfg.scenario });
   startTowerTimer(startedAt,state.towerElapsed[state.towerScenarioKey]);
 }

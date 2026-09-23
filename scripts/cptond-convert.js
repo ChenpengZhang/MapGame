@@ -2,9 +2,9 @@
 
 // 把 CPTOND-2025 的某城市 shapefile 转换成游戏用的 <城市>-transit.json
 // 用法：
-//   node cptond-convert.js                 # 默认转换北京
-//   node cptond-convert.js guangzhou       # 转换广州
-//   node cptond-convert.js shenzhen shanghai  # 批量转换多城
+//   node scripts/cptond-convert.js                 # 默认转换北京
+//   node scripts/cptond-convert.js guangzhou       # 转换广州
+//   node scripts/cptond-convert.js shenzhen shanghai  # 批量转换多城
 // 输入：data/cptond/{metro,bus}/shapefiles/<City>/<city>_*_routes.shp + <city>_*_stops.shp
 // 输出：data/<city>-transit.json
 // 要点：
@@ -18,7 +18,7 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const { parseDbf, parseShp } = require('./lib/shp');
+const { parseDbf, parseShp } = require('../lib/shp');
 
 const PATH_MAX_POINTS = 300;
 
@@ -372,7 +372,7 @@ function stopInBoundary(s, polygons) {
 function loadBoundary(cityKey) {
   const file = BOUNDARY_FILES[cityKey];
   if (!file) return null;
-  const j = JSON.parse(fs.readFileSync(path.join(__dirname, file), 'utf8'));
+  const j = JSON.parse(fs.readFileSync(path.join(__dirname, '..', file), 'utf8'));
   const g = j.features[0].geometry;
   const polys = g.type === 'MultiPolygon' ? g.coordinates : [g.coordinates];
   return polys.map((poly) => poly.map((ring) => ring.map(([lng, lat]) => gcj2wgs(lng, lat))));
@@ -397,7 +397,7 @@ function convertCity(cityKey) {
   if (!cfg) throw new Error('未知城市：' + cityKey + '（可用：' + Object.keys(CITIES).join(', ') + '）');
   const dir = cfg.dir;
   const prefix = dir.toLowerCase();
-  const OUT_FILE = path.join(__dirname, 'data', prefix + '-transit.json');
+  const OUT_FILE = path.join(__dirname, '..', 'data', prefix + '-transit.json');
 
   const t0 = Date.now();
   const segDist = loadSegmentDistances(dir);
@@ -610,7 +610,7 @@ function convertCity(cityKey) {
     output_mb: sizeMB,
     elapsed_ms: Date.now() - t0,
   };
-  fs.writeFileSync(path.join(__dirname, 'data', 'cptond', 'convert-summary-' + prefix + '.txt'), JSON.stringify(summary, null, 2), 'utf8');
+  fs.writeFileSync(path.join(__dirname, '..', 'data', 'cptond', 'convert-summary-' + prefix + '.txt'), JSON.stringify(summary, null, 2), 'utf8');
   console.log(JSON.stringify(summary, null, 2));
   return summary;
 }

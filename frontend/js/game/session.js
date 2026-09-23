@@ -75,7 +75,7 @@ export function startLevel(level, opts) {
     setModeHudVisible(hasLimit);
     toggleHidden('mode-hud-secondary',true);
     toggleHidden('tower-timer',true);
-    if(hasLimit)setText('tower-layer-label',level.goalText || `≤ ${Number(level.timeLimitMin)} 分钟`);
+    if(hasLimit)setText('tower-layer-label','时间 ' + (level.goalText || `≤ ${Number(level.timeLimitMin)} 分钟`));
   }
 
   setCityLabel((cityById(state.currentCityId) || cityById('beijing')).name + ' · ' + level.title);

@@ -3,8 +3,8 @@
 // 校准数据采集：随机采样 N 对起终点，调高德公交路径规划 API，存原始 JSON。
 //
 // 用法：
-//   AMAP_WEB_KEY=你的web服务key node calibrate-collect.js [N] [输出文件]
-//   （Windows PowerShell: $env:AMAP_WEB_KEY="..."; node calibrate-collect.js）
+//   AMAP_WEB_KEY=你的web服务key node scripts/calibrate-collect.js [N] [输出文件]
+//   （Windows PowerShell: $env:AMAP_WEB_KEY="..."; node scripts/calibrate-collect.js）
 //
 // 说明：
 //   - key 只从环境变量读，绝不写进任何文件/代码。
@@ -22,14 +22,14 @@ if (!KEY) {
 }
 
 const N = parseInt(process.argv[2], 10) || 100;
-const OUT = path.join(__dirname, process.argv[3] || 'data/calibrate-samples.json');
+const OUT = path.join(__dirname, '..', process.argv[3] || 'data/calibrate-samples.json');
 const CITY = '010'; // 北京 citycode
 
 // ---------- 采样工具（与游戏 randomPoint 一致） ----------
 const RANDOM_OFFSET_MIN_M = 300;
 const RANDOM_OFFSET_MAX_M = 1500;
 
-const data = require('./data/beijing-transit.json');
+const data = require('../data/beijing-transit.json');
 
 // 全部物理站点（合并去重后的点）——简化：直接取所有 line.stops 的坐标去重
 function buildPointPool() {

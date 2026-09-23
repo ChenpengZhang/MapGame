@@ -44,7 +44,7 @@ function activateOnline(payload,command,owner,epoch) {
     startLevel(level,{onlineStage:true,skipStory:!story,scenario:{noMetro:!scenario.allowMetro,busSpeedFactor:scenario.busSpeedFactor,walkSpeedFactor:scenario.walkSpeedFactor}});
     if(command.mode==='tower'){
       show('mode-hud');show('mode-hud-secondary');show('tower-timer');
-      setText('tower-layer-label',`第 ${state.towerLayer} 层`);setText('tower-threshold-label',`≤ ${towerLimitPercent(state.towerLayer)}%`);
+      setText('tower-layer-label',`第 ${state.towerLayer} 层`);setText('tower-threshold-label',`时间 ≤ 最速${towerLimitPercent(state.towerLayer)}%`);
       startTowerTimer(payload.stage.startedAt,cloud.completedElapsedMs);
     }
     if($('force-walk-toggle')) $('force-walk-toggle').disabled=!state.walkTransfer;

@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
 import { randomInt } from 'node:crypto';
 import assets from '../scripts/assets.js';
-import release from '../build-release.js';
+import release from '../scripts/build-release.js';
 
 const root = fileURLToPath(new URL('../',import.meta.url));
 function verifyReferences(directory) {

@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MapGame 验证码</title>
+</head>
+<!--
+  腾讯云邮件推送「模板内容 · HTML」正文（粘贴这个文件的全部内容即可）。
+
+  可用变量（由 backend/src/infrastructure/mail.js 的 TemplateData 传入）：
+    {{action}}  本次操作名：邮箱验证 / 重置密码
+    {{code}}    6 位数字验证码
+
+  写法说明：邮件客户端兼容性差，这里全部用 table 布局 + 行内 style，
+  不依赖 <style> 标签和外部 CSS，QQ 邮箱 / 163 / Gmail / Outlook 都能正常渲染。
+-->
+<body style="margin:0;padding:0;background-color:#eef2f7;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#eef2f7;">
+  <tr>
+    <td align="center" style="padding:28px 12px;">
+
+      <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0"
+             style="width:100%;max-width:600px;background-color:#ffffff;border-radius:12px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif;">
+
+        <!-- 顶部品牌条 -->
+        <tr>
+          <td style="background-color:#1f6feb;padding:22px 32px;color:#ffffff;font-size:18px;font-weight:bold;letter-spacing:0.5px;">
+            MapGame · 城市公共交通制霸
+          </td>
+        </tr>
+
+        <!-- 正文 -->
+        <tr>
+          <td style="padding:32px 32px 24px;">
+            <p style="margin:0;font-size:16px;line-height:1.7;color:#1f2937;">
+              您正在进行 <strong>{{action}}</strong>，本次验证码为：
+            </p>
+
+            <!-- 验证码：大字号 + 宽字距，方便一眼读出 -->
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:22px 0;">
+              <tr>
+                <td style="background-color:#f1f5fb;border:1px solid #d7e2f2;border-radius:10px;padding:18px 26px;font-family:Consolas,Monaco,'Courier New',monospace;font-size:32px;font-weight:bold;letter-spacing:8px;color:#1f6feb;">
+                  {{code}}
+                </td>
+              </tr>
+            </table>
+
+            <p style="margin:0;font-size:14px;line-height:1.9;color:#6b7280;">
+              验证码 <strong>10 分钟内</strong>有效，请勿转发给他人。<br>
+              如果这不是您本人的操作，忽略本邮件即可，您的账号不会受到影响。
+            </p>
+          </td>
+        </tr>
+
+        <!-- 页脚 -->
+        <tr>
+          <td style="padding:18px 32px;background-color:#f8fafc;border-top:1px solid #e5e9f0;font-size:12px;line-height:1.8;color:#9aa4b2;">
+            此邮件由系统自动发送，请勿直接回复。<br>
+            MapGame · 一个「规划最快公交 / 地铁路线」的小游戏
+          </td>
+        </tr>
+
+      </table>
+
+    </td>
+  </tr>
+</table>
+</body>
+</html>

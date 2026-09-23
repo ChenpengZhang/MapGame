@@ -1,13 +1,13 @@
 'use strict';
 
 // 端到端 benchmark：本地寻路器的耗时估计 vs 高德真实耗时（calibrate-samples.json）。
-// 用法：node benchmark.js
+// 用法：node scripts/benchmark.js
 // 跑两版参数：① 当前默认参数；② calibrate.js 锚点法校准后的参数。
 
-const router = require('./shared/router.js');
+const router = require('../shared/router.js');
 
-const data = require('./data/beijing-transit.json');
-const samples = require('./data/calibrate-samples.json').samples;
+const data = require('../data/beijing-transit.json');
+const samples = require('../data/calibrate-samples.json').samples;
 
 function median(arr) {
   if (!arr.length) return NaN;

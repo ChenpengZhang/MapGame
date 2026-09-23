@@ -19,7 +19,7 @@ import { DEFAULT_PARAMS as ROUTER_DEFAULTS } from './router-api.js';
 // ============ 地图与数据源 ============
 
 /**
- * 数据文件版本号：重跑数据管线（cptond-convert.js）更新数据后，把这里 +1，
+ * 数据文件版本号：重跑数据管线（scripts/cptond-convert.js）更新数据后，把这里 +1，
  * 浏览器缓存才会失效并重新下载（URL 带 ?v=N，版本号一变就是全新资源）。
  */
 export const DATA_VERSION = 6;

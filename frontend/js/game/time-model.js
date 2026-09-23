@@ -5,7 +5,7 @@
  *   这是整个游戏最需要"校准"的部分（见 README 的 §成本模型校准）：
  *   它的输出直接决定玩家是否达标，也决定寻路器算出的最优解是否可信。
  *   抽成纯函数后可以直接复用 shared/router.js 的参数与乘车统计，
- *   并用 node 脚本直接跑（calibrate.js / benchmark.js 的思路）。
+ *   并用 node 脚本直接跑（scripts/calibrate.js / scripts/benchmark.js 的思路）。
  *
  * 【构成】
  *   总耗时 = 起点步行 + Σ(等车 + 乘车 + 换乘) + 终点步行

@@ -1,0 +1,43 @@
+# MapGame 的 Caddy 部署示例（与 backend/deploy/nginx.conf.example 等价，换成 Caddy 写法）。
+#
+# 前置：在服务器上 clone 仓库后，先在仓库根目录执行过 `npm run build:web`，
+#       产物在 <仓库>/dist/mapgame/；下面 root 指向 <仓库>/dist。
+#
+# 站点 URL 约定：
+#   /mapgame/        游戏前端（静态文件）
+#   /mapgame/api/    后端 API（反代到本机 3001，后端只监听 loopback）
+
+zcpenguin.com {
+	encode gzip
+
+	# 1) 后端 API：必须保留完整的 /mapgame/api/ 前缀——后端路由就是按这个前缀注册的。
+	#    这里用 handle（不是 handle_path）：handle_path 会剥掉前缀，导致全部 404。
+	handle /mapgame/api/* {
+		reverse_proxy 127.0.0.1:3001 {
+			header_up X-Real-IP {remote_host}
+		}
+	}
+
+	# 2) /mapgame 补结尾斜杠（否则相对资源路径会解析错）
+	handle /mapgame {
+		redir /mapgame/ 301
+	}
+
+	# 3) 游戏前端：root 指向 <仓库>/dist，于是
+	#    /mapgame/js/app.js      → <仓库>/dist/mapgame/js/app.js
+	#    /mapgame/shared/router.js → <仓库>/dist/mapgame/shared/router.js
+	#    ⚠️ root 绝不能填仓库根目录：那会把 backend/.env、node_modules 等直接暴露出去。
+	handle /mapgame/* {
+		root * /opt/MapGame/dist
+		file_server
+	}
+
+	# 4) 其余请求仍走你原来的站点根
+	handle {
+		root * /var/www/zcpenguin
+		file_server
+	}
+
+	# 说明：不要在这里限 body 大小。请求体上限由后端 express.json({ limit: '64kb' }) 判定，
+	# 它会返回前端认识的 {"error":"BODY_TOO_LARGE"}；若在 Caddy 层拦截，前端拿到的是空白 413。
+}

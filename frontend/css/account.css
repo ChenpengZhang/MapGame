@@ -27,7 +27,6 @@
 .leaderboard-card{max-width:820px;padding:32px 38px 38px;background:#101b2a;border-color:#33465b;border-radius:12px}
 .leaderboard-heading{display:flex;align-items:baseline;gap:13px;margin:0 36px 19px 0}
 .leaderboard-card h2{margin:0;text-align:left;font-size:27px;letter-spacing:.02em}
-.leaderboard-kicker{color:var(--accent,#fb923c);font-size:11px;font-weight:800;letter-spacing:.16em}
 .leaderboard-scenarios{display:grid;grid-template-columns:repeat(4,1fr);margin:0 0 16px;border-bottom:1px solid #34475b}
 .leaderboard-scenarios button{position:relative;padding:10px 8px 12px;border:0;background:transparent;color:#8295ab;font:inherit;font-size:13px;font-weight:600;cursor:pointer}
 .leaderboard-scenarios button::after{content:"";position:absolute;right:0;bottom:-1px;left:0;height:3px;background:transparent}

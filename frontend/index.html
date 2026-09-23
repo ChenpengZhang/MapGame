@@ -458,7 +458,7 @@ html, body {
   display: flex; align-items: center; justify-content: center;
 }
 .tower-menu-inner { color: #fff; width: 92%; max-width: 640px; text-align: center; }
-.tower-menu-inner h2 { font-size: 26px; margin-bottom: 6px; }
+.tower-menu-inner h2 { font-size: 26px; margin-bottom: 22px; }
 .tower-sub { color: #9fb0c3; font-size: 13px; margin-bottom: 22px; }
 .tower-guest-notice { margin: 10px auto 18px; max-width: 520px; color: #b8c6d6; font-size: 13px; line-height: 1.6; }
 .tower-opts { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; margin-bottom: 24px; }
@@ -790,7 +790,7 @@ html, body {
     <!-- 随机模式：情景选择 -->
     <div id="free-menu" class="hidden">
       <div class="free-menu-inner">
-        <h2>🎲 随机模式</h2>
+        <h2>随机模式</h2>
         <p class="free-sub">选择要加载的情景（可多选）</p>
         <div class="free-opts">
           <label><input type="checkbox" id="free-no-metro"> 地下瘫痪（禁用地铁）</label>
@@ -807,7 +807,7 @@ html, body {
     <!-- 无尽模式：爬塔畸变选择（成绩分别记录） -->
     <div id="tower-menu" class="hidden">
       <div class="tower-menu-inner">
-        <h2>🗼 无尽模式</h2>
+        <h2>无尽模式</h2>
         <p id="tower-guest-notice" class="tower-guest-notice hidden">当前处于游客模式，登录后游玩记录会被清空，请登录以保存游戏进度。</p>
         <div class="tower-opts">
           <button id="tower-normal" class="tower-opt"><span class="tower-opt-label">普通</span><span class="tower-opt-sub">无特殊效果</span><span class="tower-best">暂无纪录</span></button>
@@ -880,7 +880,7 @@ html, body {
     </section></div>
   <div id="history-dialog" class="account-dialog hidden" role="dialog" aria-modal="true" aria-labelledby="history-title"><section class="account-card"><button id="history-close" class="account-close" type="button" aria-label="关闭">×</button><h2 id="history-title">游玩记录</h2><div id="history-list"></div></section></div>
   <div id="tower-reset-dialog" class="account-dialog hidden" role="alertdialog" aria-modal="true" aria-label="重新开始"><section class="account-card tower-reset-card"><button id="tower-reset-close" class="account-close" type="button" aria-label="关闭">×</button><p>要从第一层重新开始么？</p><button id="tower-reset-confirm" class="primary" type="button">确定</button></section></div>
-  <div id="leaderboard-dialog" class="account-dialog leaderboard-dialog hidden" role="dialog" aria-modal="true" aria-labelledby="leaderboard-title"><section class="account-card leaderboard-card"><button id="leaderboard-close" class="account-close" type="button" aria-label="关闭">×</button><header class="leaderboard-heading"><span class="leaderboard-kicker">TOP 20</span><h2 id="leaderboard-title">无尽排行</h2></header><div id="leaderboard-scenarios" class="leaderboard-scenarios" aria-label="情景筛选"></div><div class="leaderboard-table-wrap"><table class="leaderboard-table"><thead><tr><th scope="col">名次</th><th scope="col">玩家</th><th scope="col">层数</th><th scope="col">总用时</th></tr></thead><tbody id="leaderboard-list"></tbody></table></div></section></div>
+  <div id="leaderboard-dialog" class="account-dialog leaderboard-dialog hidden" role="dialog" aria-modal="true" aria-labelledby="leaderboard-title"><section class="account-card leaderboard-card"><button id="leaderboard-close" class="account-close" type="button" aria-label="关闭">×</button><header class="leaderboard-heading"><h2 id="leaderboard-title">无尽排行</h2></header><div id="leaderboard-scenarios" class="leaderboard-scenarios" aria-label="情景筛选"></div><div class="leaderboard-table-wrap"><table class="leaderboard-table"><thead><tr><th scope="col">名次</th><th scope="col">玩家</th><th scope="col">层数</th><th scope="col">总用时</th></tr></thead><tbody id="leaderboard-list"></tbody></table></div></section></div>
   <!--
     脚本加载顺序（勿随意调整）：
       1) router.js       纯算法寻路器（UMD，挂 window.TransitRouter），必须最先执行；
