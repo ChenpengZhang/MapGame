@@ -24,8 +24,9 @@ import { cityById } from './cities.js';
  * @returns {Promise<{data: object, source: string}>} data 为 { city, count, lines }；
  *          source 是给状态栏显示的来源说明。
  */
-export async function loadTransitData(onProgress, onSize) {
-  const city = cityById(state.currentCityId) || cityById('beijing');
+export async function loadTransitData(onProgress, onSize, cityId = state.currentCityId) {
+  const city = cityById(cityId);
+  if (!city) throw new Error('未知城市：' + cityId);
   const full = 'data/' + city.id + '-transit.json?v=' + DATA_VERSION;
   let data;
   let source;

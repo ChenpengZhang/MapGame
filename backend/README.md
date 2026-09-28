@@ -155,7 +155,7 @@ node --env-file=.env scripts/test-mail.mjs 你的邮箱@example.com
 }
 ```
 
-允许情景 `normal`、`noMetro`、`busBoost`、`rain`；允许城市北京、上海、广州、深圳。
+允许情景 `normal`、`noMetro`、`busBoost`、`rain`；允许城市北京、上海、广州、深圳、文山州。
 每条 ride 是一段同线连续乘车，后端检查方向、边距离、换乘连通性和起终点步行距离。
 相邻同线段允许分开，按前端规则分别计算候车和换乘；最多 200 段，JSON 请求上限 64KB。
 无尽模式允许 1.5km 内的站间步行换乘，路线中乘车段和步行段分别标记。服务端检查每个物理站、乘车方向、线路衔接和步行距离，再用权威速度参数逐段重算时间。客户端不提交自己计算的总时间。
@@ -197,7 +197,7 @@ Nginx 静态目录只复制前端资源，绝不能指向含后端和 .env 的�
 
 - `GET /history`：当前账户最近 50 条已验证记录。
 - `GET /tower-progress?city=beijing`：各情景最高层数及进行中层数。
-- `POST /runs` 支持 `{ "mode":"story", "levelId":"school" }`；故事定义由服务端读取纯数据模块，不接受客户端关卡内容或时限。
+- `POST /runs` 支持 `{ "mode":"story", "levelId":"wenshan_intro" }`；当前仅开放这一教学关，故事定义由服务端读取纯数据模块，不接受客户端关卡内容或时限。
 - 随机模式请求 `{ "mode":"free", "city":"beijing", "options":{ "noMetro":false, "busBoost":false, "rain":false } }`；仅接受这些布尔选项，速度由服务端推导。
 - 故事和随机模式完成后保存记录，不保存故事解锁进度；新的练习对局会放弃旧的未完成练习。
 - `002-play-history.sql` 增量扩展模式约束；不能修改已应用迁移。

@@ -45,11 +45,11 @@ export function setStatus(text) {
   setText('status', text);
 }
 
-/** 启动失败等致命错误的红条提示 */
-export function showError(html) {
+/** 持续显示可复制、可关闭的错误提示；位置高于加载遮罩与模式菜单。 */
+export function showError(message) {
   const el = $('error');
   if (!el) return;
-  el.innerHTML = html;
+  setText('error-message', String(message));
   el.classList.remove('hidden');
 }
 

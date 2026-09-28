@@ -154,6 +154,18 @@ export class Repository {
     );
   }
 
+  /** 已通过的故事关卡；玩法层据此从第 1 关开始连续解锁，不能跳关。 */
+  async completedStoryIds(userId) {
+    const result = await this.db.query(
+      `SELECT DISTINCT s.puzzle->>'storyId' AS story_id
+      FROM game_runs g JOIN run_rounds s ON s.run_id=g.id
+      JOIN round_submissions r ON r.round_id=s.id
+      WHERE g.user_id=$1 AND g.mode='story' AND r.passed=true AND s.puzzle->>'storyId' IS NOT NULL`,
+      [userId],
+    );
+    return result.rows.map((row) => row.story_id);
+  }
+
   async history(userId) {
     return (
       await this.db.query(

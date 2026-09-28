@@ -1,5 +1,17 @@
 import { isDeepStrictEqual } from 'node:util';
 import { beijingDate, ensure, RULES_VERSION, settle } from '../domain/rules.js';
+import { LEVELS } from '../../../frontend/js/data/levels.js';
+
+/** 从第 1 关开始只计算连续通过的前缀；跳着完成的记录不会提前解锁。 */
+export function unlockedStoryCount(completedIds) {
+  const completed = new Set(completedIds || []);
+  let unlocked = 1;
+  for (const level of LEVELS) {
+    if (!completed.has(level.id)) break;
+    unlocked++;
+  }
+  return Math.min(unlocked, LEVELS.length + 1);
+}
 
 // 下发给客户端的关卡视图：剥离最优耗时 optimalDurationMs，避免玩家直接看到答案。
 export function publicStage(stage) {
@@ -57,6 +69,12 @@ export class GameService {
 
     return this.repository.transaction(async (tx) => {
       await tx.lockUser(userId); // 行锁串行化同一用户的并发开局
+
+      if (mode === 'story') {
+        const requested = LEVELS.findIndex((level) => level.id === levelId);
+        const unlocked = unlockedStoryCount(await tx.completedStoryIds(userId));
+        ensure(requested >= 0 && requested < unlocked, 'STORY_LOCKED', 403);
+      }
 
       // 随机/故事属于“练习局”：同一用户只保留最新一局，旧的直接作废。
       if (mode === 'free' || mode === 'story') {
@@ -185,6 +203,10 @@ export class GameService {
 
   history(userId) {
     return this.repository.history(userId);
+  }
+
+  async storyProgress(userId) {
+    return { unlocked: unlockedStoryCount(await this.repository.completedStoryIds(userId)) };
   }
 
   towerProgress(userId, city) {

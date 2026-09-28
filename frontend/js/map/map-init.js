@@ -16,6 +16,22 @@ import { state } from '../core/state.js';
 import { $ } from '../core/dom.js';
 import { cityById } from '../data/cities.js';
 import { loadWalkCache } from './walk.js';
+import { createWalkRangeCircle, walkRangeBounds } from './walk-range.js';
+
+// 地图 SDK 需异步加载；用户可能在底图完成前就点击了故事关卡。
+// 用一次性就绪信号让数据/站点层等待地图，而不是对空的 state.map 注册事件。
+let finishMapSetup;
+const mapSetup = new Promise((resolve) => { finishMapSetup = resolve; });
+
+export async function waitForMap() {
+  if (state.map) return;
+  const error = await mapSetup;
+  if (error) throw error;
+}
+
+export function failMapSetup(error) {
+  finishMapSetup(error || new Error('地图初始化失败'));
+}
 
 /** 创建地图并做首屏准备（交通数据懒加载，由 game/data-ready.js 在进入游戏时触发） */
 export function initMap() {
@@ -23,6 +39,7 @@ export function initMap() {
   state.map = new AMap.Map('map', { center: city.center, zoom: 11, viewMode: '2D', scrollWheel: false });
   setupZoomInertia();
   loadWalkCache();
+  finishMapSetup(null);
 }
 
 // ============ 缩放惯性 ============
@@ -97,38 +114,62 @@ function setupZoomInertia() {
   el.addEventListener('wheel', onWheel, { passive: false });
 }
 
-// ============ 起终点图钉 ============
+// ============ 起终点图钉与步行范围 ============
 
 /**
  * 重画起终点图钉并适配视野。
- * @param {{onDestClick?: Function}} [handlers] 终点（"终"）被点击时的回调：
+ * @param {{onDestClick?: Function, showWalkRanges?: boolean}} [handlers]
+ *        终点（"终"）被点击时的回调，以及是否显示 1.5km 步行范围圈：
  *        玩法层用它来触发"完成规划"，地图层不关心具体做什么。
  */
 export function drawEndpoints(handlers) {
   const onDestClick = (handlers && handlers.onDestClick) || null;
-  for (const m of state.endpointMarkers) m.setMap(null);
-  state.endpointMarkers = [];
+  const showWalkRanges = !handlers || handlers.showWalkRanges !== false;
+  for (const overlay of state.endpointOverlays) overlay.setMap(null);
+  state.endpointOverlays = [];
+  state.originWalkRangeCircle = null;
+  state.destinationWalkRangeCircle = null;
   if (!state.ORIGIN || !state.DEST) return;
+
+  // 范围圈先画、图钉后画，确保图钉始终位于圆圈上方。教学关可按关卡配置隐藏。
+  if (showWalkRanges) {
+    state.originWalkRangeCircle = createWalkRangeCircle(state.ORIGIN);
+    state.destinationWalkRangeCircle = createWalkRangeCircle(state.DEST);
+    for (const circle of [state.originWalkRangeCircle, state.destinationWalkRangeCircle]) {
+      circle.setMap(state.map);
+      state.endpointOverlays.push(circle);
+    }
+  }
 
   const o = new AMap.Marker({
     position: state.ORIGIN, content: '<div class="pin origin flash">起</div>',
     offset: new AMap.Pixel(-12, -12), zIndex: 400,
   });
   o.setMap(state.map);
-  state.endpointMarkers.push(o);
+  state.endpointOverlays.push(o);
 
   const d = new AMap.Marker({
     position: state.DEST, content: '<div class="pin dest flash">终</div>',
     offset: new AMap.Pixel(-12, -12), zIndex: 400,
   });
   d.setMap(state.map);
-  state.endpointMarkers.push(d);
+  state.endpointOverlays.push(d);
   if (onDestClick) d.on('click', () => onDestClick());
 
-  // 视野适配起终点
-  const sw = [Math.min(state.ORIGIN[0], state.DEST[0]), Math.min(state.ORIGIN[1], state.DEST[1])];
-  const ne = [Math.max(state.ORIGIN[0], state.DEST[0]), Math.max(state.ORIGIN[1], state.DEST[1])];
-  state.map.setBounds(new AMap.Bounds(sw, ne), false, [60, 60, 60, 60]);
+  // 有范围圈时纳入完整圆圈；隐藏范围圈的教学关只适配两个图钉。
+  const bounds = showWalkRanges
+    ? walkRangeBounds([state.ORIGIN, state.DEST])
+    : {
+        sw: [Math.min(state.ORIGIN[0], state.DEST[0]), Math.min(state.ORIGIN[1], state.DEST[1])],
+        ne: [Math.max(state.ORIGIN[0], state.DEST[0]), Math.max(state.ORIGIN[1], state.DEST[1])],
+      };
+  if (bounds) state.map.setBounds(new AMap.Bounds(bounds.sw, bounds.ne), false, [40, 40, 40, 40]);
+}
+
+/** 确认首站后隐藏起点范围；取消整条规划时重新显示。终点范围不受影响。 */
+export function setOriginWalkRangeVisible(visible) {
+  const circle = state.originWalkRangeCircle;
+  if (circle) circle.setMap(visible ? state.map : null);
 }
 
 /**

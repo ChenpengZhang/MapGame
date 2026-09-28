@@ -41,7 +41,7 @@ test('PostgreSQL bootstrap: missing DB, concurrent migrations, existing data and
     bootstrapDatabase({...config,DATABASE_ADMIN_URL:maintenance.href},async()=>{}).then(p=>{pools.push(p);return p;}),
     bootstrapDatabase(config,async()=>{}).then(p=>{pools.push(p);return p;}),
   ]);
-  assert.equal((await one.query('SELECT count(*)::int AS n FROM mapgame_migrations')).rows[0].n,5);
+  assert.equal((await one.query('SELECT count(*)::int AS n FROM mapgame_migrations')).rows[0].n,6);
   await one.query('CREATE TABLE bootstrap_marker(value text NOT NULL)');
   await one.query("INSERT INTO bootstrap_marker VALUES('preserved')");
   assert.equal((await ensureDatabase({...config,DATABASE_ADMIN_URL:'postgresql://invalid:invalid@localhost:1/postgres'})).created,false);

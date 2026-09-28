@@ -1,4 +1,4 @@
-// 完整用户旅程测试：从进入界面 → 选故事关卡 → 过剧情/教学 → 规划路线 → 结算 →
+// 完整用户旅程测试：从进入界面 → 选故事关卡 → 过开场提示 → 规划路线 → 结算 →
 // 下一关 → 退出回主菜单，全程走真实 handler，模拟一个用户的完整操作流。
 //
 // 用法：node test/test-user-journey.mjs
@@ -17,11 +17,11 @@ const { stopToData } = await import('../frontend/js/map/stop-marks.js');
 const { initMap } = await import('../frontend/js/map/map-init.js');
 const { renderMetroContext, renderStops } = await import('../frontend/js/map/stop-layer.js');
 const { onStopMouseOver, onStopMouseOut } = await import('../frontend/js/map/hover.js');
-const { onStopClick, onCandidateStopClick, finishRoute } = await import('../frontend/js/game/route.js');
+const { onStopClick, onCandidateStopClick, cancelRoutePreview, finishRoute } = await import('../frontend/js/game/route.js');
 const { startLevel, showMenu, openStoryMenu, openTowerMenu } = await import('../frontend/js/game/session.js');
 const { nextLevel, restartLevel } = await import('../frontend/js/game/flow.js');
 const { openFreeMenu } = await import('../frontend/js/game/free.js');
-const { storyNext, tutorialNext } = await import('../frontend/js/ui/story.js');
+const { storyNext } = await import('../frontend/js/ui/story.js');
 const app = await import('../frontend/js/app.js'); // 入口（bootstrap：桩件里 loadScript 永不回调，属预期）
 
 const el = (id) => elements.get(id);
@@ -39,38 +39,44 @@ await step('进入界面：加载数据、建索引、铺地图、显示主菜�
   const { data } = await loadTransitData();
   const graph = buildGraph(data.lines);
   buildIndex(data, graph);
+  state.loadedCityId = 'beijing';
   assert.equal(state.routerGraph, graph, '前端索引与最优路线共用同一份寻路图');
   initMap();
   renderMetroContext();
-  renderStops({ onClick: onStopClick, onMouseOver: onStopMouseOver, onMouseOut: onStopMouseOut });
+  renderStops({ onClick: onStopClick, onMouseOver: onStopMouseOver, onMouseOut: onStopMouseOut, onMapClick: cancelRoutePreview });
   assert.ok(state.map, '地图已创建');
   assert.ok(state.physStops.length > 0, '物理站已建立');
   assert.ok(!el('main-menu').classList.contains('hidden'), '主菜单已显示');
 });
 
 // ============ 2. 选故事关卡 ============
-await step('选择故事模式 → 选第 1 关', () => {
+await step('选择故事模式 → 选第 1 关', async () => {
   openStoryMenu();
   assert.ok(!el('story-menu').classList.contains('hidden'), '选关菜单已打开');
   const lv = LEVELS[0];
+  const { ensureGameDataReady } = await import('../frontend/js/game/data-ready.js');
+  assert.equal(await ensureGameDataReady(lv.cityId), true, '教学城市数据已加载');
   startLevel(lv);
   assert.equal(state.currentLevel, lv, '已进入第 1 关');
   assert.equal(state.storyActive, true, '剧情期间地图锁定');
   assert.ok(!el('story-dialog').classList.contains('hidden'), '剧情对话框已打开');
 });
 
-// ============ 3. 过剧情 + 教学 ============
-await step('跳过剧情 → 跳过教学 → 交还操作权', () => {
+// ============ 3. 过单句开场 ============
+await step('关闭单句开场 → 交还操作权', () => {
   const lv = LEVELS[0];
   for (let i = 0; i < lv.story.length; i++) storyNext();
   assert.equal(state.storyActive, false, '剧情结束后解锁地图');
-  for (let i = 0; i < 4; i++) tutorialNext();
-  assert.ok(el('tutorial-bubble').classList.contains('hidden'), '教学气泡已收起');
-  assert.equal(el('tower-layer-label').textContent,'≤ 80 分钟','故事时限已在中央浮层显示');
+  assert.equal(state.originWalkRangeCircle, null, '教学关不显示起点步行范围圈');
+  const prompt = created.markers.findLast((m) => m.map && String(m.__opts.content).includes('map-tutorial-label'));
+  assert.ok(prompt && prompt.__opts.content.includes('放大地图显示公交站'), '初始缩放不足时显示放大提示');
+  assert.ok(el('mode-hud').classList.contains('hidden'),'第一关不显示时间限制');
 });
 
 // ============ 4. 规划路线（起点 → 换乘 → 终点）+ 结算 ============
 await step('规划路线并结算：选起点 → 换乘 → 点「终」→ 出结算', async () => {
+  const { ensureGameDataReady } = await import('../frontend/js/game/data-ready.js');
+  assert.equal(await ensureGameDataReady('beijing'), true, '已切回北京数据');
   // 用一条真实线路上的一对站开一关可解的自定义关（故事/教学已在第 1 关验过）
   const line = [...state.linesMap.values()].find((l) => l.mode === 'metro' && l.stops.length > 12);
   assert.ok(line, '找到一条可用的地铁线');
@@ -86,8 +92,10 @@ await step('规划路线并结算：选起点 → 换乘 → 点「终」→ 出
   }, { skipStory: true });
 
   onStopClick({ data: stopToData(physA) });
+  onStopClick({ data: stopToData(physA) });
   assert.equal(state.routeStops.length, 1, '首站已选中');
   assert.ok(state.candidateMarks && state.candidateMarks.data.length > 0, '候选站点已亮出');
+  onCandidateStopClick(stopToData(physB));
   onCandidateStopClick(stopToData(physB));
   assert.ok(state.routeStops.length >= 2, '已换乘到沿途站');
 
@@ -99,15 +107,15 @@ await step('规划路线并结算：选起点 → 换乘 → 点「终」→ 出
   assert.ok(state.optimalResult, '最优路线已算出');
 });
 
-// ============ 5. 下一关 ============
-await step('进入下一关', () => {
-  // 先回到第 1 关（真实关卡），再点「下一关」进第 2 关（试玩关不在关卡列表里，nextLevel 找不到下一关）
-  startLevel(LEVELS[0], { skipStory: true });
+// ============ 5. 教学关暂时是唯一故事关 ============
+await step('教学关完成后回菜单', async () => {
+  const { ensureGameDataReady } = await import('../frontend/js/game/data-ready.js');
+  const last = LEVELS[LEVELS.length - 1];
+  await ensureGameDataReady(last.cityId);
+  startLevel(last, { skipStory: true });
   nextLevel();
-  assert.equal(state.currentLevel, LEVELS[1], '已进入第 2 关');
-  assert.equal(state.routeStops.length, 0, '新关卡路线已清空');
-  restartLevel();
-  assert.equal(state.routeStops.length, 0, '重开后路线仍为空');
+  assert.ok(!el('main-menu').classList.contains('hidden'), '故事模式暂时结束并返回菜单');
+  assert.equal(state.routeStops.length, 0, '离开时路线已清空');
 });
 
 // ============ 7. 退出回主菜单（清场） ============

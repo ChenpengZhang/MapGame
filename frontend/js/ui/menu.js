@@ -82,9 +82,9 @@ export function setModeHudVisible(visible) {
   if(!visible)toggleHidden('tower-restart-btn',true);
 }
 
-/** 图例只在"浏览/选起始站"的初始阶段显示；开始规划后隐藏 */
+/** 游戏地图中的站点图例始终显示；菜单遮罩仍通过 CSS 暂时隐藏它。 */
 export function updateLegend() {
-  toggleHidden('legend', state.routeStops.length > 0);
+  toggleHidden('legend', false);
 }
 
 /** 随机模式始终开放（预留的解锁位，目前恒为解锁） */
@@ -92,25 +92,22 @@ export function updateFreeButton() {
   const free = $('free-btn');
   if (!free) return;
   free.classList.remove('locked');
-  // 只改文字标签，保留左下角的 emoji 贴纸（.btn-emoji）
+  // 只改文字标签，保留左下角的图标贴纸（.btn-emoji）
   const label = free.querySelector('.btn-label');
   if (label) label.textContent = '随机模式';
-  else free.textContent = '🎲 随机模式';
+  else free.textContent = '随机模式';
 }
 
 /**
- * 故事模式按钮：只有当前城市有故事（hasStory）才解锁，否则锁住。
- * 目前只有北京写了 6 关剧情，广州/深圳/上海禁用。
+ * 故事关卡共享一套剧本，每关自己指定城市，与自由模式城市选择无关。
  */
 export function updateStoryButton() {
   const story = $('story-btn');
   if (!story) return;
-  const city = cityById(state.currentCityId) || cityById('beijing');
-  const hasStory = !!(city && city.hasStory);
-  story.classList.toggle('locked', !hasStory);
+  story.classList.remove('locked');
   const label = story.querySelector('.btn-label');
-  if (label) label.textContent = hasStory ? '故事模式' : '故事模式（敬请期待）';
-  else story.textContent = hasStory ? '📖 故事模式' : '🔒 故事模式';
+  if (label) label.textContent = '故事模式';
+  else story.textContent = '故事模式';
 }
 
 // ============ 城市选择下拉 ============
@@ -167,7 +164,8 @@ export function updateButtons() {
   } else {
     show('btn-group');
     show('undo-btn');
-    show('show-all-btn'); // 规划中恢复"显示全图站点"（手机端预览阶段 hide 过，这里要 show 回来）
+    // 规划中恢复"显示全图站点"（手机端预览阶段 hide 过）；新手第一关不提供这个功能
+    toggleHidden('show-all-btn', !!state.currentLevel?.hideShowAllStops);
     setText('reset-btn', '取消');
   }
 }
@@ -175,7 +173,8 @@ export function updateButtons() {
 // ============ 故事模式关卡列表 ============
 
 /**
- * 渲染关卡卡片（锁住的显示 🔒）。
+ * 渲染顺序解锁的线路节点。视觉只显示圆环编号，不显示关卡标题；
+ * title 仍保留在关卡数据中，进入关卡后用于顶栏和无障碍标签。
  * @param {(level:object)=>void} onPick 点击已解锁关卡时的回调（由 game/session.js 传入 startLevel）
  */
 export function buildStoryLevels(onPick) {
@@ -184,11 +183,14 @@ export function buildStoryLevels(onPick) {
   list.innerHTML = '';
   LEVELS.forEach((lv, i) => {
     const unlocked = i < state.storyUnlocked;
-    const card = document.createElement('div');
+    const card = document.createElement('button');
+    card.type = 'button';
     card.className = 'story-level' + (unlocked ? ' unlocked' : ' locked');
-    card.innerHTML =
-      '<div class="slv-num">' + (unlocked ? String(lv.series) : '🔒') + '</div>' +
-      '<div class="slv-title">' + lv.title + '</div>';
+    card.disabled = !unlocked;
+    card.ariaLabel = unlocked ? `第 ${lv.series} 关` : `第 ${lv.series} 关，尚未解锁`;
+    if (card.style?.setProperty) card.style.setProperty('--level-color', lv.color || '#19b7c9');
+    else card.style['--level-color'] = lv.color || '#19b7c9';
+    card.innerHTML = '<span class="slv-num">' + (unlocked ? String(lv.series) : '<span class="icon icon-lock" aria-label="未解锁"></span>') + '</span>';
     if (unlocked) card.addEventListener('click', () => onPick(lv));
     list.appendChild(card);
   });

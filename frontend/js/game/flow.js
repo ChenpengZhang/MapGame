@@ -22,6 +22,7 @@ import { startTowerRound, showTowerResult } from './tower.js';
 import { resetRoute } from './route.js';
 import { showResultOverlay } from '../ui/result.js';
 import { EVENTS, on } from '../core/bus.js';
+import { showMapTutorial } from '../map/tutorial-layer.js';
 
 /**
  * 关卡结算弹窗（故事模式 / 自由模式）：
@@ -34,7 +35,7 @@ export function showLevelResult() {
   const limit = level ? level.timeLimitMin : null;
   const win = limit == null || playerTotal <= limit;
 
-  const title = win ? '🎉 恭喜！' : '🥲 抱歉…';
+  const title = win ? '恭喜！' : '抱歉…';
   const message = win
     ? ((level && level.success) || '恭喜！你完成了任务！')
     : ((level && level.fail) || '抱歉——再试试更快一点的路线？');
@@ -62,13 +63,13 @@ export function showLevelResult() {
   });
 }
 
-/** "下一关"：进入下一关；已是最后一关则解锁自由模式并回菜单 */
+/** "下一关"：进入下一关；已是最后一关则记下通关并回菜单。 */
 export function nextLevel() {
   const idx = LEVELS.indexOf(state.currentLevel);
   if (idx >= 0 && idx + 1 < LEVELS.length) {
     startLevel(LEVELS[idx + 1]);
   } else {
-    // 通关全部 → 解锁自由模式
+    // 通关全部 → 记录完成状态（自由模式本来就开放）
     if (state.storyUnlocked < LEVELS.length + 1) {
       state.storyUnlocked = LEVELS.length + 1;
       saveStoryProgress();
@@ -86,6 +87,8 @@ export function restartLevel() {
     state.towerLayer = state.towerLastPass ? state.towerLayer + 1 : 1;
     startTowerRound();
   } else {
+    // 完成路线时教学已被清掉；重玩本关要重新挂上，否则重试的玩家看不到任何提示
+    showMapTutorial(state.currentLevel?.mapTutorial);
     beginGameplay(state.currentLevel);
   }
 }

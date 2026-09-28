@@ -26,9 +26,9 @@ import { state } from './core/state.js';
 import { $, hide, show, setStatus, showError, showLoading, hideLoading, showCenterToast, loadScript, isTouchDevice, preventPagePinch } from './core/dom.js';
 import { loadAmapKey, loadAmapSecurity, saveAmapKey, saveAmapSecurity, loadWalkTransfer, saveWalkTransfer, loadCityId, saveCityId } from './core/storage.js';
 import { cityById } from './data/cities.js';
-import { initMap, setZoomSpeed } from './map/map-init.js';
+import { initMap, failMapSetup, setZoomSpeed } from './map/map-init.js';
 import { toggleShowAllStops } from './map/stop-layer.js';
-import { onStopClick, onCandidateStopClick, finishRoute, resetRoute, undoRoute, confirmStart, setForceWalk } from './game/route.js';
+import { onStopClick, onCandidateStopClick, finishRoute, resetRoute, undoRoute, setForceWalk, setWalkTransferEnabled } from './game/route.js';
 import { showMenu,returnHome, openStoryMenu, openTowerMenu, openCityMenu, startLevel, selectCity } from './game/session.js';
 import { openFreeMenu, startFreeGame } from './game/free.js';
 import { startTower,openTowerResetConfirm,closeTowerResetConfirm,confirmTowerReset,exitTowerAfterResult } from './game/tower.js';
@@ -38,7 +38,7 @@ import { nextLevel, restartLevel } from './game/flow.js';
 import { loadStoryProgress, loadTowerState } from './game/progress.js';
 import { buildStoryLevels, openSettingsPanel, closeSettingsPanel, setCityLabel, setCitySelectLabel, closeCityMenu, updateStoryButton, refreshMenuChrome } from './ui/menu.js';
 import { hideResultOverlay } from './ui/result.js';
-import { storyNext, tutorialNext } from './ui/story.js';
+import { storyNext } from './ui/story.js';
 
 // ============ 1. 引导 ============
 
@@ -62,9 +62,10 @@ async function bootstrap() {
     setCityLabel(cityName);
     setCitySelectLabel(cityName);
     initMap();
-    updateStoryButton(); // 按城市恢复故事模式按钮的锁定状态（切换城市后立即生效）
+    updateStoryButton(); // 故事模式在所有城市均可进入
     hideLoading(); // 地图就绪即收起遮罩；交通数据改为进入游戏时按需下载（见 game/data-ready.js）
   } catch (e) {
+    failMapSetup(e);
     hideLoading();
     showError('初始化失败：' + (e && e.message ? e.message : e));
   }
@@ -89,6 +90,7 @@ function bindUiEvents() {
   // ---- 规划中的操作条 ----
   on('undo-btn', undoRoute);                  // 上一步
   on('reset-btn', () => state.onlineRound?.submission ? restartLevel() : resetRoute());                // 取消（重置路线）
+  on('error-close', () => hide('error'));
   on('show-all-btn', toggleShowAllStops);     // 显示/关闭全图站点
   on('tower-restart-btn', openTowerResetConfirm);
   on('tower-reset-close',closeTowerResetConfirm);
@@ -117,11 +119,17 @@ function bindUiEvents() {
   on('settings-btn', openSettingsPanel);
   on('settings-close', closeSettingsPanel);
   on('zoom-speed-slider', (e) => setZoomSpeed(parseFloat(e.target.value) || 0.5), 'input');
-  on('walk-transfer-toggle', () => {
-    if(state.onlineRound && state.onlineRound.command?.mode!=='tower'){$('walk-transfer-toggle').checked=false;return;}
-    const on = !!$('walk-transfer-toggle').checked;
-    state.walkTransfer = on;
-    saveWalkTransfer(on);
+  on('walk-transfer-toggle', (event) => {
+    const input = event.currentTarget || $('walk-transfer-toggle');
+    if (state.onlineRound && state.onlineRound.command?.mode !== 'tower') {
+      input.checked = false;
+      setWalkTransferEnabled(false);
+      saveWalkTransfer(false);
+      return;
+    }
+    const enabled = !!input.checked;
+    setWalkTransferEnabled(enabled);
+    saveWalkTransfer(enabled);
   }, 'change');
   on('force-walk-toggle', () => {
     setForceWalk($('force-walk-toggle').checked);
@@ -133,9 +141,8 @@ function bindUiEvents() {
     location.reload(); // 换 Key 必须重新加载地图 SDK
   });
 
-  // ---- 剧情 / 教学 ----
-  on('story-dialog', storyNext);
-  on('tutorial-next', tutorialNext);
+  // ---- 剧情 ----
+  on('story-next-btn', storyNext);
 
   // ---- 结果弹窗 ----
   on('result-next', nextLevel);        // 下一关
@@ -167,7 +174,7 @@ if (typeof window !== 'undefined') {
     startLevel,
     resetRoute,
     restartLevel,
-    tap: { stop: onStopClick, candidate: onCandidateStopClick, finish: finishRoute, confirm: confirmStart },
+    tap: { stop: onStopClick, candidate: onCandidateStopClick, finish: finishRoute },
   };
 }
 bindUiEvents();

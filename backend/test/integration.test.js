@@ -7,7 +7,7 @@ import { migrate } from '../src/infrastructure/migrate.js';
 import { Repository } from '../src/infrastructure/repository.js';
 import { GameService } from '../src/application/game-service.js';
 import { createApp } from '../src/http/app.js';
-import { RULES_VERSION } from '../src/domain/rules.js';
+import { RULES_VERSION, DATA_VERSION } from '../src/domain/rules.js';
 
 const url = process.env.TEST_DATABASE_URL;
 test('PostgreSQL: authentication, reset, authoritative settlement, concurrency and ownership', { skip: !url },async t => {
@@ -33,7 +33,7 @@ test('PostgreSQL: authentication, reset, authoritative settlement, concurrency a
   const auth = createAuth(config,pool,sendMail);
   const repository = new Repository(pool);
   const puzzle = { city:'beijing',scenario:'normal',origin:[120,30],destination:[120.04,30],
-    dataVersion:6,rulesVersion:RULES_VERSION,dataHash:'integration-fixture',optimalDurationMs:10000 };
+    dataVersion:DATA_VERSION,rulesVersion:RULES_VERSION,dataHash:'integration-fixture',optimalDurationMs:10000 };
   const transit = {
     generate:async(city,scenario,options)=>({...puzzle,city,scenario,options}),
     story:async levelId=>({...puzzle,storyId:levelId,limitMs:20000}),
@@ -145,12 +145,13 @@ test('PostgreSQL: authentication, reset, authoritative settlement, concurrency a
   const free=await freeResponse.json();
   assert.equal(free.stage.puzzle.options.busSpeedFactor,0.6);
   await game.submit(user.id,free.run.id,{...command,stageId:free.stage.id,requestId:randomUUID()},await repository.now());
-  const story=await game.start(user.id,{mode:'story',levelId:'school'});
+  const story=await game.start(user.id,{mode:'story',levelId:'wenshan_intro'});
   const storyResult=await game.submit(user.id,story.run.id,{...command,stageId:story.stage.id,requestId:randomUUID()},await repository.now());
   assert.equal(storyResult.passed,true);
+  assert.deepEqual(await game.storyProgress(user.id),{unlocked:2});
   const history=await (await request('/history',undefined,cookie)).json();
   assert.ok(history.some(row=>row.run_id===free.run.id && row.mode==='free'));
-  assert.ok(history.some(row=>row.run_id===story.run.id && row.story_id==='school'));
+  assert.ok(history.some(row=>row.run_id===story.run.id && row.story_id==='wenshan_intro'));
   assert.deepEqual(await game.history('another-user'),[]);
   assert.equal((await request('/history')).status,401);
   assert.equal((await request('/runs',{mode:'story',levelId:'injected'},cookie)).status,400);

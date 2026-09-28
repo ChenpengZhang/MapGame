@@ -3,8 +3,8 @@
  *
  * 【画什么】
  *   玩家每选一个站，就产生一组覆盖物（通过 group 分组，供"撤回"整组删除）：
- *     站点序号图钉 + 乘车段折线（白描边 + 深色主线）+ 换乘步行虚线
- *   起始步行段和终点步行段用紫色虚线。
+ *     站点序号图钉 + 乘车段折线（线路色外框 + 白色内线）+ 换乘步行虚线
+ *   起始步行段和终点步行段用绿色细虚线。
  *
  * 【两个关键实现】
  *   1) 折线只取线路上"两个站之间"的一段（lineSegmentPath）：
@@ -15,7 +15,7 @@
  */
 
 import { state } from '../core/state.js';
-import { WALK_COLOR, ROUTE_COLOR, ROUTE_CASING, TRANSFER_WALK_MIN_M } from '../core/config.js';
+import { WALK_COLOR, WALK_LINE_WEIGHT, WALK_LINK_WEIGHT, ROUTE_COLOR, ROUTE_CASING, TRANSFER_WALK_MIN_M } from '../core/config.js';
 import { findStopInLine } from '../data/index-builder.js';
 import { fadeInOverlay, removeOverlay } from './anim.js';
 import { activeWalk } from './walk.js';
@@ -40,14 +40,14 @@ export function clearGroupOverlays(g) {
 // ============ 站点序号图钉 ============
 
 /** 在指定坐标画一个带序号的路线图钉（1、2、3…） */
-export function addStopMarker(index, lnglat) {
+export function addStopMarker(index, lnglat, g) {
   const m = new AMap.Marker({
     position: lnglat,
     content: '<div class="pin route">' + index + '</div>',
     offset: new AMap.Pixel(-12, -12), zIndex: 420,
   });
   m.setMap(state.map);
-  currentGroup().push(m);
+  (g || currentGroup()).push(m);
 }
 
 // ============ 悬停置顶 ============
@@ -69,20 +69,38 @@ function allRouteOverlays() {
 export function tagRouteOverlay(overlay, group, baseZ) {
   overlay._group = group;
   overlay._baseZ = baseZ;
-  overlay.on('mouseover', () => {
-    for (const o of allRouteOverlays()) {
-      if (o._group === group) o.setOptions({ zIndex: FRONT_Z });
-      else o.setOptions({ zIndex: o._baseZ });
-    }
-  });
-  overlay.on('mouseout', () => {
-    for (const o of allRouteOverlays()) o.setOptions({ zIndex: o._baseZ });
-  });
+  overlay.on('mouseover', () => raiseRouteGroup(group));
+  overlay.on('mouseout', restoreRouteGroups);
+  // 路线自己监听 mousemove 后，指针停在路线上时地图不会收到 mousemove；
+  // 地图一收到 mousemove 就说明指针已离开路线，可作为 mouseout 丢失时的兜底。
+  overlay.on('mousemove', () => {});
+  if (!restoreOnMapMove && state.map) {
+    restoreOnMapMove = true;
+    state.map.on('mousemove', restoreRouteGroups);
+  }
+}
+
+let raisedGroup = null;
+let restoreOnMapMove = false;
+
+/** 整组置顶；层级未变的覆盖物 setOptions 不会重排，避免反复移动鼠标下方的元素。 */
+function raiseRouteGroup(group) {
+  raisedGroup = group;
+  for (const o of allRouteOverlays()) {
+    if (o._group === group) o.setOptions({ zIndex: FRONT_Z });
+    else o.setOptions({ zIndex: o._baseZ });
+  }
+}
+
+function restoreRouteGroups() {
+  if (!raisedGroup) return;
+  raisedGroup = null;
+  for (const o of allRouteOverlays()) o.setOptions({ zIndex: o._baseZ });
 }
 
 // ============ 乘车段 ============
 
-/** 画一段乘车（白描边 + 深色主线），追加到当前分组 */
+/** 画一段已确认乘车路线（白色描边 + 深色实线），追加到当前分组。 */
 export function drawRideSegment(line, fromStop, toStop) {
   const sub = lineSegmentPath(line, fromStop, toStop);
   if (!sub || sub.length < 2) return;
@@ -103,6 +121,7 @@ export function drawRideSegment(line, fromStop, toStop) {
   tagRouteOverlay(main, 'player', 396);
   fadeInOverlay(main);
   currentGroup().push(main);
+  animateTraveler(sub, line.mode === 'metro' ? 'metro' : 'bus');
 }
 
 /**
@@ -125,7 +144,7 @@ export function drawTransferWalk(p1, p2) {
   if (!p1 || !p2) return;
   if (haversineKm(p1, p2) * 1000 < TRANSFER_WALK_MIN_M) return;
   const poly = new AMap.Polyline({
-    path: [p1, p2], strokeColor: WALK_COLOR, strokeWeight: 3, strokeOpacity: 0.9,
+    path: [p1, p2], strokeColor: WALK_COLOR, strokeWeight: WALK_LINK_WEIGHT, strokeOpacity: 0.9,
     strokeStyle: 'dashed', dashArray: [6, 6], lineJoin: 'round', zIndex: 388,
   });
   poly.setMap(state.map);
@@ -136,18 +155,19 @@ export function drawTransferWalk(p1, p2) {
 
 /**
  * 步行换乘段（实验性，设置里开启）：下车步行到下一个不共享线路的站。
- * 与 drawTransferWalk 不同，这一段【计入时间】（按步行速度），画得更醒目（紫色粗虚线）。
+ * 与 drawTransferWalk 不同，这一段【计入时间】（按步行速度），使用绿色虚线。
  */
 export function drawWalkTransfer(p1, p2) {
   if (!p1 || !p2) return;
   const poly = new AMap.Polyline({
-    path: [p1, p2], strokeColor: WALK_COLOR, strokeWeight: 4, strokeOpacity: 0.95,
+    path: [p1, p2], strokeColor: WALK_COLOR, strokeWeight: WALK_LINE_WEIGHT, strokeOpacity: 0.95,
     strokeStyle: 'dashed', dashArray: [12, 8], lineJoin: 'round', zIndex: 388,
   });
   poly.setMap(state.map);
   tagRouteOverlay(poly, 'player', 388);
   fadeInOverlay(poly);
   currentGroup().push(poly);
+  animateTraveler([p1, p2], 'walk');
 }
 
 // ============ 折线取段工具（最优路线层也复用） ============
@@ -198,26 +218,78 @@ function nearestPathIndex(path, pt) {
 
 // ============ 步行段 ============
 
-/** 画一段步行虚线（紫色）；g 传入时追加到该分组，否则追加到当前分组 */
-export function drawWalkPolyline(path, g) {
+/** 画一段绿色步行虚线；g 传入时追加到该分组，否则追加到当前分组；animate=false 时不播放行人动画 */
+export function drawWalkPolyline(path, g, animate = true) {
   const poly = new AMap.Polyline({
-    path, strokeColor: WALK_COLOR, strokeWeight: 4, strokeOpacity: 0.95,
+    path, strokeColor: WALK_COLOR, strokeWeight: WALK_LINE_WEIGHT, strokeOpacity: 0.95,
     strokeStyle: 'dashed', dashArray: [12, 8], lineJoin: 'round', zIndex: 190,
   });
   poly.setMap(state.map);
   tagRouteOverlay(poly, 'player', 190);
   fadeInOverlay(poly);
   (g || currentGroup()).push(poly);
+  if (animate) animateTraveler(path, 'walk');
 }
 
 /**
  * 取步行结果并画线。
  * @returns {Promise<{dist:number, min:number}>}
  */
-export function drawWalkLeg(from, to, g) {
+export function drawWalkLeg(from, to, g, animate = true) {
   g = g || currentGroup();
   return activeWalk(from, to).then((r) => {
-    drawWalkPolyline(r.path || [from, to], g);
+    drawWalkPolyline(r.path || [from, to], g, animate);
     return { dist: r.dist, min: r.min };
   });
+}
+
+// ============ 行进动画 ============
+
+const TRAVELER_ICONS = { walk: 'walking', bus: 'bus', metro: 'metro' };
+let activeTraveler = null;
+
+/**
+ * 每步确认后，让一个行人 / 公交 / 地铁小牌沿刚画好的路段从起点走到终点，随后消失。
+ * 时长按路段长度在 0.8~2.4 秒之间伸缩；新动画开始时立即结束上一个，避免连续操作时叠在一起。
+ */
+export function animateTraveler(path, kind) {
+  if (!state.map || !path || path.length < 2) return;
+  stopTraveler();
+  const cum = [0];
+  for (let i = 1; i < path.length; i++) cum.push(cum[i - 1] + haversineKm(path[i - 1], path[i]));
+  const total = cum[cum.length - 1];
+  if (!(total > 0)) return;
+  const duration = Math.min(2400, Math.max(800, 700 + total * 260));
+  const marker = new AMap.Marker({
+    position: path[0],
+    content: `<div class="traveler ${kind}"><span class="icon icon-${TRAVELER_ICONS[kind] || 'walking'}"></span></div>`,
+    offset: new AMap.Pixel(-12, -12), zIndex: 450, clickable: false,
+  });
+  marker.setMap(state.map);
+  const t0 = performance.now();
+  const anim = { marker, raf: 0 };
+  activeTraveler = anim;
+  let seg = 1;
+  const frame = (now) => {
+    if (activeTraveler !== anim) return;
+    const t = Math.min(1, (now - t0) / duration);
+    const d = total * (t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2); // 缓入缓出
+    while (seg < cum.length - 1 && cum[seg] < d) seg++;
+    const a = path[seg - 1], b = path[seg];
+    const span = cum[seg] - cum[seg - 1];
+    const k = span > 0 ? (d - cum[seg - 1]) / span : 1;
+    marker.setPosition([a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k]);
+    if (t < 1) anim.raf = requestAnimationFrame(frame);
+    else setTimeout(() => { if (activeTraveler === anim) stopTraveler(); }, 250);
+  };
+  anim.raf = requestAnimationFrame(frame);
+}
+
+/** 立即移除正在播放的行进动画（撤回、重置路线时也会调用） */
+export function stopTraveler() {
+  const anim = activeTraveler;
+  activeTraveler = null;
+  if (!anim) return;
+  cancelAnimationFrame(anim.raf);
+  anim.marker.setMap(null);
 }

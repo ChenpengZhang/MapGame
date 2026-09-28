@@ -2,12 +2,14 @@ import { state } from '../core/state.js';
 import { account } from '../core/account.js';
 import { api } from '../core/api.js';
 import { DATA_VERSION } from '../core/config.js';
-import { $,hide,show,setText,setStatus,showLoading,hideLoading,showCenterToast } from '../core/dom.js';
+import { $,hide,show,setText,setStatus,showLoading,hideLoading,showCenterToast,showError } from '../core/dom.js';
 import { loadWalkTransfer } from '../core/storage.js';
 import { LEVELS,TOWER_SCENARIOS } from '../data/levels.js';
 import { startLevel,ensureStopsReady } from './session.js';
+import { ensureGameDataReady } from './data-ready.js';
 import { showResultOverlay } from '../ui/result.js';
 import { startTowerTimer,stopTowerTimer } from './tower-timer.js';
+import { loadStoryProgress } from './progress.js';
 
 const towerLimitPercent=layer=>Math.round(Math.max(0.01,1-(layer-1)*0.99/11)*100);
 
@@ -57,7 +59,8 @@ export async function startOnline(command,{restart=false}={}) {
   const owner=account.user?.id,epoch=state.onlineEpoch||0;
   try {
     if(!owner)throw new Error('请先登录。');
-    if(!(await ensureStopsReady()))return;
+    const storyLevel=command.mode==='story' ? LEVELS.find(level=>level.id===command.levelId) : null;
+    if(storyLevel ? !(await ensureGameDataReady(storyLevel.cityId)) : !(await ensureStopsReady()))return;
     showLoading('正在加载…');
     let payload=await api('/runs',command);
     if(restart && command.mode==='tower') {
@@ -66,7 +69,11 @@ export async function startOnline(command,{restart=false}={}) {
     }
     if(payload.stage.status==='passed' && command.mode==='tower') payload.stage=await api(`/runs/${payload.run.id}/next`,{});
     activateOnline(payload,command,owner,epoch);
-  } catch(error) {setStatus(error.message);showCenterToast(error.message);}
+  } catch(error) {
+    setStatus(error.message);
+    if(command.mode==='story')showError('故事关卡启动失败：'+error.message);
+    else showCenterToast(error.message);
+  }
   finally {state.onlineStarting=false;hideLoading();}
 }
 export function serializeRoute() {
@@ -118,6 +125,7 @@ function renderResult(cloud) {
   if(state.onlineRound!==cloud)return;
   const result=cloud.result,tower=cloud.command.mode==='tower';
   if(tower)stopTowerTimer(Number(result.elapsed_ms),Number(result.total_elapsed_ms));
+  if (cloud.command.mode === 'story' && result.passed) void loadStoryProgress();
   showResultOverlay({
     title:result.passed?(tower?`第 ${cloud.stage.stageNo} 层通过！`:'完成！'):'本次未通过',
     message:tower && result.passed?`下一层要求 ≤ ${towerLimitPercent(cloud.stage.stageNo+1)}%`:'',

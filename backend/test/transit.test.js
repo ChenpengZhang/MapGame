@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import router from '../../shared/router.js';
 import { Transit } from '../src/infrastructure/transit.js';
+import { DATA_VERSION } from '../src/domain/rules.js';
 const stop = (id,lng,d=1) => ({ id,name:id,lng,lat:30,d });
 const lines = [
   {id:'bus',name:'bus',mode:'bus',oneWay:true,stops:[stop('A',120),stop('B',120.01),stop('C',120.02)]},
@@ -9,7 +10,7 @@ const lines = [
 ];
 const transit = new Transit();
 transit.cache.set('beijing',Promise.resolve({graph:router.buildGraph(lines),hash:'test'}));
-const puzzle = {city:'beijing',scenario:'normal',origin:[120,30],destination:[120.02,30],dataHash:'test',dataVersion:6,rulesVersion:1};
+const puzzle = {city:'beijing',scenario:'normal',origin:[120,30],destination:[120.02,30],dataHash:'test',dataVersion:DATA_VERSION,rulesVersion:1};
 const ride = (lineId,fromStopId,toStopId) => ({lineId,fromStopId,toStopId});
 test('recomputes finite duration and rejects reversed one-way edges, teleport, forged stop and forbidden metro',async()=> {
   const time = await transit.evaluate(puzzle,[ride('bus','A','C')]);

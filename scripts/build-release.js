@@ -42,7 +42,7 @@ const INCLUDE = [
   'scripts/assets.js',          // Static URL manifest shared with server.js
   'frontend/index.html',
   'frontend/css',
-  'frontend/favicon.svg',
+  'frontend/assets',
   'frontend/js',
   'shared/router.js',
   'frontend/fonts',                      // ChillRoundF 字体（SIL OFL，本地打包）
@@ -50,6 +50,10 @@ const INCLUDE = [
   'data/guangzhou-transit.json',// 广州全量数据
   'data/shenzhen-transit.json', // 深圳全量数据
   'data/shanghai-transit.json', // 上海全量数据
+  'data/wenshan-transit.json',  // 文山州教学关数据
+  'data/shuanghe-transit.json', // 双河换乘教学关数据
+  'data/kokdala-transit.json',  // 可克达拉限时教学关数据
+  'data/datong-transit.json',   // 大同快慢车教学关数据
   'data/sample.json',           // 演示兜底
   'README.md',
 ];

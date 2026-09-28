@@ -17,9 +17,9 @@ export const SCENARIOS = Object.freeze({
   rain: { allowMetro: true, busSpeedFactor: 0.5, walkSpeedFactor: 0.5 },
 });
 
-export const CITIES = ['beijing', 'shanghai', 'guangzhou', 'shenzhen'];
+export const CITIES = ['beijing', 'shanghai', 'guangzhou', 'shenzhen', 'wenshan', 'shuanghe', 'kokdala', 'datong'];
 export const RULES_VERSION = 1;
-export const DATA_VERSION = 6;
+export const DATA_VERSION = 7;
 
 // 爬塔难度曲线：第 1 层允许比最优慢 ≤100%（即 2 倍最优以内），
 // 线性收紧到第 12 层 ≤1%，之后保持 1%。
@@ -31,11 +31,11 @@ export function settle(stage, durationMs, receivedAt, mode) {
   ensure(Number.isSafeInteger(elapsedMs) && elapsedMs >= 0, 'INVALID_SERVER_CLOCK', 503);
   ensure(Number.isSafeInteger(durationMs) && durationMs > 0, 'INVALID_ROUTE_DURATION');
 
-  // 通过判定：故事模式看绝对时限；无尽模式看“≤ 最优 × (1 + 本层阈值)”；
-  // 其它模式（每日/随机）不设通过线，恒为 true。
+  // 通过判定：带时限的故事关看绝对时限；无时限教学关与每日/随机恒为 true；
+  // 无尽模式看“≤ 最优 × (1 + 本层阈值)”。
   const passed =
     mode === 'story'
-      ? durationMs <= stage.puzzle.limitMs
+      ? stage.puzzle.limitMs == null || durationMs <= stage.puzzle.limitMs
       : mode !== 'tower' ||
         durationMs <= Math.ceil(Number(stage.optimal_duration_ms) * (1 + threshold(stage.stage_no)));
 

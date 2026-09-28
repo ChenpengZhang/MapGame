@@ -23,9 +23,10 @@ import { CITIES } from '../data/cities.js';
  * 开发者调试开关：true 时直接解锁所有故事关卡（仅代码内开关，无 UI；自由模式本来就不上锁）。
  * ⚠ 发布前记得改成 false。
  */
-const DEV_DEBUG_MODE = true;
+const DEV_DEBUG_MODE = false;
 
-const KEY_STORY = 'mg_story_unlocked';
+// 统一关卡顺序加入了新的第 1 关，旧数字进度不能直接对应新章节。
+const KEY_STORY = 'mg_story_unlocked_v2';
 // 爬塔存档按城市分开（否则切换城市后深圳会读到北京的起终点缓存，一点进去就"传送"回北京）：
 // 每个城市一个 key，如 mg_tower_state_beijing / mg_tower_state_shenzhen
 const towerKey = () => 'mg_tower_state_' + (state.currentCityId || 'beijing');
@@ -39,11 +40,29 @@ export function clearGuestTowerState() {
 
 // ============ 故事模式解锁进度 ============
 
-/** 读存档：已解锁关卡数（读不到则为 1） */
+function normalizeStoryUnlocked(value) {
+  const parsed = Number.parseInt(value, 10);
+  return Math.max(1, Math.min(Number.isFinite(parsed) ? parsed : 1, LEVELS.length + 1));
+}
+
+/**
+ * 读顺序解锁进度：游客使用本机存档；登录玩家以服务器上连续通过的关卡为准。
+ * @returns {Promise<void>|void}
+ */
 export function loadStoryProgress() {
-  const v = parseInt(readText(KEY_STORY, ''), 10);
-  if (v > 0) state.storyUnlocked = v;
-  if (DEV_DEBUG_MODE) state.storyUnlocked = LEVELS.length + 1; // 调试模式：全部解锁
+  state.storyUnlocked = 1;
+  if (DEV_DEBUG_MODE) {
+    state.storyUnlocked = LEVELS.length + 1;
+    return;
+  }
+  if (account.user) {
+    const owner = account.user.id;
+    return api('/story-progress').then((progress) => {
+      if (account.user?.id !== owner) return;
+      state.storyUnlocked = normalizeStoryUnlocked(progress?.unlocked);
+    }).catch((error) => setStatus(error.message));
+  }
+  state.storyUnlocked = normalizeStoryUnlocked(readText(KEY_STORY, '1'));
 }
 
 /** 写存档：已解锁关卡数 */

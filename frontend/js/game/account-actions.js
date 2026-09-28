@@ -2,7 +2,7 @@ import { api } from '../core/api.js';
 import { account,refreshAccount } from '../core/account.js';
 import { $,hide,show,setText } from '../core/dom.js';
 import { showMenu } from './session.js';
-import { clearGuestTowerState,loadTowerState } from './progress.js';
+import { clearGuestTowerState,loadStoryProgress,loadTowerState } from './progress.js';
 
 let mode='login';
 let busy=false;
@@ -29,7 +29,10 @@ export async function initializeAccount() {
   const verificationError=url.searchParams.get('error');
   try {
     await refreshAccount();
-    if(account.user) { showMenu();loadTowerState(); }
+    if(account.user) {
+      showMenu();
+      await Promise.all([loadStoryProgress(), loadTowerState()]);
+    }
   } catch { /* The login dialog must still open after an email callback. */ }
   renderAccount();
   if(verified || verificationError) {

@@ -2,7 +2,8 @@
  * map/hover.js —— 站点悬浮高亮 + 信息卡
  *
  * 【交互设计】
- *   鼠标划过站点时（仅未开始规划时有效）：高亮该站所属的所有线路，并在地图角落弹出信息卡。
+ *   鼠标划过站点时：高亮该站所属的所有线路，并在地图角落弹出预览卡。
+ *   路线规划开始后，已确认的当前站另用一张固定信息卡显示，预览下一站不会覆盖它。
  *   两个细节来自实际踩坑：
  *     1) 45ms 防抖：快速划过密集站点时只处理最后停留的那个，
  *        否则会反复创建/销毁上百条折线而卡顿；
@@ -14,63 +15,181 @@
 import { state } from '../core/state.js';
 import { resolveStop, getLine } from '../data/index-builder.js';
 import { hide, $ } from '../core/dom.js';
+import { makeTransitLineLayers } from './transit-line-style.js';
+import { makeMassMarks, stopToData } from './stop-marks.js';
 
 let hoverTimer = null;
-let infoCollapsed = null; // 信息卡线路列表折叠态：null = 未初始化（手机默认收起）
-let infoLineCount = 0;
+const cards = {
+  preview: { card: 'infocard', stop: 'info-stop', latin: 'info-latin', lines: 'info-lines', toggle: 'info-toggle', walk: 'info-walk', collapsed: null, lineCount: 0 },
+  current: { card: 'current-infocard', stop: 'current-info-stop', latin: 'current-info-latin', lines: 'current-info-lines', toggle: 'current-info-toggle', walk: 'current-info-walk', collapsed: null, lineCount: 0 },
+};
 
-/** MassMarks 的 mouseover 回调：防抖后渲染高亮（仅桌面；手机端高亮由点击流程管理） */
+function escapeHtml(value) {
+  return String(value == null ? '' : value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+/** 公交牌以线路号为主体；名称前缀、“路”及方向说明都缩为同一级。 */
+function splitBusLineName(name) {
+  const value = String(name || '').trim();
+  const numbered = value.match(/^(.*?)([A-Za-zＡ-Ｚａ-ｚ]?[0-9０-９]+[A-Za-zＡ-Ｚａ-ｚ]?)(.*)$/);
+  if (numbered) {
+    return { prefix: numbered[1], main: numbered[2], suffix: numbered[3] };
+  }
+  return { prefix: '', main: value, suffix: '' };
+}
+
+/** 地铁线路牌：大号线路数字在左，“号线 / Line N”在右侧上下排列。 */
+function metroLineName(name) {
+  const chinese = String(name || '').trim().replace(/^地铁/, '');
+  const numbered = chinese.match(/^([A-Za-zＡ-Ｚａ-ｚ]?[0-9０-９]+)(.*)$/);
+  if (numbered) {
+    return { main: numbered[1], suffix: numbered[2], english: `Line ${numbered[1]}` };
+  }
+  const named = chinese.match(/^(.+?)(线.*)$/);
+  return {
+    main: named ? named[1] : chinese,
+    suffix: named ? named[2] : '',
+    english: 'Metro Line',
+  };
+}
+
+/**
+ * 唯一判定规则：有数字就突出数字并缩小前后缀；没有数字才整体缩小居中。
+ */
+function isTextLine(line) {
+  const value = String(line.name || '').trim();
+  return !/[0-9０-９]/.test(value);
+}
+
+/** MassMarks 的 mouseover 回调：防抖后渲染高亮（触摸设备不使用悬浮事件） */
 export function onStopMouseOver(e) {
   if (state.storyActive) return; // 剧情/教学期间禁止交互
   if (state.isTouch) return;     // 触摸设备：合成 mouseover 会与两阶段点击打架
-  const d = resolveStop(e && e.data);
+  if (state.pendingStart || state.pendingCandidate) return; // 已点击预览后保持红圈，不被悬浮覆盖
+  const physical = e && e.data;
+  const d = resolveStop(physical);
   if (!d) return;
+  // 逻辑站可能由多个相邻物理站合并而来；红圈必须落在鼠标实际指向的那个点上。
+  const point = physical && (physical.lnglat || (
+    Number.isFinite(physical.lng) && Number.isFinite(physical.lat)
+      ? [physical.lng, physical.lat]
+      : null
+  ));
   // 防抖：快速划过密集站点时只处理最后停留的那个，避免反复创建/销毁大量折线
   if (hoverTimer) clearTimeout(hoverTimer);
   hoverTimer = setTimeout(() => {
     hoverTimer = null;
-    renderHighlight(d);
+    renderHighlight(d, point);
   }, 45);
 }
 
-/** MassMarks 的 mouseout 回调：取消防抖并清掉高亮（仅桌面；手机端不因 mouseout 取消预选） */
+/** MassMarks 的 mouseout 回调：取消防抖并清掉高亮（预览锁定时保持红圈） */
 export function onStopMouseOut() {
   if (state.isTouch) return; // 触摸设备：缩放/点按钮会触发 mouseout，不能据此取消预选
+  if (state.pendingStart || state.pendingCandidate) return;
   if (hoverTimer) { clearTimeout(hoverTimer); hoverTimer = null; }
   clearHighlight();
 }
 
-/** 画出该站所属线路 + 高亮圈，并弹出信息卡（桌面悬浮效果；手机端"第一次点击"也复用它） */
-export function renderHighlight(d) {
+/** 画出该站所属线路 + 高亮圈，并弹出信息卡；点击预览时按实际物理站坐标画圈。 */
+export function renderHighlight(d, highlightPoint = null) {
   clearHighlight();
 
-  const shown = [];
-  const seen = new Set(); // 公交上下行同名（拆成两条单向线），只画一次、信息卡只显示一次
-  for (const id of d.line_ids || []) {
-    const line = getLine(id);
-    if (!line || !line.path || line.path.length < 2) continue;
-    if (seen.has(line.name)) continue;
-    seen.add(line.name);
-    const isMetro = line.mode === 'metro';
-    const poly = new AMap.Polyline({
-      path: line.path, strokeColor: line.color, strokeWeight: isMetro ? 5 : 3,
-      strokeOpacity: 0.95, lineJoin: 'round', zIndex: isMetro ? 210 : 200,
-      interactive: false, // OSM：高亮线不拦截鼠标，否则悬浮点点位会闪烁
-    });
-    poly.setMap(state.map);
-    state.activeOverlays.push(poly);
-    shown.push(line);
-  }
+  // 预览站点时临时画出该站全部线路，但不创建这些线路的站点层。
+  // 当前可乘线路及其可点击站点仍由 route.js 的候选网络单独管理；两层分离后，
+  // 无论第几次换乘都复用同一套预览逻辑，不会把未确认线路的站点提前放出来。
+  const allLines = displayLines(d);
+  drawPreviewLines(reachableSegments(d));
 
   const ring = new AMap.Circle({
-    center: [d.lng, d.lat], radius: 150, strokeColor: '#ffffff', strokeWeight: 2,
+    center: highlightPoint || [d.lng, d.lat], radius: 150, strokeColor: '#ffffff', strokeWeight: 2,
     fillColor: '#e74c3c', fillOpacity: 0.25, zIndex: 300,
     interactive: false, // OSM：高亮圈不拦截鼠标
   });
   ring.setMap(state.map);
   state.activeOverlays.push(ring);
 
-  showInfoCard(d, shown);
+  showInfoCard(d, allLines);
+}
+
+/**
+ * 从该站出发实际能坐到的线路段：逐个方向取“本站之后”的路径与站点。
+ * 单向线在本站之前的部分（车开过来的路）不画；在本站终止的方向不能上车，整条不画；
+ * 双向线与环线照常画整条。这样预览与确认后的候选网络一致，不会出现“预览有、选中后消失”的半边。
+ */
+function reachableSegments(d) {
+  const out = [];
+  for (const id of d.line_ids || []) {
+    const line = getLine(id);
+    if (!line || !line.path || line.path.length < 2) continue;
+    const stops = line.stops || [];
+    const physId = d.stopByLine ? d.stopByLine[String(id)] : null;
+    const i = physId == null ? -1 : stops.findIndex((st) => String(st.id) === String(physId));
+    if (!line.oneWay || line.isLoop || i < 0) {
+      out.push({ line, path: line.path, stops });
+      continue;
+    }
+    if (i >= stops.length - 1) continue; // 本方向到此为止，无法从这里上车
+    const here = stops[i];
+    let start = 0, best = Infinity;
+    line.path.forEach((p, k) => {
+      const dd = (p[0] - here.lng) ** 2 + (p[1] - here.lat) ** 2;
+      if (dd < best) { best = dd; start = k; }
+    });
+    const path = line.path.slice(start);
+    if (path.length >= 2) out.push({ line, path, stops: stops.slice(i) });
+  }
+  return out;
+}
+
+/**
+ * 画站点预览线路段，并把这些段经过的站点改成“线路色描边 + 白色空心圆”。
+ * 预览站点层只做展示、不生成命中区：未确认线路的站点仍不可点击，
+ * 候选站点始终由 route.js 的候选网络统一生成（其 zIndex 220 高于本层）。
+ */
+function drawPreviewLines(segments) {
+  // 选中的线路优先占用重叠站点的颜色。
+  const ordered = segments.slice().sort((a, b) =>
+    (state.selectedLineName === b.line.name) - (state.selectedLineName === a.line.name));
+  const stopPoints = [];
+  const seenStops = new Set();
+  for (const { line, path, stops } of ordered) {
+    const selected = state.selectedLineName === line.name;
+    const layers = makeTransitLineLayers({
+      path,
+      color: line.color,
+      mode: line.mode,
+      selected,
+      zIndex: selected ? 210 : 200,
+      opacity: selected ? 1 : 0.88,
+      lineName: line.name,
+      interactive: false,
+    });
+    for (const layer of layers) {
+      layer.setMap(state.map);
+      state.activeOverlays.push(layer);
+    }
+    for (const st of stops) {
+      const id = String(st.id);
+      if (seenStops.has(id) || !Number.isFinite(st.lng) || !Number.isFinite(st.lat)) continue;
+      seenStops.add(id);
+      stopPoints.push(stopToData(
+        { id, name: st.name, lng: st.lng, lat: st.lat, mode: line.mode, logicalId: state.physToLogical.get(id) },
+        false,
+        line.color,
+      ));
+    }
+  }
+  if (!stopPoints.length) return;
+  // 高于预览线路（200/210），低于候选站点（220），且不拦截鼠标。
+  const marks = makeMassMarks(stopPoints, { allowWalkStyle: false, inverseLineStops: true, zIndex: 215, interactive: false });
+  marks.setMap(state.map);
+  state.activeOverlays.push(marks);
 }
 
 /** 清掉高亮覆盖物并隐藏信息卡（悬浮层即时销毁，不做淡出） */
@@ -82,7 +201,18 @@ export function clearHighlight() {
   if (card) card.classList.add('hidden');
 }
 
-/** 取消手机端两阶段预选（清 pending + 清高亮），但不清已确认的路线 */
+/** 固定显示已确认的当前站信息；下一站预览使用另一张卡，不会把它顶掉。 */
+export function showCurrentStopInfo(d, onLineToggle) {
+  showInfoCard(d, displayLines(d), 'current', onLineToggle);
+}
+
+/** 仅在整条路线被重置时清掉当前站信息。 */
+export function clearCurrentStopInfo() {
+  const card = $(cards.current.card);
+  if (card) card.classList.add('hidden');
+}
+
+/** 清除预选状态和悬浮高亮，但不清已确认的路线。 */
 export function cancelPreview() {
   state.pendingStart = null;
   state.pendingCandidate = null;
@@ -91,44 +221,97 @@ export function cancelPreview() {
 
 /** 展开/收起信息卡里的"途经线路"列表 */
 export function toggleInfoLines() {
-  infoCollapsed = !infoCollapsed;
-  const card = $('infocard');
-  if (card) card.classList.toggle('collapsed', infoCollapsed);
-  const btn = $('info-toggle');
-  if (btn) btn.textContent = infoCollapsed ? ('展开 ' + infoLineCount + ' 条线路') : '收起';
+  toggleCardLines('preview');
 }
 
-/** 信息卡内容：站名（含地铁/公交）+ 途经线路小标签（大站可折叠） */
-function showInfoCard(d, lines) {
-  const stopEl = $('info-stop');
-  if (stopEl) stopEl.textContent = d.name + (d.mode === 'metro' ? '（地铁）' : '（公交）');
+function toggleCardLines(kind) {
+  const cfg = cards[kind];
+  cfg.collapsed = !cfg.collapsed;
+  const card = $(cfg.card);
+  if (card) card.classList.toggle('collapsed', cfg.collapsed);
+  const btn = $(cfg.toggle);
+  if (btn) btn.textContent = cfg.collapsed ? ('展开 ' + cfg.lineCount + ' 条线路') : '收起';
+}
 
-  const box = $('info-lines');
+function displayLines(d) {
+  const shown = [], seen = new Set();
+  for (const id of d.line_ids || []) {
+    const line = getLine(id);
+    if (!line || !line.path || line.path.length < 2 || seen.has(line.name)) continue;
+    seen.add(line.name);
+    shown.push(line);
+  }
+  return shown;
+}
+
+/** 信息卡内容：按公交/地铁标牌语言展示站名与途经线路（大站可折叠）。 */
+function showInfoCard(d, lines, kind = 'preview', onLineToggle = null) {
+  const cfg = cards[kind];
+  const stopEl = $(cfg.stop);
+  if (stopEl) stopEl.textContent = d.name;
+  const hasMetro = lines.some((line) => line.mode === 'metro');
+  const hasBus = lines.some((line) => line.mode !== 'metro');
+  const latinEl = $(cfg.latin);
+  if (latinEl) latinEl.textContent = '';
+
+  const box = $(cfg.lines);
   if (box) {
-    box.innerHTML = '';
+    box.replaceChildren();
     for (const l of lines) {
-      const tag = document.createElement('span');
-      tag.className = 'line-tag';
+      const selectable = kind === 'current' && typeof onLineToggle === 'function';
+      const textLine = isTextLine(l);
+      const tag = document.createElement(selectable ? 'button' : 'span');
+      tag.className = 'line-tag ' + (l.mode === 'metro' ? 'metro-line' : 'bus-line')
+        + (textLine ? ' text-line' : '')
+        + (selectable ? ' selectable' : '') + (state.selectedLineName === l.name ? ' selected' : '');
       tag.style.backgroundColor = l.color || (l.mode === 'metro' ? '#e74c3c' : '#f39c12');
+      // 先赋纯文本，既为无 innerHTML 的简化环境兜底，也便于辅助技术读取原名称。
       tag.textContent = l.name;
+      if (textLine) {
+        tag.innerHTML = `<span class="line-main">${escapeHtml(String(l.name).replace(/^地铁/, ''))}</span>`;
+      } else if (l.mode === 'metro') {
+        const label = metroLineName(l.name);
+        tag.innerHTML = `<span class="metro-line-main">${escapeHtml(label.main)}</span>`
+          + '<span class="metro-line-side">'
+          + `<span class="metro-line-suffix">${escapeHtml(label.suffix)}</span>`
+          + `<span class="metro-line-en">${escapeHtml(label.english)}</span>`
+          + '</span>';
+      } else {
+        const parts = splitBusLineName(l.name);
+        tag.innerHTML = '<span class="bus-line-content">'
+          + (parts.prefix ? `<span class="line-prefix">${escapeHtml(parts.prefix)}</span>` : '')
+          + `<span class="line-main">${escapeHtml(parts.main)}</span>`
+          + (parts.suffix ? `<span class="line-suffix">${escapeHtml(parts.suffix)}</span>` : '')
+          + '</span>';
+      }
+      tag.setAttribute?.('aria-label', l.name);
+      if (selectable) {
+        tag.type = 'button';
+        tag.setAttribute?.('aria-pressed', state.selectedLineName === l.name ? 'true' : 'false');
+        tag.onclick = () => onLineToggle(l.name);
+      }
       box.appendChild(tag);
     }
   }
 
-  infoLineCount = lines.length;
-  if (infoCollapsed === null) infoCollapsed = !!state.isTouch; // 手机默认收起，桌面默认展开
-  const btn = $('info-toggle');
+  cfg.lineCount = lines.length;
+  if (cfg.collapsed === null) cfg.collapsed = !!state.isTouch; // 手机默认收起，桌面默认展开
+  const btn = $(cfg.toggle);
   if (btn) {
     btn.classList.toggle('hidden', lines.length <= 1); // 只有一条线路时无需折叠按钮
-    btn.textContent = infoCollapsed ? ('展开 ' + lines.length + ' 条线路') : '收起';
-    btn.onclick = toggleInfoLines; // 就近绑定，避免去动 app.js（信息卡每次重绘都会重新挂一次，幂等）
+    btn.textContent = cfg.collapsed ? ('展开 ' + lines.length + ' 条线路') : '收起';
+    btn.onclick = () => toggleCardLines(kind); // 两张卡独立折叠，互不影响
   }
-  const card = $('infocard');
+  const card = $(cfg.card);
   if (card) {
-    card.classList.toggle('collapsed', infoCollapsed);
+    card.classList.remove('metro-board', 'bus-board', 'mixed-board');
+    card.classList.add(hasMetro ? 'metro-board' : 'bus-board');
+    if (hasMetro && hasBus) card.classList.add('mixed-board');
+    // 只有一条线路时始终露出名称板，否则手机默认折叠后会无处点击取消选择。
+    card.classList.toggle('collapsed', lines.length > 1 && cfg.collapsed);
     card.classList.remove('hidden');
   }
 
-  const walkEl = $('info-walk');
+  const walkEl = $(cfg.walk);
   if (walkEl) walkEl.textContent = '';
 }

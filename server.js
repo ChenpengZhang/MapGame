@@ -8,6 +8,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const zlib = require('zlib');
+const crypto = require('crypto');
 const { exec } = require('child_process');
 
 const PORT = Number(process.env.PORT) || 8080;
@@ -36,6 +37,7 @@ const MIME = {
   '.ico': 'image/x-icon',
   '.woff2': 'font/woff2', // ChillRoundF 字体，Chrome 需要正确的 font MIME 才加载 @font-face
   '.woff': 'font/woff',
+  '.ttf': 'font/ttf',
 };
 
 // 适合 gzip 的文本类型（二进制/已压缩格式跳过，避免徒劳且可能变大）
@@ -43,12 +45,30 @@ const GZIP_EXTS = new Set(['.html', '.js', '.css', '.json', '.svg']);
 // 内存缓存 gzip 结果：本地开发反复刷新时避免每次都重压 19MB 数据（key = 文件路径 + mtime）
 const gzipCache = new Map();
 
+// ES module 的查询参数不会从 app.js 自动传递给 import 的子模块。
+// 本地服务器也要像 build-web.js 一样给整棵依赖树加版本号，否则 Safari
+// 可能沿用旧的裸模块 URL，出现“新入口 + 旧子模块”的混用。
+function versionLocalModuleImports(source) {
+  const htmlPath = path.join(ROOT, 'frontend/index.html');
+  let html = '';
+  try { html = fs.readFileSync(htmlPath, 'utf8'); } catch (e) { return source; }
+  const version = (html.match(/js\/app\.js\?v=([^"']+)/) || [])[1];
+  if (!version) return source;
+  return source
+    .replace(/(\bfrom\s*['"])(\.{1,2}\/[^'"]+\.js)(['"])/g, `$1$2?v=${version}$3`)
+    .replace(/(\bimport\s*['"])(\.{1,2}\/[^'"]+\.js)(['"])/g, `$1$2?v=${version}$3`)
+    .replace(/(\bimport\s*\(\s*['"])(\.{1,2}\/[^'"]+\.js)(['"]\s*\))/g, `$1$2?v=${version}$3`);
+}
+
 // 缓存策略：
 //   - 带 ?v=N 的资源（数据文件 beijing-transit.json?v=1、app.js?v=5 等）→ 一年强缓存：
 //     版本号一变 URL 就变，浏览器自动拿新文件，不会用旧缓存；
 //   - HTML 入口 → no-store：保证每次刷新都拿到最新的版本号引用（app.js?v=N、数据?v=N）；
 //   - 其余无版本号的 JS 模块/CSS 等 → no-store：开发期改了就立刻生效，量小无所谓。
-function cacheControlFor(url) {
+function cacheControlFor(url, relative) {
+  // 本地/便携服务器上的代码始终取最新版本。Safari 对 immutable ES modules
+  // 的复用尤其激进，开发时即使 HTML 更新也可能继续拼出旧模块图。
+  if (/\.(?:html|js|css)$/.test(relative || '')) return 'no-store';
   const q = (url || '').indexOf('?');
   if (q >= 0) {
     const query = url.slice(q + 1);
@@ -107,12 +127,17 @@ http
           return res.end('Not Found: ' + urlPath);
         }
         const ext = path.extname(filePath).toLowerCase();
-        const headers = { 'Content-Type': MIME[ext] || 'application/octet-stream', 'Cache-Control': cacheControlFor(rawUrl) };
+        const isFrontendModule = ext === '.js' && relative.startsWith('frontend/js/');
+        if (isFrontendModule) buf = Buffer.from(versionLocalModuleImports(buf.toString('utf8')));
+        const headers = { 'Content-Type': MIME[ext] || 'application/octet-stream', 'Cache-Control': cacheControlFor(rawUrl, relative) };
 
         // gzip：仅文本类型 + 客户端支持时启用（浏览器都带 Accept-Encoding: gzip）
         const accept = String(req.headers['accept-encoding'] || '');
         if (GZIP_EXTS.has(ext) && /\bgzip\b/.test(accept) && buf.length > 1024) {
-          const ck = filePath + ':' + stat.mtimeMs + ':' + stat.size;
+          // 模块导入会随 index.html 版本号改写；v44→v45 字节数不变，
+          // 仅按长度缓存 gzip 会把旧的子模块引用发给新版入口，造成两份 state。
+          const moduleHash = isFrontendModule ? crypto.createHash('sha256').update(buf).digest('hex') : '';
+          const ck = filePath + ':' + stat.mtimeMs + ':' + stat.size + ':' + moduleHash;
           let gz = gzipCache.get(ck);
           if (!gz) {
             gz = zlib.gzipSync(buf, { level: 9 });

@@ -19,7 +19,7 @@ import { show, hide, setText, toggleHidden } from '../core/dom.js';
 /**
  * 显示结果弹窗。
  * @param {object} cfg
- * @param {string} [cfg.title]            标题（🎉 恭喜！/ 💀 止步第 N 层）
+ * @param {string} [cfg.title]            标题（恭喜！/ 止步第 N 层）
  * @param {string} [cfg.message]          主文案（成败台词 / 下一层要求 / 最高纪录）
  * @param {string} [cfg.detail]           明细行（用时、最快、时限…）
  * @param {string} [cfg.restartLabel]     "重开"按钮文案（下一层 / 重新挑战）

@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import router from '../../shared/router.js';
 import { Transit } from '../src/infrastructure/transit.js';
-import { SCENARIOS } from '../src/domain/rules.js';
+import { SCENARIOS, DATA_VERSION } from '../src/domain/rules.js';
 
 test('real Beijing data: router answers replay under the same authoritative cost model',async()=> {
   const transit = new Transit();
@@ -15,7 +15,7 @@ test('real Beijing data: router answers replay under the same authoritative cost
     const route = result.legs.filter(l=>l.type==='ride').map(l=>({lineId:l.lineId,
       fromStopId:graph.logicalById.get(l.fromLogicalId).stopByLine[l.lineId],
       toStopId:graph.logicalById.get(l.toLogicalId).stopByLine[l.lineId]}));
-    const duration = await transit.evaluate({city:'beijing',scenario,origin,destination,dataHash:hash,dataVersion:6,rulesVersion:1},route);
+    const duration = await transit.evaluate({city:'beijing',scenario,origin,destination,dataHash:hash,dataVersion:DATA_VERSION,rulesVersion:1},route);
     assert.ok(Math.abs(duration-Math.round(result.totalMin*60000)) <= 1,`${scenario}: ${duration} vs ${result.totalMin*60000}`);
   }
 });

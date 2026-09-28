@@ -66,7 +66,7 @@ export class Transit {
   async story(levelId) {
     const level = LEVELS.find((item) => item.id === levelId);
     ensure(level, 'UNKNOWN_STORY');
-    const city = 'beijing';
+    const city = level.cityId;
     const { graph, hash } = await this.load(city);
 
     const config = level.scenario ?? {};
@@ -97,7 +97,7 @@ export class Transit {
       dataHash: hash,
       optimalDurationMs: Math.round(optimal.totalMin * 60000),
       storyId: level.id,
-      limitMs: level.timeLimitMin * 60000,
+      limitMs: Number.isFinite(Number(level.timeLimitMin)) ? Number(level.timeLimitMin) * 60000 : null,
     };
   }
 

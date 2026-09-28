@@ -71,11 +71,30 @@ test('web artifact and portable release preserve paths without backend files',as
     const response=await fetch(`${base}${prefix}/`);
     assert.equal(response.status,200);
     assert.match(await response.text(),/src="shared\/router.js/);
-    for(const resource of ['js/app.js','shared/router.js','fonts/ChillRoundF/ChillRoundF.css','data/sample.json','favicon.svg']) {
+    for(const resource of ['js/app.js','shared/router.js','fonts/ChillRoundF/ChillRoundF.css','fonts/RobotoCondensed/RobotoCondensed-Variable.ttf','data/sample.json','data/wenshan-transit.json','assets/map.svg']) {
       const asset=await fetch(`${base}${prefix}/${resource}`);
       assert.equal(asset.status,200,resource); await asset.arrayBuffer();
     }
   }
+  // 缓存回归：代码即使带版本号也不永久缓存；交通数据仍按版本长期缓存。
+  // 同时只改 HTML 的入口版本（例如 v48→v49），JS 文件 mtime/大小不变，
+  // 同一个运行中的服务器必须重新压缩新版 import，不能复用旧 gzip 内容。
+  const htmlPath=path.join(stage,'frontend/index.html');
+  const originalHtml=fs.readFileSync(htmlPath,'utf8');
+  const entryVersion=originalHtml.match(/js\/app\.js\?v=(\d+)/)?.[1];
+  assert.ok(entryVersion,'entry cache version exists');
+  const nextVersion=String(Number(entryVersion)+1);
+  assert.equal(nextVersion.length,entryVersion.length,'test keeps version string length unchanged');
+  const appBefore=await fetch(`${base}/js/app.js?v=${entryVersion}`,{headers:{'accept-encoding':'gzip'}});
+  assert.equal(appBefore.headers.get('content-encoding'),'gzip');
+  assert.equal(appBefore.headers.get('cache-control'),'no-store');
+  assert.match(await appBefore.text(),new RegExp(`state\\.js\\?v=${entryVersion}`));
+  const transit=await fetch(`${base}/data/wenshan-transit.json?v=7`);
+  assert.match(transit.headers.get('cache-control') || '',/immutable/);
+  fs.writeFileSync(htmlPath,originalHtml.replace(`js/app.js?v=${entryVersion}`,`js/app.js?v=${nextVersion}`));
+  const appAfter=await fetch(`${base}/js/app.js?v=${nextVersion}`,{headers:{'accept-encoding':'gzip'}});
+  assert.equal(appAfter.headers.get('content-encoding'),'gzip');
+  assert.match(await appAfter.text(),new RegExp(`state\\.js\\?v=${nextVersion}`));
   const redirect=await fetch(`${base}/mapgame`,{redirect:'manual'});
   assert.equal(redirect.status,308);assert.equal(redirect.headers.get('location'),'/mapgame/');
   for(const resource of ['backend/.env','backend/src/main.js','frontend/package.json','data/calibrate-samples.json','lib/shp.js']) {

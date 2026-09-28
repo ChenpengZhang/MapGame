@@ -8,15 +8,14 @@
  *   也避免 game 层为了造图层去 import 整个 stop-layer。
  *
  * 数据格式（stopToData 的输出）就是高德 MassMarks 要求的 { lnglat, style, ... }，
- * 其中 style=0 表示地铁（大点、红色）、style=1 表示公交（小点、蓝色）。
+ * 其中 style=0 表示地铁（大橙点）、style=1 表示公交（小蓝点）、style=2 表示步行（小红点）。
  */
 
-import { WALK_COLOR } from '../core/config.js';
+import { METRO_STOP_COLOR, BUS_STOP_COLOR, WALK_STOP_COLOR } from '../core/config.js';
 
-/** 地铁点颜色 / 公交点颜色 / 步行可达点颜色（与步行标线同色，区分"只能步行换乘过去"的站） */
-const METRO_DOT_COLOR = '#e74c3c';
-const BUS_DOT_COLOR = '#3498db';
-const WALK_DOT_COLOR = WALK_COLOR;
+const METRO_DOT_SIZE = 12;
+const BUS_DOT_SIZE = 7;
+const WALK_DOT_SIZE = 6;
 
 let _icons = null;
 
@@ -24,9 +23,9 @@ let _icons = null;
 function getIcons() {
   if (!_icons) {
     _icons = {
-      metroIcon: circleIcon(METRO_DOT_COLOR, 10),
-      busIcon: circleIcon(BUS_DOT_COLOR, 7),
-      walkIcon: circleIcon(WALK_DOT_COLOR, 7),
+      metroIcon: circleIcon(METRO_STOP_COLOR, METRO_DOT_SIZE),
+      busIcon: circleIcon(BUS_STOP_COLOR, BUS_DOT_SIZE),
+      walkIcon: circleIcon(WALK_STOP_COLOR, WALK_DOT_SIZE),
     };
   }
   return _icons;
@@ -35,18 +34,39 @@ function getIcons() {
 /**
  * 造一个空的站点图层（MassMarks）。数据用 setData 填充。
  * __baseOpacity 供 anim.js 的淡入淡出还原透明度用。
- * style：0=地铁（大点红）、1=公交（小点蓝）、2=步行可达（小点紫）。
+ * style：0=地铁（大橙点）、1=公交（小蓝点）、2=步行可达（小红点）。
  */
-export function makeMassMarks(data) {
+export function makeMassMarks(data, options = {}) {
   const { metroIcon, busIcon, walkIcon } = getIcons();
+  const allowWalkStyle = options.allowWalkStyle !== false;
+  const styles = [
+    { url: metroIcon, size: new AMap.Size(METRO_DOT_SIZE, METRO_DOT_SIZE), anchor: new AMap.Pixel(METRO_DOT_SIZE / 2, METRO_DOT_SIZE / 2) },
+    { url: busIcon, size: new AMap.Size(BUS_DOT_SIZE, BUS_DOT_SIZE), anchor: new AMap.Pixel(BUS_DOT_SIZE / 2, BUS_DOT_SIZE / 2) },
+    // 关闭步行换乘的图层根本不装载红色步行图标；即使意外收到 style=2 也回退为蓝点。
+    { url: allowWalkStyle ? walkIcon : busIcon, size: new AMap.Size(WALK_DOT_SIZE, WALK_DOT_SIZE), anchor: new AMap.Pixel(WALK_DOT_SIZE / 2, WALK_DOT_SIZE / 2) },
+  ];
+  if (options.inverseLineStops) {
+    const styleByKey = new Map();
+    for (const point of data) {
+      if (point.style === 2 || !point.lineColor) continue;
+      const size = point.mode === 'metro' ? METRO_DOT_SIZE : BUS_DOT_SIZE;
+      const key = `${point.lineColor}|${size}`;
+      if (!styleByKey.has(key)) {
+        styleByKey.set(key, styles.length);
+        const icon = circleIcon(point.lineColor, size, true);
+        styles.push({ url: icon, size: new AMap.Size(size, size), anchor: new AMap.Pixel(size / 2, size / 2) });
+      }
+      point.style = styleByKey.get(key);
+    }
+  }
   const mm = new AMap.MassMarks(data, {
     opacity: 0.9,
-    zIndex: 110,
-    style: [
-      { url: metroIcon, size: new AMap.Size(10, 10), anchor: new AMap.Pixel(5, 5) },
-      { url: busIcon, size: new AMap.Size(7, 7), anchor: new AMap.Pixel(3.5, 3.5) },
-      { url: walkIcon, size: new AMap.Size(7, 7), anchor: new AMap.Pixel(3.5, 3.5) },
-    ],
+    // 候选站点需高于线路的透明点击热区（route.js 使用 181/191），
+    // 否则原生高德地图会先命中线路，无法点击在线路上的地铁站换乘。
+    zIndex: options.zIndex ?? 110,
+    style: styles,
+    // 纯展示层（如悬浮预览线路上的站点）不生成命中区，避免抢走下层站点的悬浮/点击。
+    interactive: options.interactive !== false,
   });
   mm.__baseOpacity = 0.9;
   return mm;
@@ -56,9 +76,9 @@ export function makeMassMarks(data) {
  * 物理点 → MassMarks 数据。
  * 事件回调里的 e.data 就是这里的对象（因此带上 logicalId，便于反查逻辑站）。
  * @param {object} p 物理点
- * @param {boolean} walkable 是否"步行可达站"（style=2，紫色）
+ * @param {boolean} walkable 是否"步行可达站"（style=2，红色）
  */
-export function stopToData(p, walkable) {
+export function stopToData(p, walkable, lineColor = null) {
   return {
     lnglat: [p.lng, p.lat],
     style: walkable ? 2 : (p.mode === 'metro' ? 0 : 1),
@@ -66,21 +86,22 @@ export function stopToData(p, walkable) {
     name: p.name,
     mode: p.mode,
     logicalId: p.logicalId,
+    lineColor,
   };
 }
 
 /** 画一个带白边的实心圆，返回 dataURL（用作 MassMarks 的图标） */
-function circleIcon(color, radius) {
-  const size = radius * 2;
+function circleIcon(color, size, inverse = false) {
+  const radius = size / 2;
   const c = document.createElement('canvas');
   c.width = c.height = size;
   const ctx = c.getContext('2d');
   ctx.beginPath();
-  ctx.arc(radius, radius, radius, 0, Math.PI * 2);
-  ctx.fillStyle = color;
+  ctx.arc(radius, radius, Math.max(1, radius - 1), 0, Math.PI * 2);
+  ctx.fillStyle = inverse ? '#ffffff' : color;
   ctx.fill();
-  ctx.lineWidth = 2;
-  ctx.strokeStyle = '#ffffff';
+  ctx.lineWidth = inverse ? 2 : 1.5;
+  ctx.strokeStyle = inverse ? color : '#ffffff';
   ctx.stroke();
   return c.toDataURL();
 }

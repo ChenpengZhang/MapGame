@@ -16,16 +16,16 @@
 import { account } from '../core/account.js';
 import { startOnline,leaveOnlineRound } from './online.js';
 import { state } from '../core/state.js';
-import { setStatus, toggleHidden,showCenterToast,setText } from '../core/dom.js';
+import { setStatus, toggleHidden,showCenterToast,setText,hide } from '../core/dom.js';
 import { haversineKm } from '../core/router-api.js';
 import { saveCityId } from '../core/storage.js';
 import { cityById } from '../data/cities.js';
 import { ensureGameDataReady, isGameDataReady } from './data-ready.js';
-import { TUTORIAL_COMMON, TUTORIAL_COMMON_TOUCH } from '../data/levels.js';
 import { drawEndpoints, setMapLocked } from '../map/map-init.js';
-import { applyScenario } from '../map/stop-layer.js';
+import { showMapTutorial, clearMapTutorial } from '../map/tutorial-layer.js';
+import { applyScenario, refreshVisibleStops } from '../map/stop-layer.js';
 import { hideAllPanels, showPanel, setCityLabel, setModeHudVisible, updateFreeButton, updateStoryButton, buildStoryLevels, updateTowerMenuBest, buildCityMenu, setCitySelectLabel, toggleCityMenu } from '../ui/menu.js';
-import { playStory, playHint, hideStoryAndTutorial } from '../ui/story.js';
+import { playStory, hideStory } from '../ui/story.js';
 import { clearResult } from '../ui/result.js';
 import { resetRoute, finishRoute } from './route.js';
 import { saveTowerState } from './progress.js';
@@ -48,11 +48,13 @@ export function beginGameplay(level) {
  *        skipStory 跳过剧情直接开玩；scenario 覆盖关卡自带情景（自由模式勾选的情景走这里）
  */
 export function startLevel(level, opts) {
+  hide('error');
+  const cityId = level.cityId || state.currentCityId;
   // 数据懒加载：首次点开始时数据可能还没下载。
   // 若未就绪 → 触发按需加载，加载完再真正开始本关（递归调用一次）。
-  if (!isGameDataReady()) {
+  if (!isGameDataReady(cityId)) {
     setStatus('正在下载城市交通数据…');
-    ensureGameDataReady().then((ready) => { if (ready) startLevel(level, opts); });
+    ensureGameDataReady(cityId).then((ready) => { if (ready) startLevel(level, opts); });
     return;
   }
   opts = opts || {};
@@ -78,25 +80,22 @@ export function startLevel(level, opts) {
     if(hasLimit)setText('tower-layer-label','时间 ' + (level.goalText || `≤ ${Number(level.timeLimitMin)} 分钟`));
   }
 
-  setCityLabel((cityById(state.currentCityId) || cityById('beijing')).name + ' · ' + level.title);
+  setCityLabel((cityById(cityId) || cityById('beijing')).name + ' · ' + level.title);
   hideAllPanels();
-  hideStoryAndTutorial();
+  hideStory();
+  clearMapTutorial();
   resetRoute();
   applyScenario();
   // 终点图钉被点击 = 完成规划；回调由玩法层提供（地图层不 import game）
-  drawEndpoints({ onDestClick: finishRoute });
+  drawEndpoints({ onDestClick: finishRoute, showWalkRanges: level.showWalkRanges !== false });
+  showMapTutorial(level.mapTutorial);
+  // 新一局的起点改变后立即按新范围重算基础站点颜色。
+  refreshVisibleStops();
 
   if (opts.skipStory || !level.story || !level.story.length) {
     beginGameplay(level);
   } else {
-    playStory(level, () => {
-      // 第一关：完整教学；情景关卡：弹出情景提示；其余：直接进入玩法
-      if (level.series === 1) {
-        // 手机端用"点一下高亮、再点一下确定"的文案，桌面用点击文案
-        const tutorial = state.isTouch ? TUTORIAL_COMMON_TOUCH : TUTORIAL_COMMON;
-        playHint(tutorial, () => beginGameplay(level));
-      } else beginGameplay(level);
-    });
+    playStory(level, () => beginGameplay(level));
   }
 }
 
@@ -111,7 +110,8 @@ export function showMenu() {
     ? { key: state.towerScenarioKey, layer: state.towerLayer, finished: state.finished }
     : null;
   resetRoute();
-  hideStoryAndTutorial();
+  hideStory();
+  clearMapTutorial();
   setMapLocked(false);
   // 爬塔退出：保存最佳纪录；进度只在"未完成的中途退出"时记为当前层。
   // 已完成（通过→已推进到下一层 / 失败→已清空）时，进度已由 showTowerResult 正确更新，这里不再覆盖。
@@ -131,7 +131,7 @@ export function showMenu() {
   showPanel('main-menu');
   clearResult();
   updateFreeButton();  // 自由模式始终开放
-  updateStoryButton(); // 故事模式按城市可用性锁定
+  updateStoryButton(); // 各城市入口指向同一套故事关卡
 }
 
 /** Home 只负责离开；无尽模式未结束的本层按原始开始时间继续计时。 */
@@ -158,13 +158,8 @@ export function openCityMenu() {
   toggleCityMenu();
 }
 
-/** 打开故事模式关卡列表（当前城市没有故事时拦截，不进入） */
+/** 打开共享故事关卡列表，关卡会自动加载自己的城市。 */
 export function openStoryMenu() {
-  const city = cityById(state.currentCityId) || cityById('beijing');
-  if (!city || !city.hasStory) {
-    setStatus('该城市的故事模式尚未开放，敬请期待');
-    return;
-  }
   buildStoryLevels(startLevel); // 卡片点击 → 直接开始该关
   showPanel('story-menu');
 }
@@ -213,7 +208,7 @@ function randomPointWithComp() {
  * @returns {Promise<boolean>} 数据是否就绪
  */
 export async function ensureStopsReady() {
-  if (state.physStops.length) return true;
+  if (isGameDataReady(state.currentCityId)) return true;
   setStatus('数据加载中，请稍候…');
   const ready = await ensureGameDataReady();
   if (!ready) { setStatus('数据加载失败，请刷新重试'); return false; }

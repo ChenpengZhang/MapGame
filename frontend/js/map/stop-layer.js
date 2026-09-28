@@ -26,15 +26,36 @@ import { setStatus, $ } from '../core/dom.js';
 import { makeMassMarks, stopToData } from './stop-marks.js';
 import { fadeInOverlay, captureMassMarksCanvas, removeOverlay } from './anim.js';
 import { mapContainer } from './map-init.js';
-import { cancelPreview } from './hover.js';
+import { isWithinWalkRange } from './walk-range.js';
 
 // ---------- 模块内部状态（只被本文件使用，因此不放进 core/state.js） ----------
 let metroMarks = null;        // 地铁站点层（MassMarks）
 let busMarks = null;          // 公交站点层（MassMarks）
+let originWalkMarks = null;   // 起点 1.5km 内的红色步行站（独立层，确认首站后销毁）
 let metroMarksShown = false;  // 当前是否可见（用于避免重复淡入淡出）
 let busMarksShown = false;
+let originWalkMarksShown = false;
 let refreshTimer = null;      // 平移/缩放刷新防抖
-let stopHandlers = {};        // { onClick, onMouseOver, onMouseOut }
+let stopHandlers = {};        // { onClick, onMouseOver, onMouseOut, onMapClick }
+let mapListeners = null;
+
+/** 切城前卸下旧站点与地图监听，避免两套城市同时接收点击。 */
+export function disposeStops() {
+  if (refreshTimer) clearTimeout(refreshTimer);
+  refreshTimer = null;
+  if (state.map && mapListeners) {
+    for (const [event, handler] of mapListeners) state.map.off(event, handler);
+  }
+  mapListeners = null;
+  for (const marks of [metroMarks, busMarks, originWalkMarks]) {
+    marks?.setMap(null);
+    if (marks?.__canvas?.isConnected) marks.__canvas.remove();
+  }
+  metroMarks = busMarks = originWalkMarks = null;
+  metroMarksShown = busMarksShown = originWalkMarksShown = false;
+  originWalkHasBus = false;
+  stopHandlers = {};
+}
 
 // ============ 站点图层创建 ============
 
@@ -43,14 +64,18 @@ let stopHandlers = {};        // { onClick, onMouseOver, onMouseOut }
  * @param {{onClick?:Function, onMouseOver?:Function, onMouseOut?:Function}} handlers 鼠标事件回调
  */
 export function renderStops(handlers) {
+  disposeStops();
   stopHandlers = handlers || {};
 
   // 基础站点层改为"按视野渲染"：初始空数据，显示时再按当前视野填充，
   // 避免 2.8 万公交站常驻渲染导致缩放/平移卡顿。
-  metroMarks = makeMassMarks([]);
-  busMarks = makeMassMarks([]);
+  metroMarks = makeMassMarks([], { allowWalkStyle: false });
+  busMarks = makeMassMarks([], { allowWalkStyle: false });
+  // 红色步行可达层必须固定压在蓝色公交层之上：缩放跨过显示级别时公交层会晚于它挂载，
+  // 同一层级下后挂载者在上，会让可达站在缩放过程中先显示成蓝色、停止后才变红。
+  originWalkMarks = makeMassMarks([], { allowWalkStyle: true, zIndex: 112 });
 
-  for (const m of [metroMarks, busMarks]) {
+  for (const m of [metroMarks, busMarks, originWalkMarks]) {
     m.setMap(state.map);
     m.hide();
     m.on('mouseover', (e) => { if (stopHandlers.onMouseOver) stopHandlers.onMouseOver(e); });
@@ -60,18 +85,22 @@ export function renderStops(handlers) {
 
   metroMarksShown = false;
   busMarksShown = false;
+  originWalkMarksShown = false;
   updateStopsByZoom();
   // 缩放过程中实时显隐（zoomchange 每次缩放级别变化都触发），缩放结束后刷新视野数据
-  state.map.on('zoomchange', updateStopsByZoom);
-  state.map.on('zoomend', () => { updateStopsByZoom(); scheduleRefreshStops(); });
-  state.map.on('moveend', scheduleRefreshStops);
-  // 手机端：点击地图空白处（非站点/路线）取消两阶段预选；缩放/点按钮不会走这里
-  state.map.on('click', (e) => {
-    if (!state.isTouch) return;
-    const t = e && e.originalEvent && e.originalEvent.target;
+  const onZoomEnd = () => { updateStopsByZoom(); scheduleRefreshStops(); };
+  // 两端一致：点击地图空白处取消预选；平移、缩放和点地图控件不会走取消逻辑。
+  const onMapClick = (e) => {
+    const original = e && (e.originalEvent || e.originEvent);
+    const t = original && original.target;
     const onInteractive = t && t.closest ? t.closest('.leaflet-interactive') : null;
-    if (!onInteractive) cancelPreview();
-  });
+    if (!onInteractive && stopHandlers.onMapClick) stopHandlers.onMapClick(e);
+  };
+  mapListeners = [
+    ['zoomchange', updateStopsByZoom], ['zoomend', onZoomEnd],
+    ['moveend', scheduleRefreshStops], ['click', onMapClick],
+  ];
+  for (const [event, handler] of mapListeners) state.map.on(event, handler);
 }
 
 // ============ 视野内取点与抽稀 ============
@@ -130,14 +159,26 @@ function setStopData(mm, data) {
 /** 按当前视野刷新某一层的点数据 */
 function refreshStopData(mm) {
   if (!mm) return;
+  if (mm === originWalkMarks) {
+    const z = state.map ? state.map.getZoom() : 0;
+    const walkable = viewportStops().filter((stop) =>
+      isWithinWalkRange(stop, state.ORIGIN)
+      && ((stop.mode === 'metro' && !state.scenario.noMetro && z >= METRO_MIN_ZOOM)
+        || (stop.mode === 'bus' && z >= BUS_MIN_ZOOM))
+    );
+    setStopData(mm, walkable.map((stop) => stopToData(stop, true)));
+    return;
+  }
   const mode = mm === metroMarks ? 'metro' : 'bus';
-  setStopData(mm, viewportStops(mode).map(stopToData));
+  // 公交/地铁基础层永远保持蓝/橙；起点红色站由独立图层覆盖，避免状态混入后残留。
+  setStopData(mm, viewportStops(mode).map((stop) => stopToData(stop, false)));
 }
 
 /** 刷新所有"正在显示"的层 */
 export function refreshVisibleStops() {
   if (metroMarksShown) refreshStopData(metroMarks);
   if (busMarksShown) refreshStopData(busMarks);
+  if (originWalkMarksShown) refreshStopData(originWalkMarks);
 }
 
 /** 防抖：平移/缩放结束后 80ms 再刷新视野内站点，避免连续重绘 */
@@ -159,7 +200,16 @@ export function updateStopsByZoom() {
   const z = state.map.getZoom();
   setStopsVisible(metroMarks, showBase && !state.scenario.noMetro && z >= METRO_MIN_ZOOM, () => metroMarksShown, (v) => { metroMarksShown = v; });
   setStopsVisible(busMarks, showBase && z >= BUS_MIN_ZOOM, () => busMarksShown, (v) => { busMarksShown = v; }); // 公交站按缩放等级显隐
+  const showOriginWalk = showBase && state.routeStops.length === 0 && !!state.ORIGIN
+    && ((!state.scenario.noMetro && z >= METRO_MIN_ZOOM) || z >= BUS_MIN_ZOOM);
+  setStopsVisible(originWalkMarks, showOriginWalk, () => originWalkMarksShown, (v) => { originWalkMarksShown = v; });
+  // 红色层在地铁级别（13）就已显示，只含地铁站；缩放跨过公交级别时它不会重新 show，
+  // 必须立刻补上公交步行站，否则蓝色公交层先出现、要等缩放停止才刷新成红色。
+  const walkIncludesBus = showOriginWalk && z >= BUS_MIN_ZOOM;
+  if (originWalkMarksShown && walkIncludesBus !== originWalkHasBus) refreshStopData(originWalkMarks);
+  originWalkHasBus = walkIncludesBus;
 }
+let originWalkHasBus = false; // 红色步行层当前数据是否已包含公交站
 
 /** 站点层显隐：直接 show/hide，不依赖淡出动画回调（回调在 iOS Safari 等环境可能不触发，导致站点层卡住） */
 function setStopsVisible(mm, show, getShown, setShown) {
@@ -167,25 +217,53 @@ function setStopsVisible(mm, show, getShown, setShown) {
   if (getShown() === show) return;
   setShown(show);
   if (show) {
+    if (mm === originWalkMarks) {
+      try { mm.setOptions({ opacity: 0.9 }); } catch (e) { /* 忽略不支持动态透明度的后端 */ }
+      if (mm.__canvas?.style) { mm.__canvas.style.display = ''; mm.__canvas.style.opacity = '0.9'; }
+    }
     refreshStopData(mm); // 显示前按当前视野填充数据（视野渲染）
+    // hideBaseStops 会把图层从地图彻底卸载；恢复时显式重新挂载。
+    mm.setMap(state.map);
     mm.show();
   } else {
-    // 隐藏用 hide() 而非 setMap(null)，这样后续 show() 还能恢复
     mm.hide();
   }
 }
 
-/** 开始规划时淡出基础站点层（候选站点层接管显示） */
+/**
+ * 开始规划时移除基础站点层（候选站点层接管显示）。
+ * 除了 hide 还要清空数据：部分地图后端会延迟隐藏 MassMarks canvas，若只 hide，
+ * 起点范围内原先染红的步行站会在确认首站后短暂或持续残留。
+ * 重置规划时 setStopsVisible 会按当前起点范围重新填充，不影响再次开始。
+ */
 export function hideBaseStops() {
   setStopsVisible(metroMarks, false, () => metroMarksShown, (v) => { metroMarksShown = v; });
   setStopsVisible(busMarks, false, () => busMarksShown, (v) => { busMarksShown = v; });
+  setStopsVisible(originWalkMarks, false, () => originWalkMarksShown, (v) => { originWalkMarksShown = v; });
+  setStopData(metroMarks, []);
+  setStopData(busMarks, []);
+  // 在清数据前后都把红色步行层透明度压到 0；即便原生地图保留旧 canvas 也不可见。
+  try { originWalkMarks?.setOptions({ opacity: 0 }); } catch (e) { /* 忽略 */ }
+  if (originWalkMarks?.__canvas?.style) {
+    originWalkMarks.__canvas.style.opacity = '0';
+    originWalkMarks.__canvas.style.display = 'none';
+  }
+  setStopData(originWalkMarks, []);
+  // 原生高德的 MassMarks.hide() 在连续 setData/缩放时可能留下旧 canvas；
+  // 从地图彻底卸载才能保证起点红色站立即消失。恢复时 setStopsVisible 会重新 setMap。
+  metroMarks?.setMap(null);
+  busMarks?.setMap(null);
+  originWalkMarks?.setMap(null);
+  // 原生高德可能保留已捕获的旧 canvas；步行层独立后可安全定向移除。
+  if (originWalkMarks?.__canvas?.isConnected) originWalkMarks.__canvas.remove();
+  if (originWalkMarks) originWalkMarks.__canvas = null;
 }
 
 // ============ 规划中的"全图显示站点"开关 ============
 
-/** 切换"全图显示站点"（开启时仍可预览站点，但确定/继续规划会被阻止；切换时取消手机端预选） */
+/** 切换"全图显示站点"（开启时仍可预览站点，但确定/继续规划会被阻止） */
 export function toggleShowAllStops() {
-  cancelPreview();
+  if (stopHandlers.onMapClick) stopHandlers.onMapClick(null, true);
   state.showAllStops = !state.showAllStops;
   const btn = $('show-all-btn');
   if (btn) btn.textContent = state.showAllStops ? '关闭全图显示' : '显示全图站点';

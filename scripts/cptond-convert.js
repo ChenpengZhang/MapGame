@@ -29,6 +29,13 @@ const CITIES = {
   guangzhou: { dir: 'Guangzhou', zh: '广州' },
   shenzhen:  { dir: 'Shenzhen',  zh: '深圳' },
   shanghai:  { dir: 'Shanghai',  zh: '上海' },
+  wenshan:   { dir: 'Wenshan Zhuang and Miao', prefix: 'wenshan_zhuang_and_miao', zh: '文山壮族苗族自治州' },
+  // 双河：全城只有 2路、3路两条公交且相互交叉，用作第二关“换乘”教学
+  shuanghe:  { dir: 'Twin Rivers', prefix: 'twin_rivers', zh: '双河' },
+  // 可克达拉：4 条公交的小城，最近站只有绕远的 68路、多走 500m 才有直达 63路，用作第三关“限时 + 步行范围”教学
+  kokdala:   { dir: 'Kokdala', prefix: 'kokdala', zh: '可克达拉' },
+  // 大同：中型城市，快速公交607线与普通 32路 走同一条通道，用作第四关“选对线路”教学
+  datong:    { dir: 'Datong', prefix: 'datong', zh: '大同' },
 };
 
 // ---------- 幽灵站修正（坑2：未开通/预留站仍出现在数据里，需按线路+站名剔除） ----------
@@ -38,6 +45,10 @@ const GHOST_STOPS = {
   guangzhou: {},
   shenzhen: {},
   shanghai: {},
+  wenshan: {},
+  shuanghe: {},
+  kokdala: {},
+  datong: {},
 };
 
 // ---------- WGS-84 → GCJ-02 ----------
@@ -215,13 +226,14 @@ function haversine(lng1, lat1, lng2, lat2) {
 }
 
 // 读取 CPTOND segments（相邻站间真实距离，km），建立双向 lookup
-function loadSegmentDistances(dir) {
+function loadSegmentDistances(dir, prefix = dir.toLowerCase()) {
   const lookup = new Map();
   const bases = [
-    `data/cptond/metro/shapefiles/${dir}/${dir.toLowerCase()}_metro_segments`,
-    `data/cptond/bus/shapefiles/${dir}/${dir.toLowerCase()}_bus_segments`,
+    `data/cptond/metro/shapefiles/${dir}/${prefix}_metro_segments`,
+    `data/cptond/bus/shapefiles/${dir}/${prefix}_bus_segments`,
   ];
   for (const base of bases) {
+    if (!fs.existsSync(path.join(__dirname, '..', base + '.shp'))) continue;
     for (const f of loadFeatures(base)) {
       const s = String(f.attrs.s_stopid || '');
       const e = String(f.attrs.e_stopid || '');
@@ -303,6 +315,7 @@ const BOUNDARY_FILES = {
   shanghai: 'data/boundaries/shanghai.json',
   guangzhou: 'data/boundaries/guangzhou.json',
   shenzhen: 'data/boundaries/shenzhen.json',
+  wenshan: 'data/boundaries/wenshan.json',
 };
 
 // 跨市公交的线路名标识：单字邻市（佛=佛山/莞=东莞）只认开头，多字邻市名可出现在任意位置。
@@ -396,11 +409,11 @@ function convertCity(cityKey) {
   const cfg = CITIES[cityKey];
   if (!cfg) throw new Error('未知城市：' + cityKey + '（可用：' + Object.keys(CITIES).join(', ') + '）');
   const dir = cfg.dir;
-  const prefix = dir.toLowerCase();
-  const OUT_FILE = path.join(__dirname, '..', 'data', prefix + '-transit.json');
+  const prefix = cfg.prefix || dir.toLowerCase();
+  const OUT_FILE = path.join(__dirname, '..', 'data', cityKey + '-transit.json');
 
   const t0 = Date.now();
-  const segDist = loadSegmentDistances(dir);
+  const segDist = loadSegmentDistances(dir, prefix);
   const boundary = loadBoundary(cityKey); // 城市边界（WGS-84，无配置则为 null → 不裁剪）
 
   const stopGroups = new Map(); // route_cn -> [{id,name,lng,lat,seq}]
@@ -410,7 +423,11 @@ function convertCity(cityKey) {
   const pairs = [
     [`data/cptond/metro/shapefiles/${dir}/${prefix}_metro_routes`, `data/cptond/metro/shapefiles/${dir}/${prefix}_metro_stops`],
     [`data/cptond/bus/shapefiles/${dir}/${prefix}_bus_routes`, `data/cptond/bus/shapefiles/${dir}/${prefix}_bus_stops`],
-  ];
+  ].filter(([routesBase, stopsBase]) =>
+    fs.existsSync(path.join(__dirname, '..', routesBase + '.shp'))
+    && fs.existsSync(path.join(__dirname, '..', stopsBase + '.shp'))
+  );
+  if (!pairs.length) throw new Error('找不到城市线路与站点 Shapefile：' + cityKey);
 
   // 未完工线路（status != '1'）的 route_cn。地铁才有 status 语义：
   //   1=运营，2=在建，3=规划；只保留 1（运营），避免把没开通的二期/北延段/中段等当成本体。

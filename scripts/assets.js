@@ -7,7 +7,6 @@ const path = require('node:path');
 function publicAssets(root) {
   const assets = new Map([
     ['/index.html', 'frontend/index.html'],
-    ['/favicon.svg', 'frontend/favicon.svg'],
     ['/shared/router.js', 'shared/router.js'],
   ]);
   function collect(directory, publicDirectory, allowed) {
@@ -20,9 +19,10 @@ function publicAssets(root) {
     }
   }
   collect('frontend/css','/css',new Set(['.css']));
+  collect('frontend/assets','/assets',new Set(['.svg','.png','.jpg','.jpeg','.webp']));
   collect('frontend/js','/js',new Set(['.js']));
-  collect('frontend/fonts','/fonts',new Set(['.css','.woff2','.woff','.txt']));
-  for (const name of ['sample','beijing-transit','guangzhou-transit','shanghai-transit','shenzhen-transit']) {
+  collect('frontend/fonts','/fonts',new Set(['.css','.woff2','.woff','.ttf','.txt']));
+  for (const name of ['sample','beijing-transit','guangzhou-transit','shanghai-transit','shenzhen-transit','wenshan-transit','shuanghe-transit','kokdala-transit','datong-transit']) {
     const relative = `data/${name}.json`;
     if (fs.existsSync(path.join(root,relative))) assets.set(`/${relative}`,relative);
   }

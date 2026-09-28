@@ -118,8 +118,8 @@ export function computeTotalMinutes() {
  * @param {number} gapRatio (玩家耗时 - 最优耗时) / 最优耗时
  */
 export function scoreFor(gapRatio) {
-  if (gapRatio <= 0.05) return { label: '完美', stars: '⭐⭐⭐', color: '#27ae60' };
-  if (gapRatio <= 0.15) return { label: '优秀', stars: '⭐⭐', color: '#2980b9' };
-  if (gapRatio <= 0.30) return { label: '良好', stars: '⭐', color: '#f39c12' };
+  if (gapRatio <= 0.05) return { label: '完美', stars: '<span class="icon icon-star" aria-hidden="true"></span><span class="icon icon-star" aria-hidden="true"></span><span class="icon icon-star" aria-hidden="true"></span>', color: '#27ae60' };
+  if (gapRatio <= 0.15) return { label: '优秀', stars: '<span class="icon icon-star" aria-hidden="true"></span><span class="icon icon-star" aria-hidden="true"></span>', color: '#2980b9' };
+  if (gapRatio <= 0.30) return { label: '良好', stars: '<span class="icon icon-star" aria-hidden="true"></span>', color: '#f39c12' };
   return { label: '还有差距', stars: '', color: '#c0392b' };
 }

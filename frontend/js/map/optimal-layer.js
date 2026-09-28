@@ -2,7 +2,7 @@
  * map/optimal-layer.js —— 最优路线绘制层（青绿色）
  *
  * 【画什么】
- *   系统算出的最优路线：起点步行（虚线）→ 各乘车段（白描边 + 青色主线）→
+ *   系统算出的最优路线：起点步行（虚线）→ 各乘车段（青色外框 + 白色内线）→
  *   换乘点橙色"换"图钉 → 终点步行（虚线）。
  *   与玩家路线配色区分开（玩家是深色黑线），并共用"悬停整组置顶"的交互。
  *
@@ -12,7 +12,7 @@
  */
 
 import { state } from '../core/state.js';
-import { OPTIMAL_COLOR, OPTIMAL_CASING, TRANSFER_WALK_MIN_M } from '../core/config.js';
+import { WALK_COLOR, WALK_LINE_WEIGHT, WALK_LINK_WEIGHT, OPTIMAL_COLOR, OPTIMAL_CASING, TRANSFER_WALK_MIN_M } from '../core/config.js';
 import { getLine, getLogical } from '../data/index-builder.js';
 import { fadeInOverlay, removeOverlay } from './anim.js';
 import { tagRouteOverlay, lineSegmentPath } from './route-layer.js';
@@ -46,10 +46,10 @@ export function drawOptimalRoute(result) {
   activeWalk([result.alight.lng, result.alight.lat], state.DEST).then((r) => { if (r.path) drawOptimalWalk(r.path); });
 }
 
-/** 最优路线的步行段（青色虚线） */
+/** 最优路线的步行段（与玩家步行统一为绿色细虚线） */
 function drawOptimalWalk(path) {
   const poly = new AMap.Polyline({
-    path, strokeColor: OPTIMAL_COLOR, strokeWeight: 4, strokeOpacity: 0.9,
+    path, strokeColor: WALK_COLOR, strokeWeight: WALK_LINE_WEIGHT, strokeOpacity: 0.9,
     strokeStyle: 'dashed', dashArray: [10, 8], lineJoin: 'round', zIndex: 382,
   });
   poly.setMap(state.map);
@@ -58,7 +58,7 @@ function drawOptimalWalk(path) {
   state.optimalOverlays.push(poly);
 }
 
-/** 最优路线的一段乘车（白描边 + 青色主线，两条折线） */
+/** 最优路线的一段乘车（白色描边 + 青色实线，两条折线） */
 function drawOptimalRide(path) {
   const casing = new AMap.Polyline({ path, strokeColor: OPTIMAL_CASING, strokeWeight: 11, strokeOpacity: 0.9, lineJoin: 'round', zIndex: 384 });
   casing.setMap(state.map);
@@ -95,7 +95,7 @@ function drawOptimalTransferWalk(p1, p2) {
   if (!p1 || !p2) return;
   if (haversineKm(p1, p2) * 1000 < TRANSFER_WALK_MIN_M) return;
   const poly = new AMap.Polyline({
-    path: [p1, p2], strokeColor: OPTIMAL_COLOR, strokeWeight: 3, strokeOpacity: 0.9,
+    path: [p1, p2], strokeColor: WALK_COLOR, strokeWeight: WALK_LINK_WEIGHT, strokeOpacity: 0.9,
     strokeStyle: 'dashed', dashArray: [6, 6], lineJoin: 'round', zIndex: 383,
   });
   poly.setMap(state.map);

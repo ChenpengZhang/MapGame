@@ -115,15 +115,10 @@ try {
     assert.ok(!(await page.isVisible('#story-dialog')), '剧情已放完');
   });
 
-  await step('连点「下一步」跳过教学 → 中央浮层显示时限', async () => {
-    for (let i = 0; i < 10; i++) {
-      if (!(await page.isVisible('#tutorial-next'))) break;
-      await page.click('#tutorial-next');
-      await wait(30);
-    }
-    assert.ok(!(await page.isVisible('#tutorial-next')), '教学已放完');
-    assert.equal(await page.textContent('#tower-layer-label'),'≤ 80 分钟');
-    assert.ok(await page.isVisible('#mode-hud'),'故事时限浮层可见');
+  await step('地图显示第一步教学文字 → 第一关没有计时限制', async () => {
+    await page.waitForSelector('.map-tutorial-label');
+    assert.match(await page.textContent('.map-tutorial-label'),/放大地图显示公交站|点击红色点行走到公交站/);
+    assert.ok(!(await page.isVisible('#mode-hud')),'第一关不显示时限浮层');
   });
 
   await step('点「🏠」返回主界面 → 主菜单回来', async () => {

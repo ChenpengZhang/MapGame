@@ -13,6 +13,13 @@ test('tower thresholds match existing game; server derives pass and elapsed time
   assert.throws(()=>settle(stage,1,new Date('2026-09-21T00:00:00Z'),'tower'));
   assert.throws(()=>settle({ ...stage,status:'passed' },1,new Date(),'tower'));
 });
+test('story levels without a time limit pass after a valid route is completed',() => {
+  const stage = {
+    status: 'active', started_at: new Date('2026-09-22T00:00:00Z'),
+    optimal_duration_ms: 10000, stage_no: 1, puzzle: { limitMs: null },
+  };
+  assert.equal(settle(stage, 999999, new Date('2026-09-22T00:00:03Z'), 'story').passed, true);
+});
 test('strict command boundary rejects injected score, clocks, layer, owner, rules and oversized paths',()=> {
   const valid = { stageId:randomUUID(),requestId:randomUUID(),route:[{lineId:'L',fromStopId:'A',toStopId:'B'}] };
   for (const key of ['durationMs','elapsedMs','elapsed_ms','totalElapsedMs','total_elapsed_ms','startedAt','started_at','finishedAt','submittedAt','serverTime','clientTime','userId','stageNo','puzzle','cleared_layers']) {

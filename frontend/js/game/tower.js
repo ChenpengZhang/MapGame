@@ -112,7 +112,7 @@ export function showTowerResult() {
 
   let title, message, restartLabel;
   if (pass) {
-    title = '🗼 第 ' + state.towerLayer + ' 层通过！';
+    title = '第 ' + state.towerLayer + ' 层通过！';
     message = '下一层要求更严苛：比最优慢 ≤ ' + Math.round(towerThreshold(state.towerLayer + 1) * 100) + '%';
     restartLabel = '下一层';
     // 通过后进度推进到下一层（退出时保存）
@@ -128,7 +128,7 @@ export function showTowerResult() {
     state.towerElapsed[state.towerScenarioKey] = 0;
     state.towerRound[state.towerScenarioKey] = null; // 本轮结束，清掉起终点
     saveTowerState();
-    title = '💀 止步第 ' + state.towerLayer + ' 层';
+    title = '止步第 ' + state.towerLayer + ' 层';
     message = '最高纪录：第 ' + state.towerBest[state.towerScenarioKey] + ' 层';
     restartLabel = '重新挑战';
   }

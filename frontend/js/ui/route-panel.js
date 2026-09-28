@@ -55,12 +55,13 @@ function fmtDist(km) {
 
 function walkRowHTML(fromName, toName, distKm, timeMin) {
   const d = (distKm != null && distKm > 0) ? '<span class="rp-km">' + fmtDist(distKm) + '</span>' : '';
-  return '<div class="rp-row"><span class="rp-desc">🚶 <span class="rp-station">' + fromName + '</span> → <span class="rp-station">' + toName + '</span></span>' +
+  return '<div class="rp-row"><span class="rp-desc">步行 <span class="rp-station">' + fromName + '</span> → <span class="rp-station">' + toName + '</span></span>' +
     '<span class="rp-metrics">' + d + '<span class="rp-time">' + timeMin.toFixed(0) + '分</span></span></div>';
 }
 
-function lineRowHTML(lineName, waitMinutes) {
-  return '<div class="rp-row"><span class="rp-desc">🚌 <span class="rp-pill">' + lineName + '</span></span>' +
+function lineRowHTML(lineName, waitMinutes, color) {
+  const bg = color ? ' style="background:' + color + '"' : '';
+  return '<div class="rp-row"><span class="rp-desc">乘 <span class="rp-pill"' + bg + '>' + lineName + '</span> 候车</span>' +
     '<span class="rp-metrics"><span class="rp-time">' + waitMinutes.toFixed(0) + '分</span></span></div>';
 }
 
@@ -75,7 +76,7 @@ function rideRowHTML(fromName, toName, stops, distKm, rideMin) {
 
 function transferRowHTML(label, penaltyMin) {
   const t = penaltyMin > 0 ? ('+' + penaltyMin.toFixed(0) + '分') : '0分';
-  return '<div class="rp-row"><span class="rp-desc">　↪ <span class="rp-pill">' + label + '</span></span>' +
+  return '<div class="rp-row"><span class="rp-desc">　<span class="rp-pill rp-transfer">' + label + '</span></span>' +
     '<span class="rp-metrics"><span class="rp-time">' + t + '</span></span></div>';
 }
 
@@ -91,9 +92,9 @@ export function renderRoutePanel() {
     if (state.finished) {
       rows.push(walkRowHTML(state.ORIGIN_NAME, state.DEST_NAME, haversineKm(state.ORIGIN, state.DEST), state.walkToFirstMin));
     } else {
-      rows.push('<div class="rp-desc" style="color:#888;">…（点击站点开始规划，或点击「终」图钉直接步行到终点）</div>');
+      rows.push('<div class="rp-desc rp-note">…（点击站点开始规划，或点击「终」图钉直接步行到终点）</div>');
     }
-    rows.push('<div class="rp-total">总耗时约 ' + computeTotalMinutes().toFixed(0) + ' 分钟</div>');
+    rows.push('<div class="rp-total">总耗时约 <b>' + computeTotalMinutes().toFixed(0) + '</b> 分钟</div>');
     appendOptimalComparison(rows);
     panel.innerHTML = rows.join('');
     applyCollapse(panel);
@@ -117,7 +118,7 @@ export function renderRoutePanel() {
       rows.push(walkRowHTML(from.logical.name, to.logical.name, dKm, min));
       continue;
     }
-    rows.push(lineRowHTML(ride.name, waitMin(ride)));
+    rows.push(lineRowHTML(ride.name, waitMin(ride), ride.color));
     const st = rideStats(ride, from.logical, to.logical);
     rows.push(rideRowHTML(
       from.logical.name, to.logical.name,
@@ -138,9 +139,9 @@ export function renderRoutePanel() {
     const last = state.routeStops[state.routeStops.length - 1];
     rows.push(walkRowHTML(last.logical.name, state.DEST_NAME, haversineKm(last.point, state.DEST), state.walkToDestMin));
   } else {
-    rows.push('<div class="rp-desc" style="color:#888;">…（继续选站，或点击「终」图钉完成）</div>');
+    rows.push('<div class="rp-desc rp-note">…（继续选站，或点击「终」图钉完成）</div>');
   }
-  rows.push('<div class="rp-total">总耗时约 ' + computeTotalMinutes().toFixed(0) + ' 分钟</div>');
+  rows.push('<div class="rp-total">总耗时约 <b>' + computeTotalMinutes().toFixed(0) + '</b> 分钟</div>');
 
   appendOptimalComparison(rows);
 
@@ -154,8 +155,7 @@ function appendOptimalComparison(rows) {
   const opt = state.optimalResult;
   if (!opt) return;
 
-  rows.push('<hr style="border:none;border-top:1px dashed #ccc;margin:6px 0;">');
-  rows.push('<div class="rp-title" style="color:#00897b;">🏆 最优路线（系统）</div>');
+  rows.push('<div class="rp-title rp-opt">最优路线（系统）</div>');
   rows.push(walkRowHTML(
     state.ORIGIN_NAME, opt.board.name,
     haversineKm(state.ORIGIN, [opt.board.lng, opt.board.lat]), opt.walkToMin
@@ -168,7 +168,7 @@ function appendOptimalComparison(rows) {
       const tp = (la && lb) ? transferPenaltyMin(la, lb) : 0;
       rows.push(transferRowHTML(tp > 0 ? '换乘' : '同站换乘', tp));
     } else {
-      rows.push(lineRowHTML(leg.lineName, leg.waitMin));
+      rows.push(lineRowHTML(leg.lineName, leg.waitMin, getLine(leg.lineId)?.color));
       rows.push(rideRowHTML(leg.fromName, leg.toName, leg.stops, leg.distanceKm, leg.rideMin));
     }
   }
@@ -176,7 +176,7 @@ function appendOptimalComparison(rows) {
     opt.alight.name, state.DEST_NAME,
     haversineKm([opt.alight.lng, opt.alight.lat], state.DEST), opt.walkFromMin
   ));
-  rows.push('<div class="rp-total" style="color:#00897b;">最优总耗时约 ' + opt.totalMin.toFixed(0) + ' 分钟</div>');
+  rows.push('<div class="rp-total">最优总耗时约 <b>' + opt.totalMin.toFixed(0) + '</b> 分钟</div>');
 
   const playerTotal = computeTotalMinutes();
   const gap = playerTotal - opt.totalMin;
@@ -187,5 +187,5 @@ function appendOptimalComparison(rows) {
     : gapRatio < -0.001
       ? ('比最优快 ' + (-gapRatio * 100).toFixed(0) + '%（-' + (-gap).toFixed(0) + ' 分钟）')
       : '与最优持平！';
-  rows.push('<div style="color:' + s.color + ';font-weight:700;">评分：' + s.label + ' ' + s.stars + ' · ' + gapTxt + '</div>');
+  rows.push('<div class="rp-score">评分：' + s.label + ' ' + s.stars + ' · ' + gapTxt + '</div>');
 }

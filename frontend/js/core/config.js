@@ -22,14 +22,14 @@ import { DEFAULT_PARAMS as ROUTER_DEFAULTS } from './router-api.js';
  * 数据文件版本号：重跑数据管线（scripts/cptond-convert.js）更新数据后，把这里 +1，
  * 浏览器缓存才会失效并重新下载（URL 带 ?v=N，版本号一变就是全新资源）。
  */
-export const DATA_VERSION = 6;
+export const DATA_VERSION = 7;
 
 // 注：地图初始中心、数据文件路径、城市列表都按城市区分，见 data/cities.js。
 
 // ============ 站点渲染阈值 ============
 
-export const METRO_MIN_ZOOM = 13;   // 地铁站：放大到更近才显示（站点少，仍可较早出现）
-export const BUS_MIN_ZOOM = 15;     // 公交站：放大到该等级才显示（视野渲染 + 抽稀，避免低缩放卡顿）
+export const METRO_MIN_ZOOM = 13;   // 地铁站：比之前晚一级显示，降低中等缩放下的地图拥挤
+export const BUS_MIN_ZOOM = 15;     // 公交站数量较多，放大到该等级再显示以控制密度和性能
 export const MAX_BUS_RENDER = 8000; // 公交站低缩放时的渲染上限：视野内超过则空间抽稀，避免整城 2.8 万点卡顿
 
 // ============ 配色 ============
@@ -42,9 +42,14 @@ export const LINE_PALETTE = [
   '#ffe119', '#a9a9a9', '#d2f53c',
 ];
 
-export const WALK_COLOR = '#6c5ce7';    // 步行（虚线）
-export const ROUTE_COLOR = '#111111';   // 已规划乘车段（深色主线）
-export const ROUTE_CASING = '#ffffff';  // 已规划乘车段白色描边
+export const METRO_STOP_COLOR = '#f39c12'; // 地铁站（较大橙点）
+export const BUS_STOP_COLOR = '#3498db';   // 公交站（较小蓝点）
+export const WALK_STOP_COLOR = '#e74c3c';  // 步行可达站（较小红点）
+export const WALK_COLOR = '#2ecc71';       // 步行线路（绿色细虚线）
+export const WALK_LINE_WEIGHT = 3;
+export const WALK_LINK_WEIGHT = 2;
+export const ROUTE_COLOR = '#111111';   // 玩家已确认的乘车段（实线）
+export const ROUTE_CASING = '#ffffff';  // 玩家乘车段白色外描边
 export const OPTIMAL_COLOR = '#00b894'; // 最优路线（青绿色）
 export const OPTIMAL_CASING = '#ffffff';
 

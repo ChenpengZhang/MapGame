@@ -23,6 +23,8 @@ export function makeEl(id) {
     addEventListener(type, fn) { (this.__ev[type] = this.__ev[type] || []).push(fn); },
     dispatch(type, evt) { for (const fn of this.__ev[type] || []) fn(evt || {}); },
     appendChild(c) { this.children.push(c); return c; },
+    replaceChildren(...children) { this.children = children; },
+    setAttribute() {},
     querySelector() { return makeEl(id + '::child'); },
     querySelectorAll() { return []; },
   };
@@ -92,6 +94,7 @@ class MapStub {
   getBounds() { return new BoundsStub([115.0, 39.0], [117.5, 41.0]); }
   setStatus() {}
   on(evt, fn) { (this.__ev[evt] = this.__ev[evt] || []).push(fn); }
+  off(evt, fn) { this.__ev[evt] = (this.__ev[evt] || []).filter((listener) => listener !== fn); }
 }
 class OverlayStub {
   constructor(opts) { this.__opts = Object.assign({ strokeOpacity: 1, opacity: 0.9 }, opts); this.__ev = {}; this.map = null; }

@@ -146,6 +146,37 @@
 
   function attach(o, m) { if (m) m.addLayer(o); else o.remove(); }
 
+  // 高德覆盖物依赖 zIndex；Leaflet 默认却只按“加入先后”叠放。候选网络每次重绘都
+  // 晚于玩家路线创建，若不映射层级就会把已规划实线完全盖住。为每个高德 zIndex
+  // 建立对应 pane，让两套后端遵守同一套图层顺序。
+  function paneFor(m, zIndex) {
+    if (!m || !m._map || !Number.isFinite(Number(zIndex))) return null;
+    const z = Math.round(Number(zIndex));
+    const name = 'amap-z-' + z;
+    let pane = m._map.getPane(name);
+    if (!pane) pane = m._map.createPane(name);
+    pane.style.zIndex = String(400 + z);
+    return name;
+  }
+
+  function moveToPane(layer, m, zIndex) {
+    const pane = paneFor(m, zIndex);
+    if (pane) layer.options.pane = pane;
+  }
+
+  // 已挂载的矢量图形改层级：把原 SVG 元素移到目标 pane 的渲染器里（同 Leaflet bringToFront 的做法）。
+  // 不能 remove + addLayer：那会在鼠标下方新建元素，旧元素的 mouseout 永远不会触发，
+  // 路线悬停置顶后就再也恢复不了原层级。各 pane 渲染器坐标系一致，原渲染器照常负责重绘。
+  function restackPath(layer, m, zIndex) {
+    const pane = paneFor(m, zIndex);
+    if (!pane) return;
+    layer.options.pane = pane;
+    const renderer = m._map.getRenderer(layer);
+    const root = renderer && renderer._rootGroup;
+    if (root && layer._path) root.appendChild(layer._path);
+    else { layer.remove(); m._map.addLayer(layer); }
+  }
+
   AMap.Polyline = class {
     constructor(opts) {
       // 入口：GCJ-02 path → WGS-84
@@ -159,8 +190,14 @@
         lineJoin: 'round',
         interactive: opts.interactive !== false, // 高亮/步行等瞬态线不拦截鼠标，避免悬浮站点点位闪烁
       });
+      this._z = opts.zIndex;
+      this._map = null;
     }
-    setMap(m) { attach(this._o, m); }
+    setMap(m) {
+      this._map = m || null;
+      if (m) moveToPane(this._o, m, this._z);
+      attach(this._o, m);
+    }
     setOptions(o) {
       const cur = this._o.options;
       this._o.setStyle({
@@ -169,6 +206,10 @@
         opacity: o.strokeOpacity !== undefined ? o.strokeOpacity : cur.opacity,
         dashArray: o.dashArray !== undefined ? o.dashArray : cur.dashArray,
       });
+      if (o.zIndex !== undefined && o.zIndex !== this._z) {
+        this._z = o.zIndex;
+        if (this._map) restackPath(this._o, this._map, this._z);
+      }
     }
     on(e, cb) { this._o.on(e, cb); }
     getOptions() { return { strokeOpacity: this._o.options.opacity }; }
@@ -186,8 +227,14 @@
         fillOpacity: opts.fillOpacity != null ? opts.fillOpacity : 0.25,
         interactive: opts.interactive !== false, // 高亮圈不拦截鼠标
       });
+      this._z = opts.zIndex;
+      this._map = null;
     }
-    setMap(m) { attach(this._o, m); }
+    setMap(m) {
+      this._map = m || null;
+      if (m) moveToPane(this._o, m, this._z);
+      attach(this._o, m);
+    }
     setOptions(o) {
       const cur = this._o.options;
       this._o.setStyle({
@@ -197,6 +244,10 @@
         fillColor: o.fillColor !== undefined ? o.fillColor : cur.fillColor,
         fillOpacity: o.fillOpacity !== undefined ? o.fillOpacity : cur.fillOpacity,
       });
+      if (o.zIndex !== undefined && o.zIndex !== this._z) {
+        this._z = o.zIndex;
+        if (this._map) restackPath(this._o, this._map, this._z);
+      }
     }
     on(e, cb) { this._o.on(e, cb); }
     getOptions() { return { strokeOpacity: this._o.options.opacity }; }
@@ -204,21 +255,46 @@
 
   AMap.Marker = class {
     constructor(opts) {
+      // 高德 offset = 内容左上角相对坐标点的偏移；Leaflet 的 iconAnchor 正好是它的相反数。
+      // 不能写死 (12,12)：那只对 offset(-12,-12) 的图钉成立，教学提示等 offset(0,0) 的标记会偏 12px。
+      const off = opts.offset || { x: -12, y: -12 };
       const icon = L.divIcon({
         html: opts.content || '',
         className: 'amap-pin-marker',
         iconSize: L.point(24, 24),
-        iconAnchor: L.point(12, 12),
+        iconAnchor: L.point(-off.x, -off.y),
       });
       // 入口：GCJ-02 position → WGS-84
-      this._o = L.marker(gcj2leaflet([opts.position[0], opts.position[1]]), { icon });
+      // 教学文字等纯展示 Marker 必须允许点击穿透，否则会盖住同坐标的公交站点。
+      const interactive = opts.clickable !== false;
+      this._o = L.marker(gcj2leaflet([opts.position[0], opts.position[1]]), {
+        icon, interactive, keyboard: interactive,
+      });
       this._z = opts.zIndex || 0;
+      this._map = null;
     }
     setMap(m) {
-      if (m) { this._o.setZIndexOffset(this._z); m.addLayer(this._o); } else this._o.remove();
+      this._map = m || null;
+      if (m) {
+        moveToPane(this._o, m, this._z);
+        m.addLayer(this._o);
+      } else this._o.remove();
     }
     on(e, cb) { this._o.on(e, cb); }
-    setOptions(o) { if (o.zIndex !== undefined) { this._z = o.zIndex; this._o.setZIndexOffset(o.zIndex); } }
+    setPosition(p) { // 入口：GCJ-02 → WGS-84
+      const lng = p.getLng ? p.getLng() : p[0], lat = p.getLat ? p.getLat() : p[1];
+      this._o.setLatLng(gcj2leaflet([lng, lat]));
+    }
+    setOptions(o) {
+      if (o.zIndex !== undefined && o.zIndex !== this._z) {
+        this._z = o.zIndex;
+        if (this._map) {
+          this._o.remove();
+          moveToPane(this._o, this._map, this._z);
+          this._map.addLayer(this._o);
+        }
+      }
+    }
     getOptions() { return {}; }
   };
 
@@ -235,6 +311,9 @@
       this._base = (opts && opts.opacity) != null ? opts.opacity : 0.9;
       this.__baseOpacity = this._base;
       this.__canvas = null;
+      this._z = opts && opts.zIndex;
+      this._paneName = null;
+      this._interactive = !(opts && opts.interactive === false);
       this._group = L.layerGroup();
       this._rebuild();
     }
@@ -242,27 +321,31 @@
       this._group.clearLayers();
       for (const d of this._data) {
         const metro = d.style === 0;
-        const walk = d.style === 2; // 步行可达站（紫色，与步行标线同色）
+        const walk = d.style === 2; // 步行可达站（红色，区别于蓝色公交站和橙色地铁站）
+        const lineStop = !walk && !!d.lineColor;
         // 入口：GCJ-02 lnglat → WGS-84（仅渲染用；d 本身保持 GCJ-02 供事件回传）
         const ll = gcj2leaflet([d.lnglat[0], d.lnglat[1]]);
         const dot = L.circleMarker(ll, {
-          radius: metro ? 5 : 3.5,
-          color: '#fff', weight: 1,
-          fillColor: metro ? '#e74c3c' : walk ? '#6c5ce7' : '#3498db',
+          radius: metro ? 6 : walk ? 3 : 3.5,
+          color: lineStop ? d.lineColor : '#fff', weight: lineStop ? 2 : 1,
+          fillColor: lineStop ? '#fff' : metro ? '#f39c12' : walk ? '#e74c3c' : '#3498db',
           fillOpacity: this._base,
           opacity: this._base,
+          pane: this._paneName || 'overlayPane',
           interactive: false,
         });
+        this._group.addLayer(dot);
+        if (!this._interactive) continue;
         const hit = L.circleMarker(ll, {
           radius: HIT_R,
           stroke: false, fill: true, fillOpacity: 0,
+          pane: this._paneName || 'overlayPane',
           interactive: true,
         });
         const dd = d;
         hit.on('mouseover', () => this._fire('mouseover', { data: dd }));
         hit.on('mouseout', () => this._fire('mouseout', { data: dd }));
         hit.on('click', () => this._fire('click', { data: dd }));
-        this._group.addLayer(dot);
         this._group.addLayer(hit);
       }
     }
@@ -271,7 +354,14 @@
       if (a) for (let i = 0; i < a.length; i++) a[i](obj);
     }
     on(type, cb) { (this._handlers[type] = this._handlers[type] || []).push(cb); }
-    setMap(m) { this._map = m; if (m) m.addLayer(this._group); else this._group.remove(); }
+    setMap(m) {
+      this._map = m;
+      if (m) {
+        this._paneName = paneFor(m, this._z);
+        this._rebuild();
+        m.addLayer(this._group);
+      } else this._group.remove();
+    }
     show() { if (this._map) this._map.addLayer(this._group); }
     hide() { if (this._map) this._map.removeLayer(this._group); }
     setData(data) { this._data = data || []; this._rebuild(); }

@@ -4,6 +4,7 @@ import { rateLimit } from 'express-rate-limit';
 import { toNodeHandler, fromNodeHeaders } from 'better-auth/node';
 import { z } from 'zod';
 import { GameError, CITIES, SCENARIOS } from '../domain/rules.js';
+import { LEVELS } from '../../../frontend/js/data/levels.js';
 
 const uuid = z.string().uuid();
 const city = z.enum(CITIES);
@@ -19,7 +20,7 @@ export const startBody = z.discriminatedUnion('mode', [
   }).strict(),
   z.object({
     mode: z.literal('story'),
-    levelId: z.enum(['school', 'yizhuang', 'airport', 'metrodown', 'smooth', 'rain']),
+    levelId: z.enum(LEVELS.map((level) => level.id)),
   }).strict(),
 ]);
 
@@ -121,6 +122,7 @@ export function createApp({ auth, game, repository, config }) {
 
   app.get(`${prefix}/me`, (req, res) => res.json({ userId: req.userId }));
   app.get(`${prefix}/history`, async (req, res) => res.json(await game.history(req.userId)));
+  app.get(`${prefix}/story-progress`, async (req, res) => res.json(await game.storyProgress(req.userId)));
 
   app.get(`${prefix}/tower-progress`, async (req, res) => {
     const query = z.object({ city }).strict().parse(req.query);

@@ -34,6 +34,7 @@ export const state = {
 
   // ---------- 当前城市 ----------
   currentCityId: 'beijing',     // 当前选中城市（data/cities.js 的 id；启动时由 storage 恢复）
+  loadedCityId: null,          // 当前内存索引和地图图层所属城市（故事关卡可以不同于所选城市）
 
   // ---------- 关卡与情景 ----------
   ORIGIN: null,                 // 起点 [lng, lat]（由关卡设定）
@@ -53,8 +54,10 @@ export const state = {
   mapLocked: false,             // 剧情期间锁定地图拖拽/缩放
   showAllStops: false,          // 规划中"全图显示站点"开关（开启时不能继续规划）
   isTouch: false,               // 是否触摸设备（由 app.js 启动时用 isTouchDevice 判定）
-  pendingStart: null,           // 手机端两阶段选站：已预览但未确认的起点 {logical, point}
-  pendingCandidate: null,       // 手机端两阶段选站：已预览但未确认的下一站 {logical}
+  pendingStart: null,           // 两阶段选站：第一次点击预览、再次点击同一物理站确认的起点
+  pendingCandidate: null,       // 两阶段选站：第一次点击预览、再次点击同一物理站确认的下一站
+  selectedLineName: null,       // 当前站手动选中的下一段线路名（同名上下行视为同一线路）
+  selectedLineId: null,         // 直接点击地图线路时锁定其具体方向；点名称牌时保持按同名线路选择
 
   // ---------- 无尽模式（爬塔） ----------
   towerActive: false,           // 是否处于爬塔中
@@ -76,7 +79,9 @@ export const state = {
   finished: false,              // 玩家是否已点击终点完成规划
 
   // ---------- 地图覆盖物句柄 ----------
-  endpointMarkers: [],          // 起终点图钉
+  endpointOverlays: [],         // 起终点图钉 + 1.5km 步行范围圈
+  originWalkRangeCircle: null,  // 起点范围圈：确认首站后隐藏，重置规划后恢复
+  destinationWalkRangeCircle: null, // 终点范围圈：规划过程中持续提示末站可达范围
   activeOverlays: [],           // 悬浮高亮（线路 + 高亮圈）
   metroBase: [],                // 地铁底图（灰色地铁线）
   candidateMarks: null,         // 候选站点层（MassMarks）
