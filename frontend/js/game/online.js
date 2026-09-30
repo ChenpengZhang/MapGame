@@ -10,6 +10,7 @@ import { ensureGameDataReady } from './data-ready.js';
 import { showResultOverlay,towerSign } from '../ui/result.js';
 import { startTowerTimer,stopTowerTimer } from './tower-timer.js';
 import { loadStoryProgress } from './progress.js';
+import { customLevelView, customScenario, showOnlineCustomResult } from './custom-play.js';
 
 const towerLimitPercent=layer=>Math.round(Math.max(0.01,1-(layer-1)*0.99/11)*100);
 
@@ -30,7 +31,18 @@ function activateOnline(payload,command,owner,epoch,meta={}) {
     const cloud={...payload,command,meta,owner,result:null,pending:null,submission:null,error:null,
       completedElapsedMs:Math.max(0,Number(payload.run?.total_elapsed_ms)||0)};
     state.onlineRound=cloud;
-    state.walkTransfer=command.mode==='tower';
+    state.walkTransfer=command.mode==='tower' || command.mode==='custom'; // 服务端只在这两种模式验证步行换乘
+    if(command.mode==='custom'){
+      // 自定义：关卡组内容来自开局响应（最新版本），第几关由服务端题目决定
+      const map=payload.map || meta.customMap;
+      cloud.meta={...meta,customMap:map};
+      if(state.customPlay){state.customPlay.map=map;state.customPlay.index=puzzle.levelIndex;state.customPlay.total=Number(payload.run?.total_score)||state.customPlay.total||0;}
+      const level=customLevelView(map,puzzle.levelIndex,state.customPlay?.total||0);
+      startLevel(level,{onlineStage:true,skipStory:!level.story,scenario:customScenario(puzzle.scenario)});
+      if($('force-walk-toggle')) $('force-walk-toggle').disabled=false;
+      setText('result-sync','');hide('result-retry');
+      return true;
+    }
     const scenario=puzzle.options || {allowMetro:command.scenario!=='noMetro',busSpeedFactor:1,walkSpeedFactor:1};
     const story=command.mode==='story' ? LEVELS.find(level=>level.id===puzzle.storyId) : null;
     const daily=command.mode==='daily' ? {
@@ -64,7 +76,7 @@ function activateOnline(payload,command,owner,epoch,meta={}) {
     setText('result-sync','');hide('result-retry');
     return true;
 }
-export async function startOnline(command,{restart=false,city=null,date=null,scenarioKey=null}={}) {
+export async function startOnline(command,{restart=false,city=null,date=null,scenarioKey=null,customMap=null}={}) {
   if(state.onlineStarting)return;
   state.onlineStarting=true;
   const owner=account.user?.id,epoch=state.onlineEpoch||0;
@@ -74,15 +86,25 @@ export async function startOnline(command,{restart=false,city=null,date=null,sce
     // 每日挑战的题目城市由服务端决定（与玩家当前选择的城市无关），先取今日概况再加载该城市数据
     if(command.mode==='daily' && !city){const info=await api('/daily');city=info.city;date=info.date;}
     const dataCity=storyLevel?.cityId || (command.mode==='daily' ? city : null);
-    if(dataCity ? !(await ensureGameDataReady(dataCity)) : !(await ensureStopsReady()))return;
+    // 自定义模式在拿到题目后才知道本关城市（见下），这里不预加载当前城市
+    if(command.mode!=='custom' && (dataCity ? !(await ensureGameDataReady(dataCity)) : !(await ensureStopsReady())))return;
     showLoading('正在加载…');
     let payload=await api('/runs',command);
+    if(command.mode==='custom'){
+      // 继续进行中的一局时，上一关可能已结算：直接开下一关；每关城市可能不同，先加载该关城市数据
+      if(payload.stage.status!=='active'){
+        const map=payload.map;
+        payload={...payload,stage:await api(`/runs/${payload.run.id}/next`,{})};
+        payload.map=map;
+      }
+      if(!(await ensureGameDataReady(payload.stage.puzzle.city)))return;
+    }
     if(restart && command.mode==='tower') {
       await api(`/runs/${payload.run.id}/abandon`,{});
       payload=await api('/runs',command);
     }
     if(payload.stage.status==='passed' && command.mode==='tower') payload.stage=await api(`/runs/${payload.run.id}/next`,{});
-    activateOnline(payload,command,owner,epoch,{city,date,scenarioKey});
+    activateOnline(payload,command,owner,epoch,{city,date,scenarioKey,customMap});
   } catch(error) {
     setStatus(error.message);
     if(command.mode==='story')showError('故事关卡启动失败：'+error.message);
@@ -139,6 +161,7 @@ function renderResult(cloud) {
   if(state.onlineRound!==cloud)return;
   const result=cloud.result,tower=cloud.command.mode==='tower';
   if(cloud.command.mode==='daily'){renderDailyResult(cloud);return;}
+  if(cloud.command.mode==='custom'){showOnlineCustomResult(result,cloud.stage);show('result-restart');hide('result-retry');setText('result-sync','');return;}
   if(tower)stopTowerTimer(Number(result.elapsed_ms),Number(result.total_elapsed_ms));
   if (cloud.command.mode === 'story' && result.passed) void loadStoryProgress();
   showResultOverlay({
@@ -172,9 +195,24 @@ function renderDailyResult(cloud) {
   }).catch(()=>{ if(state.onlineRound===cloud)setText('result-message','每天可以多次尝试，排行按当日最好成绩计算。'); });
 }
 
+/** 自定义关卡组：进入下一关（城市可能与上一关不同，先加载数据） */
+export async function advanceOnlineRound() {
+  const cloud=state.onlineRound;
+  if(!cloud || cloud.pending || state.onlineStarting)return;
+  state.onlineStarting=true;
+  const epoch=state.onlineEpoch||0;
+  try{
+    const stage=await api(`/runs/${cloud.run.id}/next`,{});
+    if(!(await ensureGameDataReady(stage.puzzle.city)))return;
+    cloud.run.total_score=cloud.result?.total_score ?? cloud.run.total_score;
+    activateOnline({run:cloud.run,stage,map:cloud.meta?.customMap},cloud.command,cloud.owner,epoch,cloud.meta);
+  }catch(error){setStatus(error.message);showCenterToast(error.message);}
+  finally{state.onlineStarting=false;hideLoading();}
+}
 export async function restartOnline() {
   const cloud=state.onlineRound;
   if(!cloud || cloud.pending)return;
+  if(cloud.command.mode==='custom')return startOnline({...cloud.command,restart:true},{customMap:cloud.meta?.customMap});
   if(cloud.command.mode==='tower' && cloud.result?.passed){
     if(state.onlineStarting)return;
     state.onlineStarting=true;

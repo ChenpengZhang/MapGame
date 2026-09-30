@@ -28,7 +28,7 @@ const cards = {
 
 /** MassMarks 的 mouseover 回调：防抖后渲染高亮（触摸设备不使用悬浮事件） */
 export function onStopMouseOver(e) {
-  if (state.storyActive) return; // 剧情/教学期间禁止交互
+  if (state.storyActive || state.editorActive) return; // 剧情/教学、关卡编辑期间禁止交互
   if (isMapPracticePending()) return; // 地图操作练习期间静默忽略站点预览
   if (state.isTouch) return;     // 触摸设备：合成 mouseover 会与两阶段点击打架
   if (state.pendingStart || state.pendingCandidate) return; // 已点击预览后保持红圈，不被悬浮覆盖

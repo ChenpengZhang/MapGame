@@ -752,6 +752,9 @@ await step('每日挑战面板：今日题目、游客提示、我的名次', as
   globalThis.fetch = async (url) => {
     const u = String(url);
     if (u.endsWith('/api/daily')) return json({ id: 'd1', date: '2026-09-29', city: 'beijing', scenario: 'normal', opensAt: closesAt, closesAt });
+    if (u.includes('/leaderboard?') && u.includes('date=2026-09-28')) {
+      return json({ leaders: [{ rank: '1', name: '昨日冠军', duration_ms: 1200000, achieved_at: '2026-09-28T09:00:00' }], player: null });
+    }
     if (u.includes('/leaderboard?') && u.includes('mode=daily')) {
       return json({ leaders: [{ rank: '1', name: '甲', duration_ms: 1500000, achieved_at: '2026-09-29T08:05:09' }], player: { rank: '23', name: '测试玩家', duration_ms: 1860000, is_me: true } });
     }
@@ -772,6 +775,12 @@ await step('每日挑战面板：今日题目、游客提示、我的名次', as
     assert.equal(el('daily-mine').textContent, '今日最好 31.0 分钟 · 第 23 名', '前 20 名以外也显示自己的名次');
     assert.equal(el('daily-board').children.length, 3, '前 20 + 分隔行 + 自己');
     assert.equal(el('daily-board').children[0].children[3].textContent, '08:05:09', '第二排名键完成时间显示在列表中');
+    assert.equal(el('daily-yesterday-date').textContent, '2026-09-28', '侧栏显示前一天的日期');
+    assert.equal(el('daily-yesterday-board').children[0].children[1].textContent, '昨日冠军', '侧栏显示昨日排行');
+    const aside = el('daily-yesterday');
+    const collapsedBefore = aside.classList.contains('collapsed');
+    el('daily-yesterday-toggle').dispatch('click');
+    assert.equal(aside.classList.contains('collapsed'), !collapsedBefore, '点击把手折叠/展开昨日排行');
   } finally {
     globalThis.fetch = originalFetch;
     account.user = null;

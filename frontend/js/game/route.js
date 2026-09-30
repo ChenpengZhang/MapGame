@@ -196,7 +196,7 @@ function onCandidateLineClick(line, event) {
 
 /** 基础站点层的点击回调（由 app.js 注入到 map/stop-layer.js） */
 export function onStopClick(e) {
-  if (state.storyActive) return; // 剧情/教学期间禁止开始规划
+  if (state.storyActive || state.editorActive) return; // 剧情/教学、关卡编辑期间禁止开始规划
   if (isMapPracticePending()) {
     clearHighlight();
     return;

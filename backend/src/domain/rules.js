@@ -37,10 +37,10 @@ export function settle(stage, durationMs, receivedAt, mode) {
   ensure(Number.isSafeInteger(elapsedMs) && elapsedMs >= 0, 'INVALID_SERVER_CLOCK', 503);
   ensure(Number.isSafeInteger(durationMs) && durationMs > 0, 'INVALID_ROUTE_DURATION');
 
-  // 通过判定：带时限的故事关看绝对时限；无时限教学关与每日/随机恒为 true；
+  // 通过判定：带时限的故事关与自定义关看绝对时限；无时限教学关与每日/随机恒为 true；
   // 无尽模式看“≤ 最优 × (1 + 本层阈值)”。
   const passed =
-    mode === 'story'
+    mode === 'story' || mode === 'custom'
       ? stage.puzzle.limitMs == null || durationMs <= stage.puzzle.limitMs
       : mode !== 'tower' ||
         durationMs <= Math.ceil(Number(stage.optimal_duration_ms) * (1 + threshold(stage.stage_no)));

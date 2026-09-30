@@ -102,6 +102,13 @@
       // 去掉 Leaflet 默认的“国旗 + Leaflet”前缀，只保留 OpenStreetMap 版权署名（OSM 许可要求）
       if (m.attributionControl) m.attributionControl.setPrefix(false);
       this._map = m;
+      // 与原生高德一致：地图点击事件带 GCJ-02 的 e.lnglat（关卡编辑器用它放置起终点）。
+      // 构造时最先注册，Leaflet 按注册顺序调用，后注册的监听拿到的是同一个已补上坐标的事件对象。
+      m.on('click', (ev) => {
+        if (!ev.latlng || ev.lnglat) return;
+        const [lng, lat] = wgs2gcj(ev.latlng.lng, ev.latlng.lat);
+        ev.lnglat = new AMap.LngLat(lng, lat);
+      });
       this._focusing = false;
       const interruptFocus = () => {
         if (!this._focusing) return;

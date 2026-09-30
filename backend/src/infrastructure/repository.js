@@ -69,13 +69,36 @@ export class Repository {
     return run;
   }
 
+  // 自定义模式的“已完成回合数/累计用时/总分”与爬塔的“已通过层数/累计用时”共用 cleared_layers 等列名，
+  // 回合推进与提交校验（stage_no === cleared_layers + 1）两种模式走同一套逻辑。
   run(id, userId) {
     return this.one(
-      `SELECT g.*,COALESCE(t.cleared_layers,0) AS cleared_layers,
-    COALESCE(t.total_elapsed_ms,0) AS total_elapsed_ms FROM game_runs g
-    LEFT JOIN tower_run_stats t ON t.run_id=g.id WHERE g.id=$1 AND g.user_id=$2 FOR UPDATE OF g`,
+      `SELECT g.*,COALESCE(t.cleared_layers,c.rounds_done,0) AS cleared_layers,
+    COALESCE(t.total_elapsed_ms,c.total_elapsed_ms,0) AS total_elapsed_ms,c.total_score FROM game_runs g
+    LEFT JOIN tower_run_stats t ON t.run_id=g.id LEFT JOIN custom_run_stats c ON c.run_id=g.id
+    WHERE g.id=$1 AND g.user_id=$2 FOR UPDATE OF g`,
       [id, userId],
     );
+  }
+
+  activeCustom(userId, mapId) {
+    return this.one(
+      `SELECT g.*,c.rounds_done AS cleared_layers,c.total_elapsed_ms,c.total_score FROM game_runs g
+      JOIN custom_run_stats c ON c.run_id=g.id
+      WHERE g.user_id=$1 AND g.mode='custom' AND g.status='active' AND g.custom_map_id=$2`,
+      [userId, mapId],
+    );
+  }
+
+  async createCustomRun(userId, map, puzzle) {
+    const run = await this.one(
+      `INSERT INTO game_runs(id,user_id,mode,city_id,scenario_key,data_hash,rules_version,custom_map_id,custom_map_version)
+      VALUES($1,$2,'custom',$3,$4,$5,$6,$7,$8) RETURNING *`,
+      [randomUUID(), userId, puzzle.city, puzzle.scenario, puzzle.dataHash, puzzle.rulesVersion, map.id, map.version],
+    );
+    await this.db.query('INSERT INTO custom_run_stats(run_id,achieved_at) VALUES($1,$2)', [run.id, run.created_at]);
+    await this.db.query('UPDATE custom_maps SET play_count=play_count+1 WHERE id=$1', [map.id]);
+    return { ...run, cleared_layers: 0, total_elapsed_ms: 0, total_score: 0 };
   }
 
   stage(id) {
@@ -109,9 +132,10 @@ export class Repository {
   // 爬塔累计层数/耗时、非爬塔写单次成绩。整体运行在调用方的事务里。
   async record(run, stage, requestId, route, result, receivedAt) {
     const submission = await this.one(
-      `INSERT INTO round_submissions(id,round_id,request_id,route,duration_ms,elapsed_ms,passed,submitted_at)
-      VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *,round_id AS stage_id`,
-      [randomUUID(), stage.id, requestId, JSON.stringify(route), result.durationMs, result.elapsedMs, result.passed, receivedAt],
+      `INSERT INTO round_submissions(id,round_id,request_id,route,duration_ms,elapsed_ms,passed,submitted_at,score)
+      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *,round_id AS stage_id`,
+      [randomUUID(), stage.id, requestId, JSON.stringify(route), result.durationMs, result.elapsedMs, result.passed, receivedAt,
+        result.score ?? null],
     );
 
     await this.db.query(
@@ -120,7 +144,10 @@ export class Repository {
     );
 
     const cleared = run.mode === 'tower' && result.passed ? stage.stage_no : run.cleared_layers;
-    const status = run.mode !== 'tower' || !result.passed ? 'completed' : 'active';
+    // 自定义模式：无论本关成败都进入下一关，最后一关提交后整组结束
+    const status = run.mode === 'custom'
+      ? (stage.stage_no >= stage.puzzle.levelCount ? 'completed' : 'active')
+      : run.mode !== 'tower' || !result.passed ? 'completed' : 'active';
 
     await this.db.query(
       `UPDATE game_runs SET status=$2,finished_at=CASE WHEN $2='completed' THEN $3::timestamptz ELSE NULL END WHERE id=$1`,
@@ -131,6 +158,12 @@ export class Repository {
       await this.db.query(
         `UPDATE tower_run_stats SET cleared_layers=$2,total_elapsed_ms=total_elapsed_ms+$3,achieved_at=$4 WHERE run_id=$1`,
         [run.id, cleared, result.elapsedMs, receivedAt],
+      );
+    } else if (run.mode === 'custom') {
+      await this.db.query(
+        `UPDATE custom_run_stats SET rounds_done=$2,total_score=total_score+$3,total_elapsed_ms=total_elapsed_ms+$4,achieved_at=$5
+        WHERE run_id=$1`,
+        [run.id, stage.stage_no, result.score, result.elapsedMs, receivedAt],
       );
     } else if (run.mode !== 'tower') {
       await this.db.query(
@@ -240,6 +273,107 @@ export class Repository {
       SELECT name,duration_ms,achieved_at,rank,position,user_id=$2 AS is_me FROM ranked
       WHERE position<=20 OR user_id=$2 ORDER BY duration_ms ASC,achieved_at,user_id`,
         [date, viewerId ?? ''],
+      )
+    ).rows;
+  }
+
+  // ============ 自定义关卡组 ============
+
+  customMapByCode(code) {
+    return this.one(
+      `SELECT m.*,u.name AS author_name FROM custom_maps m JOIN "user" u ON u.id=m.owner_id
+      WHERE m.code=$1 AND m.deleted_at IS NULL`,
+      [code],
+    );
+  }
+
+  customMapById(id) {
+    return this.one('SELECT * FROM custom_maps WHERE id=$1', [id]);
+  }
+
+  async countCustomMaps(ownerId) {
+    return (await this.one('SELECT count(*)::int AS n FROM custom_maps WHERE owner_id=$1 AND deleted_at IS NULL', [ownerId])).n;
+  }
+
+  async createCustomMap(ownerId, code, { title, description, visibility, levels }) {
+    return this.one(
+      `INSERT INTO custom_maps(id,code,owner_id,title,description,visibility,levels)
+      VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+      [randomUUID(), code, ownerId, title, description, visibility, JSON.stringify(levels)],
+    );
+  }
+
+  /** 关卡内容变了才升版本（旧版本的对局与排行随之失效）；只改标题/说明/公开范围不影响排行 */
+  updateCustomMap(id, { title, description, visibility, levels }) {
+    return this.one(
+      `UPDATE custom_maps SET title=$2,description=$3,visibility=$4,
+        version=version+CASE WHEN levels=$5::jsonb THEN 0 ELSE 1 END,levels=$5::jsonb,updated_at=clock_timestamp()
+      WHERE id=$1 AND deleted_at IS NULL RETURNING *`,
+      [id, title, description, visibility, JSON.stringify(levels)],
+    );
+  }
+
+  async deleteCustomMap(id) {
+    await this.db.query('UPDATE custom_maps SET deleted_at=clock_timestamp() WHERE id=$1', [id]);
+    await this.db.query(
+      "UPDATE game_runs SET status='abandoned',finished_at=clock_timestamp() WHERE custom_map_id=$1 AND status='active'",
+      [id],
+    );
+  }
+
+  async abandonCustom(userId, mapId) {
+    await this.db.query(
+      "UPDATE game_runs SET status='abandoned',finished_at=clock_timestamp() WHERE user_id=$1 AND custom_map_id=$2 AND status='active'",
+      [userId, mapId],
+    );
+  }
+
+  /** 广场列表：只含公开且未删除的关卡组；q 模糊匹配标题 */
+  async listCustomMaps({ sort, q, offset, limit }) {
+    const order = sort === 'new' ? 'm.created_at DESC' : 'm.play_count DESC,m.created_at DESC';
+    return (
+      await this.db.query(
+        `SELECT m.code,m.title,m.description,m.play_count,m.created_at,m.updated_at,u.name AS author_name,
+          jsonb_array_length(m.levels) AS level_count,
+          (SELECT array_agg(DISTINCT l->>'city') FROM jsonb_array_elements(m.levels) l) AS cities
+        FROM custom_maps m JOIN "user" u ON u.id=m.owner_id
+        WHERE m.visibility='public' AND m.deleted_at IS NULL
+          AND ($1::text IS NULL OR m.title ILIKE '%' || $1 || '%')
+        ORDER BY ${order} LIMIT $2 OFFSET $3`,
+        [q || null, limit, offset],
+      )
+    ).rows;
+  }
+
+  async myCustomMaps(ownerId) {
+    return (
+      await this.db.query(
+        `SELECT m.code,m.title,m.description,m.visibility,m.play_count,m.created_at,m.updated_at,
+          jsonb_array_length(m.levels) AS level_count,
+          (SELECT array_agg(DISTINCT l->>'city') FROM jsonb_array_elements(m.levels) l) AS cities
+        FROM custom_maps m WHERE m.owner_id=$1 AND m.deleted_at IS NULL ORDER BY m.updated_at DESC`,
+        [ownerId],
+      )
+    ).rows;
+  }
+
+  /** 关卡组排行：每人取当前版本下已完成的最好一局（总分高者优先，同分用时短者优先） */
+  async customLeaderboard(mapId, version, viewerId) {
+    return (
+      await this.db.query(
+        `WITH personal AS (
+      SELECT g.user_id,u.name,c.total_score,c.total_elapsed_ms,c.achieved_at,
+        row_number() OVER(PARTITION BY g.user_id ORDER BY c.total_score DESC,c.total_elapsed_ms ASC,c.achieved_at,g.id) AS choice
+      FROM custom_run_stats c JOIN game_runs g ON g.id=c.run_id JOIN "user" u ON u.id=g.user_id
+      WHERE g.mode='custom' AND g.status='completed' AND c.invalidated_at IS NULL
+        AND g.custom_map_id=$1 AND g.custom_map_version=$2
+    ), ranked AS (SELECT user_id,name,total_score,total_elapsed_ms,achieved_at,
+      rank() OVER(ORDER BY total_score DESC,total_elapsed_ms ASC) AS rank,
+      row_number() OVER(ORDER BY total_score DESC,total_elapsed_ms ASC,achieved_at,user_id) AS position
+      FROM personal WHERE choice=1)
+      SELECT name,total_score,total_elapsed_ms,achieved_at,rank,position,user_id=$3 AS is_me FROM ranked
+      WHERE position<=20 OR user_id=$3 ORDER BY total_score DESC,total_elapsed_ms ASC,achieved_at,user_id`,
+        [mapId, version, viewerId ?? ''],
       )
     ).rows;
   }

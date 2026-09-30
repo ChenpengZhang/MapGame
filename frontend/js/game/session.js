@@ -30,6 +30,7 @@ import { clearResult } from '../ui/result.js';
 import { resetRoute, finishRoute } from './route.js';
 import { saveTowerState } from './progress.js';
 import { stopTowerTimer } from './tower-timer.js';
+import { closeCustomEditor } from './custom-editor.js';
 
 // ============ 地图交互锁（剧情/教学期间禁止拖拽缩放） ============
 // 锁定实现放在 map/map-init.js（它同时管滚轮缩放），这里只负责在合适的时机调用。
@@ -59,7 +60,7 @@ export function startLevel(level, opts) {
     return;
   }
   opts = opts || {};
-  if(account.user && !opts.onlineStage && level.id !== 'tower' && level.id !== 'random') {
+  if(account.user && !opts.onlineStage && level.id !== 'tower' && level.id !== 'random' && level.id !== 'custom') {
     return startOnline({mode:'story',levelId:level.id});
   }
   if(!opts.onlineStage) leaveOnlineRound();
@@ -111,6 +112,8 @@ export function showMenu() {
   const keepBlind = !!state.scenario?.blindMap && !state.finished;
   const wasOnline=!!state.onlineRound;
   leaveOnlineRound();
+  if (state.editorActive) closeCustomEditor(); // 编辑中点了回主页：直接关闭编辑器（未保存的修改丢弃）
+  state.customPlay = null; // 自定义关卡组：离开即结束本次游玩（登录玩家的进行中对局保留在服务端，可继续）
   // 先记下爬塔状态：resetRoute 会清掉 finished，必须在它之前取
   const tower = state.towerActive
     ? { key: state.towerScenarioKey, layer: state.towerLayer, finished: state.finished }

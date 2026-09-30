@@ -129,7 +129,7 @@ node --env-file=.env scripts/test-mail.mjs 你的邮箱@example.com
 
 注册后必须输入邮件中的 6 位验证码才能登录；密码最少 12 字符。验证码有效期 10 分钟、最多尝试 5 次，服务端仅保存哈希。找回密码按“邮箱 → 验证码 → 新密码”完成，成功后撤销旧会话。
 
-游戏接口（除 health、daily 和 leaderboard，其余均需已验证邮箱的登录用户）：
+游戏接口（除 health、daily、leaderboard 和自定义关卡组的列表/详情，其余均需已验证邮箱的登录用户）：
 
 | 方法与路径 | 行为 |
 |---|---|
@@ -144,6 +144,19 @@ node --env-file=.env scripts/test-mail.mjs 你的邮箱@example.com
 | POST `/runs/:id/abandon` | `{}`；放弃当前对局 |
 | GET `/leaderboard?mode=daily&date=2026-09-22` | 每日榜（用时升序，同用时按完成时刻） |
 | GET `/leaderboard?mode=tower&city=beijing&scenario=normal` | 当前地图哈希/规则版本的爬塔榜 |
+| GET `/custom-maps?sort=popular&q=&page=0` | 自定义关卡组广场（仅公开的；`sort` 为 `popular` 或 `new`，每页 20 个） |
+| GET `/custom-maps/:code` | 关卡组详情（8 位分享码，公开与仅链接的都可访问） |
+| GET `/my/custom-maps` | 我创建的关卡组 |
+| POST `/custom-maps` | 创建：`{title, description, visibility:"public"\|"unlisted", levels:[…]}`，每人最多 30 个 |
+| PUT `/custom-maps/:code` | 作者修改；关卡内容变化时版本 +1，旧版本的对局作废、排行重新开始 |
+| DELETE `/custom-maps/:code` | 作者删除（软删除），进行中的对局一并作废 |
+| POST `/runs` `{"mode":"custom","map":"分享码","restart"?:true}` | 开始/继续一组自定义关卡；每关一个回合，`/runs/:id/next` 领取下一关（本关成败都可继续） |
+| GET `/leaderboard?mode=custom&map=分享码` | 关卡组当前版本的排行（总分降序，同分按累计用时） |
+
+自定义关卡（`levels` 数组元素，1–10 个）：`{city, origin:[lng,lat], dest:[lng,lat], scenario, timeLimit, originName?, destName?, title?, text?}`。
+`scenario` 为无尽模式的 6 种之一；`timeLimit` 为 `null`、`{"type":"minutes","value":1–300}` 或 `{"type":"ratio","value":1.01–5}`（最速用时的倍数）。
+保存时服务端逐关校验：起终点至少相距 1.6 km，且存在乘车路线；出错返回 `LEVEL_TOO_CLOSE:2` 这类带关卡序号的错误码。
+最优用时由服务端在每个回合开局时按当前数据重算，客户端不能提交。每关得分 = 5000 × 最优用时 / 路线用时（上限 5000，超时 0 分），规则在 `frontend/js/data/custom-maps.js`，前后端共用。
 
 ```json
 {

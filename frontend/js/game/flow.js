@@ -23,6 +23,7 @@ import { resetRoute } from './route.js';
 import { showResultOverlay } from '../ui/result.js';
 import { EVENTS, on } from '../core/bus.js';
 import { showMapTutorial } from '../map/tutorial-layer.js';
+import { nextCustomLevel, restartCustomRun, showLocalCustomResult } from './custom-play.js';
 
 /**
  * 关卡结算弹窗（故事模式 / 自由模式）：
@@ -66,6 +67,7 @@ export function showLevelResult() {
 
 /** "下一关"：进入下一关；已是最后一关则记下通关并回菜单。 */
 export function nextLevel() {
+  if (state.customPlay) return nextCustomLevel();
   const idx = LEVELS.indexOf(state.currentLevel);
   if (idx >= 0 && idx + 1 < LEVELS.length) {
     startLevel(LEVELS[idx + 1]);
@@ -81,6 +83,7 @@ export function nextLevel() {
 
 /** "重开"：爬塔按通过与否决定进下一层还是回第 1 层；其它模式重玩本关 */
 export function restartLevel() {
+  if (state.customPlay) return restartCustomRun(); // 自定义关卡组：“重玩整组”
   if(state.onlineRound)return restartOnline();
   resetRoute();
   if (state.towerActive) {
@@ -98,6 +101,7 @@ export function restartLevel() {
 on(EVENTS.ROUTE_FINISHED, () => { if(state.onlineRound) void submitOnlineResult(); });
 on(EVENTS.OPTIMAL_READY, () => {
   if(state.onlineRound)return;
-  if (state.towerActive) showTowerResult();
+  if (state.customPlay) showLocalCustomResult();
+  else if (state.towerActive) showTowerResult();
   else showLevelResult();
 });

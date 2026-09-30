@@ -18,8 +18,8 @@ import { LEVELS, TOWER_SCENARIOS } from '../data/levels.js';
 import { CITIES, cityById } from '../data/cities.js';
 import { loadAmapKey, loadAmapSecurity } from '../core/storage.js';
 
-/** 互斥的五个主面板（同一时间只该出现一个；城市选择是顶栏下拉，不在此列） */
-export const PANELS = ['main-menu', 'story-menu', 'tower-menu', 'daily-menu', 'settings-panel'];
+/** 互斥的主面板（同一时间只该出现一个；城市选择是顶栏下拉，不在此列） */
+export const PANELS = ['main-menu', 'story-menu', 'tower-menu', 'daily-menu', 'custom-menu', 'custom-detail', 'settings-panel'];
 
 /**
  * 同步"菜单态"：只要任意一个全屏面板可见，就给 #app 打上 .menu-open，

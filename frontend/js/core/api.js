@@ -15,12 +15,23 @@ const messages = {
   WRONG_DIRECTION_OR_MISSING_EDGE:'路线方向或站间数据无效，尚未入库。',
   STAGE_ALREADY_SETTLED:'本关已结算，请返回菜单恢复进度。',RUN_NOT_ACTIVE:'本局已结束，请重新开始。',
   RUN_NOT_FOUND:'此对局不属于当前账户或已不存在。',
+  MAP_NOT_FOUND:'找不到这个关卡组，可能已被作者删除。',NOT_MAP_OWNER:'只有作者可以修改这个关卡组。',
+  MAP_LIMIT_REACHED:'每人最多保存 30 个关卡组，请先删除不用的关卡组。',
+  MAP_CHANGED:'作者更新了这个关卡组，请重新开始。',
+  LEVEL_TOO_CLOSE:'起点和终点太近（需相距 1.6 公里以上）。',LEVEL_UNREACHABLE:'起点到终点没有可行的公交/地铁路线。',
+  UNKNOWN_CITY:'关卡使用了不支持的城市。',
 };
-export async function api(path,body) {
+/** 带关卡序号的错误码（如 LEVEL_TOO_CLOSE:2）→ “第 2 关：…” */
+function messageFor(code) {
+  const match = /^([A-Z_]+):(\d+)$/.exec(code || '');
+  if (match && messages[match[1]]) return `第 ${match[2]} 关：${messages[match[1]]}`;
+  return messages[code];
+}
+export async function api(path,body,method) {
   let response;
   try {
     response = await fetch('/mapgame/api'+path,{
-      method:body === undefined ? 'GET':'POST',credentials:'same-origin',
+      method:method || (body === undefined ? 'GET':'POST'),credentials:'same-origin',
       headers:body === undefined ? {} : {'Content-Type':'application/json'},
       body:body === undefined ? undefined : JSON.stringify(body),
       signal:AbortSignal.timeout(30000),
@@ -34,7 +45,7 @@ export async function api(path,body) {
     if(response.status===401 && !path.startsWith('/auth/') && typeof window !== 'undefined' && window.dispatchEvent) {
       window.dispatchEvent(new CustomEvent('mapgame:session-expired'));
     }
-    const error = new Error(response.status === 429 ? '操作过于频繁，请稍后重试。' : messages[code] || '请求未成功，请稍后重试。');
+    const error = new Error(response.status === 429 ? '操作过于频繁，请稍后重试。' : messageFor(code) || '请求未成功，请稍后重试。');
     error.code=code;error.status=response.status;throw error;
   }
   return data;

@@ -40,6 +40,7 @@ import { buildStoryLevels, openSettingsPanel, closeSettingsPanel, setCityLabel, 
 import { hideResultOverlay } from './ui/result.js';
 import { storyNext } from './ui/story.js';
 import { openDailyMenu, startDaily } from './game/daily.js';
+import { bindCustomMenu, openSharedMapFromUrl } from './game/custom-menu.js';
 
 // ============ 1. 引导 ============
 
@@ -113,6 +114,7 @@ function bindUiEvents() {
   on('daily-btn', openDailyMenu);
   on('daily-start', startDaily);
   on('daily-back-btn', showMenu);
+  bindCustomMenu(showMenu); // 自定义模式：广场 / 详情 / 编辑器入口
 
   // ---- 爬塔：四种畸变 ----
   on('tower-normal', () => startTower('normal'));
@@ -158,6 +160,7 @@ function bindUiEvents() {
   // ---- 结果弹窗 ----
   on('result-next', nextLevel);        // 下一关
   on('result-exit', exitTowerAfterResult);
+  on('result-home', showMenu);
   on('result-restart', restartLevel);  // 重开本关 / 下一层
   on('result-viewmap', hideResultOverlay);
   on('result-toggle-btn', () => { hide('result-toggle-btn'); show('result-overlay'); });
@@ -195,7 +198,7 @@ loadTowerState();      // 爬塔纪录（localStorage）
 buildStoryLevels(startLevel); // 预生成关卡卡片（打开故事菜单时也会重建）
 refreshMenuChrome();          // 首屏即为主菜单，隐藏地图上的游戏 UI
 bootstrap();
-void initializeAccount();
+void initializeAccount().finally(openSharedMapFromUrl); // 分享链接 ?map=分享码：账户状态就绪后再打开（决定能否编辑）
 
 /**
  * 手机端路线面板/站点卡片是贴底的抽屉，会盖住地图右下角的 OpenStreetMap 署名。

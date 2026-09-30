@@ -8,6 +8,7 @@
  */
 
 import { api } from '../core/api.js';
+import { state } from '../core/state.js';
 import { account } from '../core/account.js';
 import { $, setText, toggleHidden, showCenterToast } from '../core/dom.js';
 import { cityById } from '../data/cities.js';
@@ -61,8 +62,8 @@ function boardRow(list, row, own) {
   list.appendChild(tr);
 }
 
-function boardMessage(text) {
-  const list = $('daily-board');
+function boardMessage(text, listId = 'daily-board') {
+  const list = $(listId);
   if (!list) return;
   list.replaceChildren();
   const tr = document.createElement('tr');
@@ -74,16 +75,16 @@ function boardMessage(text) {
   list.appendChild(tr);
 }
 
-/** 当日排行 + 我的最好成绩（服务端只返回前 20 名；我不在前 20 时单独附带我的名次） */
-async function loadBoard(version) {
-  boardMessage('正在加载排行…');
+/** 拉取某日排行并填入表格；返回服务端结果（失败时在表格里显示错误并返回 null） */
+async function fillBoard(listId, date, version, emptyText) {
+  boardMessage('正在加载排行…', listId);
   try {
-    const board = await api(`/leaderboard?${new URLSearchParams({ mode: 'daily', date: dailyInfo.date })}`);
-    if (version !== requestVersion) return;
-    const list = $('daily-board');
+    const board = await api(`/leaderboard?${new URLSearchParams({ mode: 'daily', date })}`);
+    if (version !== requestVersion) return null;
+    const list = $(listId);
     list.replaceChildren();
     const leaders = board?.leaders || [];
-    if (!leaders.length && !board?.player) boardMessage('今天还没有人完成，来当第一个吧');
+    if (!leaders.length && !board?.player) boardMessage(emptyText, listId);
     for (const row of leaders) boardRow(list, row, !!row.is_me);
     if (board?.player) {
       const tr = document.createElement('tr');
@@ -95,11 +96,60 @@ async function loadBoard(version) {
       list.appendChild(tr);
       boardRow(list, board.player, true);
     }
-    const mine = board?.player || leaders.find((row) => row.is_me);
-    setText('daily-mine', mine ? `今日最好 ${formatMinutes(mine.duration_ms)} · 第 ${mine.rank} 名` : (account.user ? '今天还没有完成记录' : ''));
+    return board;
   } catch (error) {
-    if (version === requestVersion) boardMessage(error.message);
+    if (version === requestVersion) boardMessage(error.message, listId);
+    return null;
   }
+}
+
+/** 当日排行 + 我的最好成绩（服务端只返回前 20 名；我不在前 20 时单独附带我的名次） */
+async function loadBoard(version) {
+  const board = await fillBoard('daily-board', dailyInfo.date, version, '今天还没有人完成，来当第一个吧');
+  if (!board) return;
+  const mine = board.player || (board.leaders || []).find((row) => row.is_me);
+  setText('daily-mine', mine ? `今日最好 ${formatMinutes(mine.duration_ms)} · 第 ${mine.rank} 名` : '');
+}
+
+/** 题目日期的前一天（YYYY-MM-DD，按日历日计算，与时区无关） */
+export function previousDate(date) {
+  const d = new Date(date + 'T00:00:00Z');
+  d.setUTCDate(d.getUTCDate() - 1);
+  return d.toISOString().slice(0, 10);
+}
+
+/** 昨日排行（侧栏，已截止的最终名次） */
+async function loadYesterdayBoard(version) {
+  const date = previousDate(dailyInfo.date);
+  setText('daily-yesterday-date', date);
+  await fillBoard('daily-yesterday-board', date, version, '昨天没有人完成');
+}
+
+// ============ 昨日排行侧栏：可折叠到屏幕右缘 ============
+const YESTERDAY_COLLAPSED_KEY = 'mg_daily_yesterday_collapsed';
+
+function setYesterdayCollapsed(collapsed) {
+  const aside = $('daily-yesterday');
+  if (!aside) return;
+  aside.classList.toggle('collapsed', collapsed);
+  const toggle = $('daily-yesterday-toggle');
+  if (toggle) {
+    toggle.setAttribute?.('aria-expanded', collapsed ? 'false' : 'true');
+    toggle.setAttribute?.('aria-label', collapsed ? '展开昨日排行' : '收起昨日排行');
+  }
+  try { localStorage.setItem(YESTERDAY_COLLAPSED_KEY, collapsed ? '1' : '0'); } catch { /* 存储不可用时只影响本次 */ }
+}
+
+function initYesterdayPanel() {
+  const toggle = $('daily-yesterday-toggle');
+  if (!toggle || toggle.__bound) return;
+  toggle.__bound = true;
+  let saved = null;
+  try { saved = localStorage.getItem(YESTERDAY_COLLAPSED_KEY); } catch { /* 忽略 */ }
+  // 默认：宽屏展开；手机或窄窗口收起（侧栏会盖住中间的今日排行）
+  const narrow = typeof window !== 'undefined' && window.innerWidth < 1180;
+  setYesterdayCollapsed(saved != null ? saved === '1' : (!!state.isTouch || narrow));
+  toggle.addEventListener('click', () => setYesterdayCollapsed(!$('daily-yesterday').classList.contains('collapsed')));
 }
 
 /** 打开每日挑战面板 */
@@ -123,7 +173,8 @@ export async function openDailyMenu() {
       if ($('daily-menu')?.classList.contains('hidden')) { clearInterval(countdownTimer); countdownTimer = null; return; }
       renderInfo();
     }, 30000);
-    await loadBoard(version);
+    initYesterdayPanel();
+    await Promise.all([loadBoard(version), loadYesterdayBoard(version)]);
   } catch (error) {
     if (version === requestVersion) setText('daily-info', '今日题目获取失败：' + error.message);
   }

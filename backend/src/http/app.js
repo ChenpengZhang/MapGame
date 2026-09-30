@@ -5,12 +5,48 @@ import { toNodeHandler, fromNodeHeaders } from 'better-auth/node';
 import { z } from 'zod';
 import { GameError, CITIES, SCENARIOS } from '../domain/rules.js';
 import { LEVELS } from '../../../frontend/js/data/levels.js';
+import { CUSTOM_LIMITS as L, CUSTOM_SCENARIO_KEYS } from '../../../frontend/js/data/custom-maps.js';
 
 const uuid = z.string().uuid();
 const city = z.enum(CITIES);
 const scenario = z.enum(Object.keys(SCENARIOS));
 
+const shareCode = z.string().regex(/^[A-HJ-NP-Z2-9]{8}$/);
+const lngLat = z.tuple([z.number().min(-180).max(180), z.number().min(-90).max(90)]);
+const shortText = (max) => z.string().trim().max(max);
+
+/** 一个自定义关卡：只接受这些字段（最优用时等由服务端计算，不接受客户端提供） */
+export const customLevel = z.object({
+  city,
+  origin: lngLat,
+  dest: lngLat,
+  originName: shortText(L.placeNameMax).optional(),
+  destName: shortText(L.placeNameMax).optional(),
+  scenario: z.enum(CUSTOM_SCENARIO_KEYS),
+  timeLimit: z.union([
+    z.null(),
+    z.object({ type: z.literal('minutes'), value: z.number().int().min(L.minutesMin).max(L.minutesMax) }).strict(),
+    z.object({ type: z.literal('ratio'), value: z.number().min(L.ratioMin).max(L.ratioMax) }).strict(),
+  ]),
+  title: shortText(L.levelTitleMax).optional(),
+  text: shortText(L.levelTextMax).optional(),
+}).strict();
+
+export const customMapBody = z.object({
+  title: z.string().trim().min(1).max(L.titleMax),
+  description: shortText(L.descriptionMax).default(''),
+  visibility: z.enum(['public', 'unlisted']),
+  levels: z.array(customLevel).min(1).max(L.maxLevels),
+}).strict();
+
+const customListQuery = z.object({
+  sort: z.enum(['popular', 'new']).default('popular'),
+  q: z.string().max(40).default(''),
+  page: z.coerce.number().int().min(0).max(50).default(0),
+}).strict();
+
 export const startBody = z.discriminatedUnion('mode', [
+  z.object({ mode: z.literal('custom'), map: shareCode, restart: z.boolean().optional() }).strict(),
   z.object({ mode: z.literal('daily') }).strict(),
   z.object({ mode: z.literal('tower'), city, scenario }).strict(),
   z.object({
@@ -52,6 +88,7 @@ const boardQuery = z.discriminatedUnion('mode', [
     ),
   }).strict(),
   z.object({ mode: z.literal('tower'), city, scenario }).strict(),
+  z.object({ mode: z.literal('custom'), map: shareCode }).strict(),
 ]);
 
 const empty = z.object({}).strict();
@@ -110,6 +147,16 @@ export function createApp({ auth, game, repository, config }) {
     res.json(await game.leaderboard(boardQuery.parse(req.query), viewerId));
   });
 
+  // 自定义关卡组：广场列表与详情对游客公开（游客可以本地游玩，但不计入排行）
+  const viewer = async (req) => {
+    const session = await auth.api.getSession({ headers: fromNodeHeaders(req.headers) });
+    return session?.user?.emailVerified ? session.user.id : null;
+  };
+  app.get(`${prefix}/custom-maps`, async (req, res) =>
+    res.json(await game.listCustomMaps(customListQuery.parse(req.query))));
+  app.get(`${prefix}/custom-maps/:code`, async (req, res) =>
+    res.json(await game.getCustomMap(shareCode.parse(req.params.code), await viewer(req))));
+
   // 以下路由都要求“已登录且邮箱已验证”；游客只能访问上面的公开接口。
   app.use(prefix, async (req, res, next) => {
     const session = await auth.api.getSession({ headers: fromNodeHeaders(req.headers) });
@@ -130,6 +177,16 @@ export function createApp({ auth, game, repository, config }) {
   });
 
   app.get(`${prefix}/saves`, async (req, res) => res.json(await game.saves(req.userId)));
+
+  app.get(`${prefix}/my/custom-maps`, async (req, res) => res.json(await game.myCustomMaps(req.userId)));
+  app.post(`${prefix}/custom-maps`, async (req, res) =>
+    res.json(await game.createCustomMap(req.userId, customMapBody.parse(req.body))));
+  app.put(`${prefix}/custom-maps/:code`, async (req, res) =>
+    res.json(await game.updateCustomMap(req.userId, shareCode.parse(req.params.code), customMapBody.parse(req.body))));
+  app.delete(`${prefix}/custom-maps/:code`, async (req, res) => {
+    await game.deleteCustomMap(req.userId, shareCode.parse(req.params.code));
+    res.status(204).end();
+  });
 
   app.post(`${prefix}/runs`, async (req, res) =>
     res.json(await game.start(req.userId, startBody.parse(req.body))),

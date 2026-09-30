@@ -479,7 +479,7 @@ html, body {
    主菜单
    ========================================================================== */
 /* 一级 + 二级菜单共用：半透明遮罩，让地图作为低 alpha 背景透出 */
-#main-menu, #story-menu, #tower-menu, #daily-menu {
+#main-menu, #story-menu, #tower-menu, #daily-menu, #custom-menu, #custom-detail {
   background: rgba(13, 20, 34, 0.80);
   -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px);
 }
@@ -939,37 +939,64 @@ html, body {
 #route-panel .rp-total b { color: var(--sign-red); font-weight: 700; font-size: 13px; }
 #route-panel .rp-score { color: var(--sign-ink); }
 
-/* 结算：整张卡就是一块站牌 —— 白底圆角；文案、用时和按钮都居中排在站牌下方，
-   主按钮用线路色（通过绿 / 未通过红），其余按钮为白底描边胶囊 */
+/* 结算：天津公交站牌——灰色顶梁、米白板面、细灰分隔线；标题像站名，右上角的结果牌像线路号，
+   明细像站牌上的站点列表（竖线串圆点，第一项红色“本站”）；按钮是方角的站牌式按钮 */
 #result-overlay { background: rgba(4, 8, 18, .45); -webkit-backdrop-filter: none; backdrop-filter: none; }
 .result-inner {
-  width: 420px; padding: 0 0 20px; text-align: center; overflow: hidden;
-  background: #fff; border: 0; border-radius: 16px;
-  box-shadow: 0 18px 40px rgba(0,0,0,.35);
+  width: min(380px, calc(100vw - 32px)); box-sizing: border-box; padding: 10px 14px 14px; text-align: left; overflow: hidden;
+  background: var(--sign-bg); color: var(--sign-ink); font-family: var(--font-sign);
+  border: 0; border-top: 6px solid var(--sign-bar); border-radius: 0;
+  box-shadow: var(--sign-shadow), inset 0 0 0 1px var(--sign-rule);
   animation: result-pop .28s ease-out both;
 }
-#result-title { margin: 0; padding: 22px 16px 6px; font-size: 26px; font-weight: 800; color: #111; }
-#result-message { margin: 14px 28px 4px; font-size: 14px; line-height: 1.7; color: #222; }
+.result-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.result-kicker { font-size: 11px; color: var(--sign-muted); letter-spacing: .12em; }
+.result-badge { padding: 2px 10px; font-size: 13px; font-weight: 800; color: #fff; letter-spacing: .08em; line-height: 1.5; }
+.result-badge.pass { background: #009a44; }
+.result-badge.fail { background: var(--sign-red); }
+.result-badge.done { background: #4b5b68; }
+.result-badge.hidden { display: none; }
+#result-title {
+  margin: 6px 0 0; padding: 0 0 8px; font-size: 26px; font-weight: 800; color: var(--sign-ink); line-height: 1.25;
+  border-bottom: 1px solid var(--sign-rule);
+}
+#result-message { margin: 8px 0 0; font-size: 13px; line-height: 1.7; color: #222; }
 #result-times {
-  margin: 2px 28px 18px; padding: 0; border: 0; border-radius: 0; background: transparent;
-  font-size: 12px; color: #6b7680;
+  position: relative; list-style: none; margin: 10px 0 12px; padding: 2px 0 2px 16px; border: 0; background: transparent;
+  font-size: 12px; color: var(--sign-ink);
 }
-#result-sync { margin: 0 28px 10px; color: var(--sign-muted); }
-.result-btns { justify-content: center; gap: 10px; padding: 0 24px; }
+/* 站点列表的竖线 */
+#result-times::before { content: ''; position: absolute; left: 4px; top: 10px; bottom: 10px; width: 2px; background: var(--sign-bar); }
+#result-times li { position: relative; display: flex; justify-content: space-between; gap: 12px; padding: 3px 0; }
+#result-times li + li { border-top: 1px dashed var(--sign-rule); }
+#result-times li::before {
+  content: ''; position: absolute; left: -16px; top: 50%; width: 8px; height: 8px; margin-top: -5px;
+  border: 1px solid var(--sign-muted); border-radius: 50%; background: #fff;
+}
+#result-times li:first-child::before { background: var(--sign-red); border-color: var(--sign-red); }
+#result-times li:first-child .row-value { color: var(--sign-red); font-weight: 800; }
+#result-times .row-label { color: var(--sign-muted); }
+#result-times .row-value { font-weight: 700; white-space: nowrap; font-variant-numeric: tabular-nums; }
+#result-times .row-note { color: var(--sign-muted); }
+#result-sync { margin: 0 0 10px; color: var(--sign-muted); }
+.result-btns { display: flex; justify-content: stretch; gap: 6px; padding: 10px 0 0; border-top: 1px solid var(--sign-rule); }
 .result-btns button, #result-retry {
-  font-family: inherit; font-weight: 700; font-size: 14px; padding: 8px 20px;
-  border-radius: 999px; box-shadow: none; color: #111;
-  background: #fff; border: 1.5px solid #cfd6dc;
+  flex: 1; font-family: inherit; font-weight: 700; font-size: 14px; padding: 8px 6px;
+  border-radius: 2px; box-shadow: none; color: var(--sign-ink);
+  background: #eef2f5; border: 1px solid #aeb8c2;
 }
-.result-btns button:hover { transform: none; box-shadow: none; filter: none; background: #f2f5f7; }
-#result-next, #result-restart, #result-viewmap, #result-exit { background: #fff; }
-/* 主按钮（id 选择器才能压过上面按 id 设置的白底） */
+.result-btns button.hidden { display: none; }
+.result-btns button:hover { transform: none; box-shadow: none; filter: none; background: #e2e8ee; }
+#result-next, #result-restart, #result-viewmap, #result-exit, #result-home { background: #eef2f5; }
+/* 主按钮用线路色（id 选择器才能压过上面按 id 设置的底色） */
 .result-btns :is(#result-next, #result-restart).primary { color: #fff; border-color: transparent; }
 .result-inner.outcome-pass :is(#result-next, #result-restart).primary { background: #009a44; }
 .result-inner.outcome-pass :is(#result-next, #result-restart).primary:hover { background: #008a3c; }
-.result-inner.outcome-fail :is(#result-next, #result-restart).primary { background: #b8123d; }
-.result-inner.outcome-fail :is(#result-next, #result-restart).primary:hover { background: #a10f35; }
-.result-inner.outcome-none :is(#result-next, #result-restart).primary { background: #334155; }
+.result-inner.outcome-fail :is(#result-next, #result-restart).primary { background: var(--sign-red); }
+.result-inner.outcome-fail :is(#result-next, #result-restart).primary:hover { background: #a80d26; }
+.result-inner.outcome-done :is(#result-next, #result-restart).primary,
+.result-inner.outcome-none :is(#result-next, #result-restart).primary { background: #4b5b68; }
+#result-retry { width: 100%; margin-bottom: 8px; }
 #result-toggle-btn { padding: 4px 12px; font-size: 13px; font-weight: 700; }
 @media (max-width: 760px) {
   #route-panel { border-radius: 0; }
@@ -999,6 +1026,15 @@ html, body {
 .icon-nav-arrow-down { --icon: url("assets/icons/nav-arrow-down.svg"); }
 .icon-nav-arrow-left { --icon: url("assets/icons/nav-arrow-left.svg"); }
 .icon-nav-arrow-right { --icon: url("assets/icons/nav-arrow-right.svg"); }
+.icon-map-pin { --icon: url("assets/icons/map-pin.svg"); }
+.icon-edit-pencil { --icon: url("assets/icons/edit-pencil.svg"); }
+.icon-plus { --icon: url("assets/icons/plus.svg"); }
+.icon-trash { --icon: url("assets/icons/trash.svg"); }
+.icon-share-android { --icon: url("assets/icons/share-android.svg"); }
+.icon-search { --icon: url("assets/icons/search.svg"); }
+.icon-arrow-up { --icon: url("assets/icons/arrow-up.svg"); }
+.icon-arrow-down { --icon: url("assets/icons/arrow-down.svg"); }
+.icon-play { --icon: url("assets/icons/play.svg"); }
 .icon-xmark { --icon: url("assets/icons/xmark.svg"); }
 .icon-refresh { --icon: url("assets/icons/refresh.svg"); }
 .icon-calendar { --icon: url("assets/icons/calendar.svg"); }
@@ -1111,48 +1147,133 @@ html, body {
 }
 .daily-start:hover { filter: brightness(1.08); }
 .daily-start:disabled { opacity: .5; cursor: default; }
+/* 昨日排行：贴右缘的侧栏，收起时整体滑出屏幕，只留竖排的“昨日排行”把手 */
+.daily-yesterday {
+  position: absolute; top: 50%; right: 0; z-index: 2; display: flex; align-items: stretch;
+  transform: translateY(-50%); transition: transform .28s ease;
+}
+.daily-yesterday.collapsed { transform: translate(calc(100% - 34px), -50%); }
+.daily-yesterday-toggle {
+  flex: 0 0 34px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
+  margin: 0; padding: 12px 0; border: 1px solid rgba(255,255,255,.12); border-right: 0; border-radius: 12px 0 0 12px;
+  background: #16233a; color: #dbe4ee; font: inherit; font-size: 13px; cursor: pointer;
+}
+.daily-yesterday-toggle:hover { background: #1c2d4a; }
+.daily-yesterday-toggle .icon { transition: transform .28s ease; }
+.daily-yesterday.collapsed .daily-yesterday-toggle .icon { transform: rotate(180deg); }
+.daily-yesterday-tab { writing-mode: vertical-rl; letter-spacing: .2em; }
+.daily-yesterday-body {
+  width: min(400px, calc(100vw - 50px)); box-sizing: border-box; padding: 16px 16px 4px;
+  border: 1px solid rgba(255,255,255,.12); border-right: 0; background: #111c30f2;
+}
+.daily-yesterday-body h3 { margin: 0 0 4px; font-size: 16px; color: var(--ink); }
+.daily-yesterday-date { margin: 0 0 10px; font-size: 12px; color: #9fb0c3; }
+.daily-yesterday .daily-board-wrap { max-height: min(360px, 60vh); }
+/* 共用排行表是固定列宽（为宽弹窗设计），窄侧栏改为按内容自动分配 */
+.daily-yesterday .leaderboard-table { table-layout: auto; }
+.daily-yesterday .daily-board th, .daily-yesterday .daily-board td { width: auto; height: auto; padding: 7px 8px; white-space: nowrap; font-size: 12px; }
+
+/* ============ 自定义模式 ============ */
+#custom-menu, #custom-detail { position: fixed; inset: 0; z-index: 910; display: flex; align-items: center; justify-content: center; overflow-y: auto; }
+#custom-menu.hidden, #custom-detail.hidden { display: none; }
+.custom-inner { max-width: 560px; padding: 24px 0; max-height: 100%; box-sizing: border-box; }
+.custom-inner h2 { margin-bottom: 26px; }
+.custom-code-row { display: flex; gap: 8px; margin: 0 0 14px; }
+.custom-code-row input, .custom-tools input, .custom-tools select {
+  flex: 1; min-width: 0; padding: 9px 12px; border: 1px solid rgba(255,255,255,.16); border-radius: 10px;
+  background: #0e1829; color: #fff; font: inherit; font-size: 14px;
+}
+.custom-code-row input { letter-spacing: .18em; text-transform: uppercase; }
+.custom-code-row button { padding: 0 16px; border: 0; border-radius: 10px; background: #19b7c9; color: #06202a; font: inherit; font-weight: 700; cursor: pointer; }
+.custom-tabs { display: flex; gap: 4px; margin-bottom: 10px; border-bottom: 1px solid rgba(255,255,255,.12); }
+.custom-tabs button { padding: 8px 16px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: #9fb0c3; font: inherit; cursor: pointer; }
+.custom-tabs button.active { color: #fff; border-bottom-color: #19b7c9; }
+.custom-tools { display: flex; gap: 8px; margin-bottom: 10px; }
+.custom-tools select { flex: 0 0 auto; }
+.custom-search-wrap { position: relative; flex: 1; display: flex; }
+.custom-search-wrap .icon { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: #9fb0c3; }
+.custom-search-wrap input { padding-left: 32px; }
+.custom-list { max-height: min(46vh, 420px); overflow-y: auto; margin-bottom: 16px; text-align: left; display: flex; flex-direction: column; gap: 8px; }
+.custom-empty { color: #9fb0c3; font-size: 13px; text-align: center; padding: 24px 0; }
+.custom-item { width: 100%; padding: 12px 14px; border: 1px solid rgba(255,255,255,.12); border-radius: 12px; background: #111c30cc; color: #fff; font: inherit; text-align: left; cursor: pointer; }
+.custom-item:hover { border-color: #19b7c9; background: #19b7c917; }
+.custom-item-head { display: flex; align-items: center; gap: 8px; }
+.custom-item-title { font-size: 15px; font-weight: 700; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.custom-badge { flex: none; padding: 2px 8px; border-radius: 999px; background: #ffffff1a; color: #cbd5e1; font-size: 11px; }
+.custom-item-meta { margin-top: 4px; color: #9fb0c3; font-size: 12px; }
+.custom-item-desc { margin-top: 6px; color: #cbd5e1; font-size: 13px; line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.custom-detail-desc { margin: -10px 0 16px; color: #cbd5e1; font-size: 14px; line-height: 1.6; }
+.custom-levels { margin: 0 0 16px; padding: 0; list-style: none; text-align: left; max-height: 30vh; overflow-y: auto; }
+.custom-level-row { display: flex; align-items: center; gap: 10px; padding: 8px 4px; border-top: 1px solid rgba(255,255,255,.08); font-size: 13px; }
+.custom-level-no { flex: none; width: 24px; height: 24px; border-radius: 50%; background: #19b7c9; color: #06202a; font-weight: 800; display: grid; place-items: center; font-size: 12px; }
+.custom-level-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #fff; }
+.custom-level-tags { flex: none; color: #9fb0c3; font-size: 12px; }
+.custom-board-title { margin: 0 0 8px; font-size: 15px; text-align: left; color: #fff; }
+.custom-summary { margin: 0 0 16px; padding: 14px; border-radius: 12px; background: #19b7c91f; border: 1px solid #19b7c970; }
+.custom-summary-total { font-size: 26px; font-weight: 800; color: #fff; }
+.custom-summary-max { color: #9fb0c3; font-size: 12px; margin-top: 2px; }
+.custom-summary-levels { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 14px; margin-top: 8px; color: #dbe4ee; font-size: 12px; }
+.custom-summary-note { margin: 8px 0 0; color: #b8c6d6; font-size: 12px; }
+.tower-menu-links .custom-danger { color: #f19a9a; }
+.tower-menu-links { flex-wrap: wrap; }
+
+/* 编辑器：地图保持可操作，隐藏游戏中的操作条与图例 */
+#app.custom-editing #left-col, #app.custom-editing #legend, #app.custom-editing #btn-group,
+#app.custom-editing #mode-hud, #app.custom-editing #tower-restart-btn, #app.custom-editing #result-toggle-btn,
+#app.custom-editing #topbar .title { display: none; }
+.custom-editor {
+  position: absolute; top: 72px; left: 14px; bottom: 14px; z-index: 650; width: 360px; box-sizing: border-box;
+  overflow-y: auto; padding: 16px; border: 1px solid #19b7c970; border-radius: 16px;
+  background: #111c30f5; color: var(--ink); box-shadow: var(--shadow-lg);
+}
+.custom-editor.hidden { display: none; }
+.custom-editor h2 { margin: 0 0 12px; font-size: 18px; }
+.custom-field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; font-size: 12px; color: #9fb0c3; min-width: 0; }
+.custom-field input, .custom-field select, .custom-field textarea {
+  padding: 8px 10px; border: 1px solid rgba(255,255,255,.16); border-radius: 8px; background: #0b1424; color: #fff;
+  font: inherit; font-size: 14px; resize: vertical;
+}
+.custom-ed-row { display: flex; gap: 8px; }
+.custom-ed-row .custom-field { flex: 1; }
+.custom-ed-section { margin: 14px 0 6px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,.1); }
+.custom-ed-section-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; font-weight: 700; color: #fff; }
+.custom-ed-section-head button, .custom-ed-place button, .custom-ed-actions button {
+  padding: 7px 12px; border: 1px solid rgba(255,255,255,.18); border-radius: 8px; background: #16233a; color: #fff; font: inherit; font-size: 13px; cursor: pointer;
+}
+.custom-ed-section-head button:disabled { opacity: .45; cursor: default; }
+.custom-ed-levels { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; }
+.custom-ed-level { display: flex; align-items: center; gap: 2px; border-radius: 8px; }
+.custom-ed-level.active { background: #19b7c926; }
+.custom-ed-level-pick { flex: 1; min-width: 0; padding: 7px 8px; border: 0; background: transparent; color: #dbe4ee; font: inherit; font-size: 13px; text-align: left; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.custom-ed-level.active .custom-ed-level-pick { color: #fff; font-weight: 700; }
+.custom-ed-icon { flex: none; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: #cbd5e1; cursor: pointer; display: grid; place-items: center; }
+.custom-ed-icon:hover:not(:disabled) { background: #ffffff14; }
+.custom-ed-icon:disabled { opacity: .3; cursor: default; }
+.custom-ed-place { display: flex; gap: 8px; margin-bottom: 6px; }
+.custom-ed-place button { flex: 1; }
+.custom-ed-place button.active { border-color: #19b7c9; background: #19b7c933; }
+.custom-ed-hint { margin: 0 0 8px; font-size: 12px; color: #67d9e5; min-height: 0; }
+.custom-ed-hint:empty, .custom-ed-status:empty { display: none; }
+.custom-ed-limit-field input.hidden { display: none; }
+.custom-ed-check { margin: 4px 0 0; padding: 8px 10px; border-radius: 8px; background: #0b1424; font-size: 12px; line-height: 1.6; color: #9fe3a8; }
+.custom-ed-check.bad { color: #f6b35c; }
+.custom-ed-check:empty { display: none; }
+.custom-ed-status { margin: 10px 0 0; font-size: 13px; color: #f6b35c; }
+.custom-ed-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; position: sticky; bottom: -16px; padding: 10px 0; background: #111c30f5; }
+.custom-ed-actions .primary { border-color: #19b7c9; background: #19b7c9; color: #06202a; font-weight: 700; }
+.custom-ed-actions button:disabled { opacity: .5; cursor: default; }
+@media (max-width: 600px) {
+  .custom-editor { top: auto; left: 0; right: 0; bottom: 0; width: auto; max-height: 58vh; border-radius: 16px 16px 0 0; }
+  #app.custom-editing #map .leaflet-bottom { bottom: 58vh; } /* OSM 署名留在抽屉上方，不压住保存按钮 */
+  .custom-level-tags { display: none; }
+}
 
 /* 无尽模式“盲棋”：没有底图时地图容器用素色底，只剩城市轮廓与站点线路 */
 #map.blind-map { background: #eef0ec; }
 
 /* 结算站牌（日本车站站名牌风格）：大号站名 + 读音 + 一行说明、线路色带（三段即按钮）、罗马字行、用时。
    整个弹窗就是这块站牌，没有额外的按钮区 */
-.result-sign { padding: 16px 0 12px; background: #fff; text-align: center; color: #111; }
-.result-sign .sign-name { font-size: 40px; font-weight: 800; letter-spacing: .45em; text-indent: .45em; line-height: 1.1; }
-.result-sign .sign-reading { margin: 4px 0 2px; font-size: 13px; font-weight: 700; letter-spacing: .08em; }
-.result-sign .sign-note #result-message { margin: 2px 24px 10px; font-size: 13px; line-height: 1.55; color: #333; }
-.result-sign .sign-note:empty { height: 8px; }
-.result-sign .sign-band {
-  display: grid; grid-template-columns: 1fr 104px 1fr; align-items: stretch; height: 44px;
-  color: #fff;
-}
-.result-sign .sign-slot, .result-sign .sign-here { display: flex; align-items: stretch; justify-content: center; min-width: 0; }
-.result-sign .sign-band button {
-  flex: 1; margin: 0; padding: 0 6px; border: 0; border-radius: 0; background: transparent !important;
-  color: #fff; font: inherit; font-size: 15px; font-weight: 800; letter-spacing: .04em; cursor: pointer;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; box-shadow: none;
-  transition: background .15s;
-}
-.result-sign .sign-band button:hover { background: rgba(0,0,0,.14) !important; }
-.result-sign .sign-here button { color: #fff; }
-/* 箭头一侧（主操作）的文字避开箭头尖 */
-.result-sign.pass #result-slot-right button { padding-right: 22px; }
-.result-sign.fail #result-slot-left button { padding-left: 22px; }
-.result-sign .sign-roman {
-  display: grid; grid-template-columns: 1fr 104px 1fr; margin-top: 6px;
-  font-size: 12px; font-weight: 600; color: #333;
-}
-.result-sign .sign-roman > span { text-align: center; white-space: nowrap; }
-.result-sign .sign-roman-here { grid-column: 2; }
-.result-sign .sign-detail #result-times { margin: 8px 20px 0; padding: 0; border: 0; background: transparent; font-size: 12px; color: #6b7680; }
-/* 通过：JR 绿色线带，箭头向右；未通过：红色线带，箭头向左 */
-.result-sign.pass .sign-band { background: #009a44; clip-path: polygon(0 0, calc(100% - 18px) 0, 100% 50%, calc(100% - 18px) 100%, 0 100%); }
-.result-sign.pass .sign-here { background: #7fd13b; }
-.result-sign.fail .sign-band { background: #b8123d; clip-path: polygon(18px 0, 100% 0, 100% 100%, 18px 100%, 0 50%); }
-.result-sign.fail .sign-here { background: #7ac143; }
-.result-sign:not(.hidden) + #result-title { display: none; }
-.result-inner.has-sign { padding-bottom: 0; width: 460px; }
-.result-inner.has-sign .result-btns { display: none; }
+
 </style>
   <!-- GoatCounter 访问统计（自建，见 stats.zcpenguin.com） -->
   <script data-goatcounter="https://stats.zcpenguin.com/count" async src="//stats.zcpenguin.com/count.js"></script>
@@ -1249,19 +1370,11 @@ html, body {
     <!-- 关卡结束结果 -->
     <div id="result-overlay" class="hidden">
       <div class="result-inner">
-        <!-- 结算站牌：参照日本车站站名牌。通过 = 绿色线带、箭头向右（继续前进）；未通过 = 红色线带、箭头向左（退回重来） -->
-        <div id="result-sign" class="result-sign hidden" aria-hidden="true">
-          <div class="sign-name" id="result-sign-name"></div>
-          <div class="sign-reading" id="result-sign-reading"></div>
-          <div class="sign-note" id="result-slot-message"></div>
-          <!-- 线带三段即按钮：箭头一侧是主操作，另一侧是次操作，中间方块查看地图（由 ui/result.js 把按钮放进来） -->
-          <div class="sign-band"><div class="sign-slot" id="result-slot-left"></div><div class="sign-here" id="result-slot-center"></div><div class="sign-slot" id="result-slot-right"></div></div>
-          <div class="sign-roman"><span id="result-sign-left-en"></span><span class="sign-roman-here" id="result-sign-en"></span><span id="result-sign-right-en"></span></div>
-          <div class="sign-detail" id="result-slot-times"></div>
-        </div>
+        <!-- 结算站牌：天津公交站牌式——灰色顶梁、米白板面，右上角是结果“线路牌”，明细排成站点列表 -->
+        <div class="result-head"><span id="result-kicker" class="result-kicker">本次行程</span><span id="result-badge" class="result-badge hidden"></span></div>
         <div id="result-title">恭喜！</div>
         <div id="result-message"></div>
-        <div id="result-times"></div>
+        <ul id="result-times"></ul>
         <div id="result-sync" role="status" aria-live="polite"></div>
         <button id="result-retry" class="hidden">重试保存</button>
         <div class="result-btns">
@@ -1269,6 +1382,7 @@ html, body {
           <button id="result-viewmap">查看最快</button>
           <button id="result-next">下一关</button>
           <button id="result-exit" class="hidden">退出</button>
+          <button id="result-home" class="hidden">回到主页</button>
         </div>
       </div>
     </div>
@@ -1292,6 +1406,7 @@ html, body {
           <button id="tower-btn"><span class="btn-emoji"><span class="icon icon-tower" aria-hidden="true"></span></span><span class="btn-label">无尽模式</span></button>
           <button id="free-btn"><span class="btn-emoji"><span class="icon icon-dice-five" aria-hidden="true"></span></span><span class="btn-label">随机模式</span></button>
           <button id="daily-btn"><span class="btn-emoji"><span class="icon icon-calendar" aria-hidden="true"></span></span><span class="btn-label">每日挑战</span></button>
+          <button id="custom-btn"><span class="btn-emoji"><span class="icon icon-map-pin" aria-hidden="true"></span></span><span class="btn-label">自定义模式</span></button>
           <button id="settings-btn"><span class="btn-emoji"><span class="icon icon-settings" aria-hidden="true"></span></span><span class="btn-label">设置</span></button>
         </div>
       </div>
@@ -1351,7 +1466,112 @@ html, body {
         <button id="daily-start" class="daily-start" type="button">开始挑战</button>
         <div class="tower-menu-links"><button id="daily-back-btn" type="button"><span class="icon icon-nav-arrow-left" aria-hidden="true"></span>返回</button></div>
       </div>
+      <aside id="daily-yesterday" class="daily-yesterday" aria-label="昨日排行">
+        <button id="daily-yesterday-toggle" class="daily-yesterday-toggle" type="button" aria-expanded="true" aria-controls="daily-yesterday-body">
+          <span class="icon icon-nav-arrow-right" aria-hidden="true"></span><span class="daily-yesterday-tab">昨日排行</span>
+        </button>
+        <div id="daily-yesterday-body" class="daily-yesterday-body">
+          <h3>昨日排行</h3>
+          <p class="daily-yesterday-date" id="daily-yesterday-date"></p>
+          <div class="daily-board-wrap">
+            <table class="leaderboard-table daily-board">
+              <thead><tr><th scope="col">名次</th><th scope="col">玩家</th><th scope="col">公交用时</th><th scope="col">完成时间</th></tr></thead>
+              <tbody id="daily-yesterday-board"></tbody>
+            </table>
+          </div>
+        </div>
+      </aside>
     </div>
+
+    <!-- 自定义模式：广场 / 我的 / 分享码 -->
+    <div id="custom-menu" class="hidden">
+      <div class="tower-menu-inner custom-inner">
+        <h2>玩家自定义关卡</h2>
+        <form id="custom-code-form" class="custom-code-row" autocomplete="off">
+          <input id="custom-code-input" maxlength="8" placeholder="输入 8 位分享码" aria-label="分享码" spellcheck="false">
+          <button type="submit">打开</button>
+        </form>
+        <div class="custom-tabs" role="tablist">
+          <button id="custom-tab-plaza" class="active" type="button" role="tab">广场</button>
+          <button id="custom-tab-mine" type="button" role="tab">我的</button>
+        </div>
+        <div id="custom-plaza-tools" class="custom-tools">
+          <span class="custom-search-wrap"><span class="icon icon-search" aria-hidden="true"></span><input id="custom-search" type="search" maxlength="40" placeholder="搜索关卡组标题" aria-label="搜索关卡组"></span>
+          <select id="custom-sort" aria-label="排序"><option value="popular">最热</option><option value="new">最新</option></select>
+        </div>
+        <div id="custom-list" class="custom-list"></div>
+        <button id="custom-create" class="daily-start" type="button"><span class="icon icon-plus" aria-hidden="true"></span> 创建关卡组</button>
+        <div class="tower-menu-links"><button id="custom-back-btn" type="button"><span class="icon icon-nav-arrow-left" aria-hidden="true"></span>返回</button></div>
+      </div>
+    </div>
+
+    <!-- 自定义模式：关卡组详情与排行 -->
+    <div id="custom-detail" class="hidden">
+      <div class="tower-menu-inner custom-inner">
+        <h2 id="custom-detail-title"></h2>
+        <p class="tower-sub" id="custom-detail-meta"></p>
+        <p class="custom-detail-desc" id="custom-detail-desc"></p>
+        <div id="custom-summary" class="custom-summary hidden"></div>
+        <ol id="custom-detail-levels" class="custom-levels"></ol>
+        <h3 class="custom-board-title">排行榜</h3>
+        <div class="daily-board-wrap">
+          <table class="leaderboard-table daily-board">
+            <thead><tr><th scope="col">名次</th><th scope="col">玩家</th><th scope="col">总分</th><th scope="col">用时</th></tr></thead>
+            <tbody id="custom-board"></tbody>
+          </table>
+        </div>
+        <p id="custom-guest-notice" class="tower-guest-notice hidden">游客可以游玩，但成绩不计入排行；登录后成绩会进入排行榜。</p>
+        <button id="custom-play" class="daily-start" type="button">开始挑战</button>
+        <div class="tower-menu-links">
+          <button id="custom-detail-back" type="button"><span class="icon icon-nav-arrow-left" aria-hidden="true"></span>返回</button>
+          <button id="custom-share" type="button"><span class="icon icon-share-android" aria-hidden="true"></span> 复制分享链接</button>
+          <button id="custom-edit" class="hidden" type="button"><span class="icon icon-edit-pencil" aria-hidden="true"></span> 编辑</button>
+          <button id="custom-delete" class="hidden custom-danger" type="button"><span class="icon icon-trash" aria-hidden="true"></span> 删除</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 自定义模式：关卡组编辑器（地图保持可操作，面板贴左侧） -->
+    <aside id="custom-editor" class="custom-editor hidden" aria-labelledby="custom-ed-heading">
+      <h2 id="custom-ed-heading">创建关卡组</h2>
+      <label class="custom-field">标题<input id="custom-ed-title" maxlength="40" placeholder="例如：北京早高峰通勤"></label>
+      <label class="custom-field">说明<textarea id="custom-ed-desc" maxlength="300" rows="2" placeholder="选填"></textarea></label>
+      <label class="custom-field">公开范围
+        <select id="custom-ed-visibility"><option value="public">公开：出现在广场</option><option value="unlisted">仅链接：拿到分享码可玩</option></select>
+      </label>
+      <div class="custom-ed-section">
+        <div class="custom-ed-section-head"><span>关卡</span><button id="custom-ed-add" type="button"><span class="icon icon-plus" aria-hidden="true"></span> 添加关卡</button></div>
+        <ol id="custom-ed-levels" class="custom-ed-levels"></ol>
+      </div>
+      <div class="custom-ed-section">
+        <div class="custom-ed-section-head"><span id="custom-ed-level-heading">第 1 关</span></div>
+        <label class="custom-field">城市<select id="custom-ed-city"></select></label>
+        <div class="custom-ed-place">
+          <button id="custom-ed-place-origin" type="button">放置起点</button>
+          <button id="custom-ed-place-dest" type="button">放置终点</button>
+        </div>
+        <p id="custom-ed-hint" class="custom-ed-hint"></p>
+        <div class="custom-ed-row">
+          <label class="custom-field">起点名称<input id="custom-ed-origin-name" maxlength="20" placeholder="起点"></label>
+          <label class="custom-field">终点名称<input id="custom-ed-dest-name" maxlength="20" placeholder="终点"></label>
+        </div>
+        <label class="custom-field">情景<select id="custom-ed-scenario"></select></label>
+        <div class="custom-ed-row">
+          <label class="custom-field">时间限制
+            <select id="custom-ed-limit-type"><option value="none">不限时</option><option value="minutes">固定分钟数</option><option value="ratio">最速的倍数</option></select>
+          </label>
+          <label class="custom-field custom-ed-limit-field">&nbsp;<input id="custom-ed-limit-value" class="hidden" type="number" inputmode="decimal" aria-label="时限数值"></label>
+        </div>
+        <label class="custom-field">本关标题<input id="custom-ed-level-title" maxlength="30" placeholder="选填，开局时显示"></label>
+        <label class="custom-field">提示文字<textarea id="custom-ed-level-text" maxlength="200" rows="2" placeholder="选填，开局时显示"></textarea></label>
+        <p id="custom-ed-check" class="custom-ed-check"></p>
+      </div>
+      <p id="custom-ed-status" class="custom-ed-status" role="status"></p>
+      <div class="custom-ed-actions">
+        <button id="custom-ed-cancel" type="button">取消</button>
+        <button id="custom-ed-save" class="primary" type="button">保存关卡组</button>
+      </div>
+    </aside>
 
     <!-- 爬塔 HUD（无尽模式进行中显示） -->
     <div id="mode-hud" class="hidden">
@@ -1426,6 +1646,6 @@ html, body {
   -->
   <script src="shared/router.js?v=5"></script>
   <script src="js/amap-polyfill.js"></script>
-  <script src="js/app.js?v=76" type="module"></script>
+  <script src="js/app.js?v=89" type="module"></script>
 </body>
 </html>

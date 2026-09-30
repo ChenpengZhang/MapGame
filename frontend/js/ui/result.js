@@ -15,6 +15,7 @@
  */
 
 import { $, show, hide, setText, toggleHidden } from '../core/dom.js';
+import { state } from '../core/state.js';
 
 /**
  * 显示结果弹窗。
@@ -26,109 +27,91 @@ import { $, show, hide, setText, toggleHidden } from '../core/dom.js';
  * @param {string} [cfg.nextLabel]        "下一关"按钮文案
  * @param {boolean} [cfg.showNext]        是否显示"下一关"（爬塔恒不显示）
  * @param {boolean} [cfg.showExit]        是否显示立即退出
- * @param {object} [cfg.sign]           结算站牌（见 renderSign）
+ * @param {object} [cfg.sign]           { outcome: 'pass'|'fail'|'done' }：右上角结果牌与主按钮配色
  * @param {string} [cfg.viewMapLabel]     收起弹窗看地图的按钮文案（默认“查看最快”）
  *   传入 undefined 的字段保持原值不动（与重构前逐字段赋值的行为一致）。
  */
-/** 站牌三种结果：站名、拼音读音、罗马字（英文） */
+/** 结算站牌右上角的“线路牌”：通过绿、未通过红、完成灰 */
 const SIGN_OUTCOMES = {
-  pass: { name: '通过', en: 'Passed', cls: 'pass' },
-  fail: { name: '未通过', en: 'Failed', cls: 'fail' },
-  done: { name: '完成', en: 'Finished', cls: 'pass' },
+  pass: { name: 'PASSED', cls: 'pass' },
+  fail: { name: 'FAILED', cls: 'fail' },
+  done: { name: 'FINISHED', cls: 'done' },
 };
 
-/**
- * 结算站牌。cfg.sign = { outcome: 'pass'|'fail'|'done', left, right, leftEn, rightEn }；
- * 不传 sign（如“正在验证…”“记录尚未确认保存”）则隐藏站牌、显示普通标题。
- */
-function renderSign(sign) {
-  const el = $('result-sign');
-  if (!el) return null;
+/** 右上角结果牌；不传 sign（如“正在验证…”）则隐藏 */
+function renderBadge(sign) {
   const cfg = sign && SIGN_OUTCOMES[sign.outcome];
-  if (!cfg) { el.classList.add('hidden'); return null; }
-  el.className = 'result-sign ' + cfg.cls;
-  setText('result-sign-name', cfg.name);
-  setText('result-sign-reading', cfg.en); // 站名下方的英文（原为拼音）
+  const badge = $('result-badge');
+  if (badge) {
+    badge.className = 'result-badge ' + (cfg ? cfg.cls : 'hidden');
+    badge.textContent = cfg ? cfg.name : '';
+  }
   return cfg;
 }
 
-/** 按钮文案对应的罗马字（显示在线带下方，与站牌“相邻站”的英文位置一致） */
-const BUTTON_EN = {
-  下一关: 'Next', 下一层: 'Next floor', 重新开始: 'Restart', 重新挑战: 'Retry', 再试一次: 'Try again',
-  退出: 'Exit', '通关·回菜单': 'Finish', 查看最快: 'View fastest', 查看地图: 'View map',
-};
-function buttonEn(btn) {
-  return btn ? (BUTTON_EN[btn.textContent.trim()] || '') : '';
-}
-
 /**
- * 把按钮、说明和用时放进站牌：线带三段就是按钮。
- *   主操作（有“下一关”时是它，否则是“重开/下一层/再试一次/重新挑战”）放在箭头一侧：通过在右、未通过在左；
- *   次操作（有下一关时的“重新开始”，或爬塔通过后的“退出”）放在另一侧；中间方块是“查看地图/最快”。
- * 没有站牌（“正在验证…”等）时把它们放回普通按钮区。
+ * 明细写成站牌上的“站点列表”：竖线串起圆点，每项一行（标签在左、数值在右），第一项是红色的“本站”。
+ * detail 仍以纯文本写入（无障碍与测试读取），再在真实 DOM 中替换为逐行结构。
  */
-function placeIntoSign(cfg) {
-  const inner = document.querySelector?.('.result-inner');
-  const btns = document.querySelector?.('.result-btns');
-  const next = $('result-next'), restart = $('result-restart'), viewmap = $('result-viewmap'), exit = $('result-exit');
-  const message = $('result-message'), times = $('result-times');
-  if (!inner || !btns || !next || !restart) return;
-  inner.classList.toggle('has-sign', !!cfg);
-  if (!cfg) {
-    const title = $('result-title');
-    if (title && message) title.after?.(message);
-    if (message && times) message.after?.(times);
-    for (const b of [restart, viewmap, next, exit]) if (b) btns.appendChild(b);
-    return;
-  }
-  $('result-slot-message')?.appendChild(message);
-  $('result-slot-times')?.appendChild(times);
-  const shown = (b) => b && !b.classList.contains('hidden');
-  const primary = shown(next) ? next : restart;
-  const secondary = shown(next) ? restart : (shown(exit) ? exit : null);
-  const [left, right] = cfg.cls === 'pass' ? [secondary, primary] : [primary, secondary];
-  const slotL = $('result-slot-left'), slotR = $('result-slot-right'), slotC = $('result-slot-center');
-  slotL.replaceChildren(); slotR.replaceChildren(); slotC.replaceChildren();
-  // 用不到的按钮仍保留在普通按钮区（该区在站牌模式下隐藏）
-  for (const b of [restart, viewmap, next, exit]) if (b) btns.appendChild(b);
-  if (left) slotL.appendChild(left);
-  if (right) slotR.appendChild(right);
-  if (viewmap) slotC.appendChild(viewmap);
-  setText('result-sign-left-en', buttonEn(left));
-  setText('result-sign-right-en', buttonEn(right));
-  setText('result-sign-en', shown(viewmap) ? buttonEn(viewmap) : '');
+function renderRows(detail) {
+  const box = $('result-times');
+  if (!box) return;
+  box.textContent = detail;
+  // 只在真实浏览器 DOM 中改成逐行结构（测试桩只读纯文本）
+  if (!detail || typeof HTMLElement === 'undefined' || !(box instanceof HTMLElement)) return;
+  const parts = detail.split(/\s*·\s*/).map((part) => part.trim()).filter(Boolean);
+  const rows = parts.map((part) => {
+    const row = document.createElement('li');
+    const match = /^(.+?)\s+([\d.]+\s*\S*)$/.exec(part);
+    if (match) {
+      const label = document.createElement('span');
+      label.className = 'row-label';
+      label.textContent = match[1];
+      const value = document.createElement('span');
+      value.className = 'row-value';
+      value.textContent = match[2];
+      row.appendChild(label);
+      row.appendChild(value);
+    } else {
+      row.className = 'row-note';
+      row.textContent = part;
+    }
+    return row;
+  });
+  if (rows.length) box.replaceChildren(...rows);
 }
 
-/** 爬塔结算站牌：通过 = 第 n 层 → 第 n+1 层（箭头向右）；未通过 = 箭头向左退回第 1 层 */
-export function towerSign(pass, layer) {
-  return pass
-    ? { outcome: 'pass', left: `第 ${layer} 层`, right: `第 ${layer + 1} 层`, leftEn: `Floor ${layer}`, rightEn: `Floor ${layer + 1}` }
-    : { outcome: 'fail', left: '第 1 层', right: `第 ${layer} 层`, leftEn: 'Floor 1', rightEn: `Floor ${layer}` };
+/** 爬塔结算（保留旧接口）：只需要成败 */
+export function towerSign(pass) {
+  return { outcome: pass ? 'pass' : 'fail' };
 }
 
 export function showResultOverlay(cfg) {
   cfg = cfg || {};
-  const signCfg = renderSign(cfg.sign);
-  const outcome = SIGN_OUTCOMES[cfg.sign?.outcome]?.cls || 'none';
+  const signCfg = renderBadge(cfg.sign);
+  const outcome = signCfg?.cls || 'none';
   const inner = document.querySelector?.('.result-inner');
   if (inner) inner.className = 'result-inner outcome-' + outcome;
   setText('result-sync','');hide('result-sync');hide('result-retry');show('result-restart');
+  // 左上角副标题：当前关卡的名称（如“新手教程”“无尽模式 · 普通”“某关卡组 · 第 1/3 关”）
+  setText('result-kicker', cfg.kicker || state.currentLevel?.title || '本次行程');
   if (cfg.title != null) setText('result-title', cfg.title);
   if (cfg.message != null) { setText('result-message', cfg.message);toggleHidden('result-message',!cfg.message); }
-  if (cfg.detail != null) { setText('result-times', cfg.detail);toggleHidden('result-times',!cfg.detail); }
+  if (cfg.detail != null) { renderRows(cfg.detail);toggleHidden('result-times',!cfg.detail); }
   if (cfg.restartLabel != null) setText('result-restart', cfg.restartLabel);
   if (cfg.nextLabel != null) setText('result-next', cfg.nextLabel);
   if (cfg.showNext != null) toggleHidden('result-next', !cfg.showNext);
   toggleHidden('result-exit', !cfg.showExit);
+  // 没有“下一关/退出”可走时（如教程完成、每日挑战），给一个回到主页的出口
+  toggleHidden('result-home', !!cfg.showNext || !!cfg.showExit);
 
   // “查看最快”：有最优路线可看时的默认文案；每日挑战不公布最优，改为“查看地图”
   setText('result-viewmap', cfg.viewMapLabel || '查看最快');
   show('result-viewmap');
-  // 主按钮：有“下一关”时是它，否则是“重开/下一层/再试一次”；按结果着线路色（无站牌时使用）
+  // 主按钮：有“下一关”时是它，否则是“重开/下一层/再试一次”；按结果着线路色
   const nextShown = !$('result-next')?.classList.contains('hidden');
   $('result-next')?.classList.toggle('primary', nextShown);
   $('result-restart')?.classList.toggle('primary', !nextShown);
-  placeIntoSign(signCfg);
   hide('result-toggle-btn');
   show('result-overlay');
 }

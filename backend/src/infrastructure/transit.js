@@ -3,6 +3,7 @@ import { createHash, randomInt } from 'node:crypto';
 import router from '../../../shared/router.js';
 // Pure level definitions; no browser state or DOM dependencies.
 import { LEVELS } from '../../../frontend/js/data/levels.js';
+import { CUSTOM_LIMITS, customLimitMs } from '../../../frontend/js/data/custom-maps.js';
 import { CITIES, DATA_VERSION, RULES_VERSION, SCENARIOS, ensure } from '../domain/rules.js';
 
 // Anti-corruption adapter: the existing router remains independent of HTTP/database code.
@@ -101,6 +102,42 @@ export class Transit {
     };
   }
 
+  /**
+   * 自定义关卡 → 一回合题目。最优用时每次开回合时按当前数据重算（数据更新后仍然正确）。
+   * 起终点过近、或没有可行路线时抛错（保存关卡组时用同一逻辑校验）。
+   */
+  async custom(level, meta = {}) {
+    const { graph, hash } = await this.load(level.city);
+    const options = SCENARIOS[level.scenario];
+    ensure(options, 'UNKNOWN_SCENARIO');
+    const origin = level.origin;
+    const destination = level.dest;
+    ensure(router.haversineKm(origin, destination) >= CUSTOM_LIMITS.minDistanceKm, 'LEVEL_TOO_CLOSE');
+    const optimal = await router.findOptimalRoute(graph, origin, destination, options, async (a, b) => ({
+      min: (router.haversineKm(a, b) * 1000) / (75 * options.walkSpeedFactor),
+    }));
+    // 最优方案必须真的乘车（全程步行的题目无法按乘车路线提交与验证）
+    ensure(
+      optimal && Number.isFinite(optimal.totalMin) && optimal.totalMin > 0
+        && (optimal.legs || []).some((leg) => leg.type === 'ride'),
+      'LEVEL_UNREACHABLE',
+    );
+    const optimalDurationMs = Math.round(optimal.totalMin * 60000);
+    return {
+      city: level.city,
+      scenario: level.scenario,
+      options,
+      origin,
+      destination,
+      dataVersion: DATA_VERSION,
+      rulesVersion: RULES_VERSION,
+      dataHash: hash,
+      optimalDurationMs,
+      limitMs: customLimitMs(level.timeLimit, optimalDurationMs),
+      ...meta,
+    };
+  }
+
   // 服务端权威重算：逐段校验物理站、乘车方向、线路衔接与步行距离，
   // 用权威速度参数重算总时长——完全不信任客户端提交的任何数值。
   async evaluate(puzzle, route, mode) {
@@ -120,8 +157,8 @@ export class Transit {
 
     for (const leg of route) {
       if (leg.type === 'walk') {
-        // 步行换乘只在无尽模式开放，且相邻站必须在步行上限内。
-        ensure(mode === 'tower', 'WALK_TRANSFER_NOT_ALLOWED');
+        // 步行换乘只在无尽模式与自定义模式开放，且相邻站必须在步行上限内。
+        ensure(mode === 'tower' || mode === 'custom', 'WALK_TRANSFER_NOT_ALLOWED');
         const a = graph.physById.get(leg.fromStopId);
         const b = graph.physById.get(leg.toStopId);
         ensure(a && b && a.id !== b.id, 'INVALID_WALK_STOPS');
