@@ -17,6 +17,7 @@ import { resolveStop, getLine } from '../data/index-builder.js';
 import { hide, $ } from '../core/dom.js';
 import { makeTransitLineLayers } from './transit-line-style.js';
 import { makeMassMarks, stopToData } from './stop-marks.js';
+import { isMapPracticePending } from './tutorial-layer.js';
 
 let hoverTimer = null;
 const cards = {
@@ -69,6 +70,7 @@ function isTextLine(line) {
 /** MassMarks 的 mouseover 回调：防抖后渲染高亮（触摸设备不使用悬浮事件） */
 export function onStopMouseOver(e) {
   if (state.storyActive) return; // 剧情/教学期间禁止交互
+  if (isMapPracticePending()) return; // 地图操作练习期间静默忽略站点预览
   if (state.isTouch) return;     // 触摸设备：合成 mouseover 会与两阶段点击打架
   if (state.pendingStart || state.pendingCandidate) return; // 已点击预览后保持红圈，不被悬浮覆盖
   const physical = e && e.data;
@@ -84,6 +86,7 @@ export function onStopMouseOver(e) {
   if (hoverTimer) clearTimeout(hoverTimer);
   hoverTimer = setTimeout(() => {
     hoverTimer = null;
+    if (state.storyActive || isMapPracticePending() || state.pendingStart || state.pendingCandidate) return;
     renderHighlight(d, point);
   }, 45);
 }
@@ -97,7 +100,7 @@ export function onStopMouseOut() {
 }
 
 /** 画出该站所属线路 + 高亮圈，并弹出信息卡；点击预览时按实际物理站坐标画圈。 */
-export function renderHighlight(d, highlightPoint = null) {
+export function renderHighlight(d, highlightPoint = null, onLineToggle = null) {
   clearHighlight();
 
   // 预览站点时临时画出该站全部线路，但不创建这些线路的站点层。
@@ -114,7 +117,7 @@ export function renderHighlight(d, highlightPoint = null) {
   ring.setMap(state.map);
   state.activeOverlays.push(ring);
 
-  showInfoCard(d, allLines);
+  showInfoCard(d, allLines, 'preview', onLineToggle);
 }
 
 /**
@@ -258,7 +261,7 @@ function showInfoCard(d, lines, kind = 'preview', onLineToggle = null) {
   if (box) {
     box.replaceChildren();
     for (const l of lines) {
-      const selectable = kind === 'current' && typeof onLineToggle === 'function';
+      const selectable = typeof onLineToggle === 'function';
       const textLine = isTextLine(l);
       const tag = document.createElement(selectable ? 'button' : 'span');
       tag.className = 'line-tag ' + (l.mode === 'metro' ? 'metro-line' : 'bus-line')

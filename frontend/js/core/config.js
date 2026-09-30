@@ -29,7 +29,7 @@ export const DATA_VERSION = 7;
 // ============ 站点渲染阈值 ============
 
 export const METRO_MIN_ZOOM = 13;   // 地铁站：比之前晚一级显示，降低中等缩放下的地图拥挤
-export const BUS_MIN_ZOOM = 15;     // 公交站数量较多，放大到该等级再显示以控制密度和性能
+export const BUS_MIN_ZOOM = 13;     // 步行圈聚焦尺度即可看到公交站，密度由视野过滤与抽稀控制
 export const MAX_BUS_RENDER = 8000; // 公交站低缩放时的渲染上限：视野内超过则空间抽稀，避免整城 2.8 万点卡顿
 
 // ============ 配色 ============

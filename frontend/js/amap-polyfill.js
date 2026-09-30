@@ -93,12 +93,37 @@
       const m = L.map(el, {
         center: c,
         zoom: opts.zoom || 11,
+        zoomSnap: 0, // 按实际视野精确缩放，避免整数级别让范围圈显得过小
         scrollWheelZoom: !opts.scrollWheel,
         zoomControl: false, // 游戏自带滚轮惯性缩放，去掉 Leaflet 默认的 +/- 按钮
         attributionControl: true,
       });
       L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '&copy; OpenStreetMap' }).addTo(m);
       this._map = m;
+      this._focusing = false;
+      const interruptFocus = () => {
+        if (!this._focusing) return;
+        this._focusing = false;
+        this._focusComplete = null;
+        m.stop();
+      };
+      // 手动操作立即接管，不让飞行动画与后续拖动或滚轮争夺视野。
+      for (const event of ['pointerdown', 'wheel', 'touchstart']) {
+        m.getContainer().addEventListener(event, interruptFocus, { capture: true, passive: true });
+      }
+      m.on('moveend', () => {
+        const completed = this._focusing ? this._focusComplete : null;
+        this._focusing = false;
+        this._focusComplete = null;
+        completed?.();
+      });
+    }
+    enableNativeWheelZoom(speed = 0.5) {
+      this.setWheelZoomSpeed(speed);
+      this._map.scrollWheelZoom.enable();
+    }
+    setWheelZoomSpeed(speed) {
+      this._map.options.wheelPxPerZoomLevel = 180 - Math.max(0, Math.min(1, speed)) * 120;
     }
     getZoom() { return this._map.getZoom(); }
     setZoom(z) { this._map.setZoom(z); }
@@ -118,6 +143,9 @@
       return new AMap.Bounds(sw, ne);
     }
     setBounds(bounds, immediately, padding) { // 入口：GCJ-02 → WGS-84
+      this._focusing = false;
+      this._focusComplete = null;
+      this._map.stop();
       const p = padding || [0, 0, 0, 0]; // [top, right, bottom, left]
       this._map.fitBounds(
         [
@@ -130,6 +158,29 @@
           animate: false,
         }
       );
+    }
+    focusBounds(bounds, padding = [0, 0, 0, 0], onComplete) {
+      const target = [
+        gcj2leaflet([bounds.getSouthWest().getLng(), bounds.getSouthWest().getLat()]),
+        gcj2leaflet([bounds.getNorthEast().getLng(), bounds.getNorthEast().getLat()]),
+      ];
+      this._focusing = false;
+      this._focusComplete = null;
+      this._map.stop(); // 连续点击时从当前视野开始聚焦
+      const framing = {
+        paddingTopLeft: L.point(padding[3], padding[0]),
+        paddingBottomRight: L.point(padding[1], padding[2]),
+      };
+      const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+      if (reducedMotion) {
+        this._map.fitBounds(target, { ...framing, animate: false });
+        onComplete?.();
+      }
+      else {
+        this._focusing = true;
+        this._focusComplete = onComplete;
+        this._map.flyToBounds(target, { ...framing, animate: true, duration: 0.8 });
+      }
     }
     setStatus(s) {
       const m = this._map;

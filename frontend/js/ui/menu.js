@@ -172,28 +172,22 @@ export function updateButtons() {
 
 // ============ 故事模式关卡列表 ============
 
-/**
- * 渲染顺序解锁的线路节点。视觉只显示圆环编号，不显示关卡标题；
- * title 仍保留在关卡数据中，进入关卡后用于顶栏和无障碍标签。
- * @param {(level:object)=>void} onPick 点击已解锁关卡时的回调（由 game/session.js 传入 startLevel）
- */
+/** 故事模式暂时只显示新手教程与后续关卡占位，等待内容设计。 */
 export function buildStoryLevels(onPick) {
   const list = $('story-level-list');
   if (!list) return;
   list.innerHTML = '';
-  LEVELS.forEach((lv, i) => {
-    const unlocked = i < state.storyUnlocked;
-    const card = document.createElement('button');
-    card.type = 'button';
-    card.className = 'story-level' + (unlocked ? ' unlocked' : ' locked');
-    card.disabled = !unlocked;
-    card.ariaLabel = unlocked ? `第 ${lv.series} 关` : `第 ${lv.series} 关，尚未解锁`;
-    if (card.style?.setProperty) card.style.setProperty('--level-color', lv.color || '#19b7c9');
-    else card.style['--level-color'] = lv.color || '#19b7c9';
-    card.innerHTML = '<span class="slv-num">' + (unlocked ? String(lv.series) : '<span class="icon icon-lock" aria-label="未解锁"></span>') + '</span>';
-    if (unlocked) card.addEventListener('click', () => onPick(lv));
-    list.appendChild(card);
-  });
+  const tutorial = document.createElement('button');
+  tutorial.type = 'button';
+  tutorial.className = 'story-placeholder';
+  tutorial.innerHTML = '<span class="story-placeholder-number">1</span><span>新手教程</span><small>自由选线 · 体验换乘</small>';
+  tutorial.addEventListener('click', () => onPick(LEVELS[0]));
+  list.appendChild(tutorial);
+  const upcoming = document.createElement('div');
+  upcoming.className = 'story-placeholder upcoming';
+  upcoming.innerHTML = '<span class="story-placeholder-number">…</span><span>后续关卡</span><small>敬请期待</small>';
+  list.appendChild(upcoming);
+
 }
 
 // ============ 爬塔菜单的纪录文案 ============

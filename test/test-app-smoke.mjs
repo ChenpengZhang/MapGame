@@ -135,7 +135,7 @@ class MapStub {
   setZoom(z) { this.zoom = z; }
   setZoomAndCenter(z) { this.zoom = z; }
   getCenter() { return this.center; }
-  setBounds() {}
+  setBounds() { for (const handler of [...(this.__ev.moveend || [])]) handler({}); }
   /** 覆盖整个北京的视野，保证 viewportStops 的过滤分支能跑到 */
   getBounds() { return new BoundsStub([115.0, 39.0], [117.5, 41.0]); }
   setStatus() {}
@@ -152,7 +152,10 @@ class OverlayStub {
 }
 class PolylineStub extends OverlayStub { constructor(o) { super(o); created.polylines.push(this); } }
 class CircleStub extends OverlayStub {}
-class MarkerStub extends OverlayStub { constructor(o) { super(o); created.markers.push(this); } }
+class MarkerStub extends OverlayStub {
+  constructor(o) { super(o); created.markers.push(this); }
+  setPosition(position) { this.__opts.position = position; }
+}
 class MassMarksStub extends OverlayStub {
   constructor(data, opts) {
     super(opts);
@@ -511,71 +514,155 @@ await step('自由模式：勾选晴雨情景开局', async () => {
   assert.equal(state.scenario.busSpeedFactor, 0.5, '雨天的公交系数已应用');
 });
 
-await step('单句开场 → 地图内教学 → 交还操作权', async () => {
+await step('自由选线换乘教程：欢迎、提示、换乘、撤回与通关', async () => {
   const lv = LEVELS[0];
+  const { isMapPracticePending } = await import('../frontend/js/map/tutorial-layer.js');
   const { ensureGameDataReady } = await import('../frontend/js/game/data-ready.js');
-  assert.equal(await ensureGameDataReady(lv.cityId), true, '已切换到教学城市');
+  assert.equal(await ensureGameDataReady(lv.cityId), true);
   startLevel(lv);
-  assert.equal(state.storyActive, true, '剧情期间地图锁定');
-  assert.ok(!el('story-dialog').classList.contains('hidden'), '剧情对话框已打开');
-  for (let i = 0; i < lv.story.length; i++) storyNext();
-  assert.equal(state.storyActive, false, '开场结束后解锁地图');
-  assert.ok(el('story-dialog').classList.contains('hidden'), '剧情对话框已收起');
-  assert.equal(state.originWalkRangeCircle, null, '教学关不显示起点步行范围圈');
-  assert.equal(state.destinationWalkRangeCircle, null, '教学关不显示终点步行范围圈');
-  let prompt = created.markers.findLast((m) => m.map && String(m.__opts.content).includes('map-tutorial-label'));
-  assert.ok(prompt && prompt.__opts.content.includes('放大地图显示公交站'), '缩放不足时应先提示放大地图');
+  assert.equal(state.storyActive, true, '开场先显示欢迎说明');
+  assert.ok(el('story-text').textContent.includes('尽可能快地抵达'));
+  assert.equal(el('story-welcome-title').textContent, '欢迎来到 RouteGuesser');
+  assert.ok(el('tutorial-guide').classList.contains('hidden'), '欢迎说明与操作框不重叠');
+  storyNext();
+  assert.equal(state.storyActive, false, '开始后可自由操作地图');
+  assert.ok(!el('tutorial-guide').classList.contains('hidden'));
+  assert.ok(state.originWalkRangeCircle && state.destinationWalkRangeCircle, '保留普通玩法步行范围');
+  assert.ok(!created.markers.some(m => m.map && /map-tutorial-label|transfer-highlight|map-tutorial-note/.test(String(m.__opts.content))), '不添加地图教学标注');
+  const originalGetBounds = state.map.getBounds;
+  const originalSetBounds = state.map.setBounds;
+  const wideBounds = new BoundsStub([state.ORIGIN[0] - .08, state.ORIGIN[1] - .08], [state.ORIGIN[0] + .08, state.ORIGIN[1] + .08]);
+  let viewBounds = wideBounds;
+  state.map.getBounds = () => viewBounds;
+  state.map.setBounds = (bounds) => {
+    viewBounds = bounds;
+    for (const handler of [...(state.map.__ev.moveend || [])]) handler({});
+  };
+  const { walkRangeBounds } = await import('../frontend/js/map/walk-range.js');
+  const focusedBounds = walkRangeBounds([state.ORIGIN], 1650);
+  const adjustView = (bounds) => {
+    viewBounds = bounds;
+    for (const handler of [...(state.map.__ev.moveend || [])]) handler({});
+  };
   state.map.setZoom(15);
   for (const handler of state.map.__ev.zoomchange || []) handler({});
-  prompt = created.markers.findLast((m) => m.map && String(m.__opts.content).includes('map-tutorial-label'));
-  assert.ok(prompt && prompt.__opts.content.includes('点击红色点行走到公交站'), '达到公交站显示等级后应切换教学文字');
-  state.map.setZoom(11);
-  for (const handler of state.map.__ev.zoomchange || []) handler({});
-  prompt = created.markers.findLast((m) => m.map && String(m.__opts.content).includes('map-tutorial-label'));
-  assert.ok(prompt && prompt.__opts.content.includes('点击红色点行走到公交站'), '再次缩小时不应退回放大提示');
-
-  const firstStop = state.physStops.find((p) => p.name === '电信局');
-  assert.ok(firstStop, '教学数据包含电信局站');
-  onStopClick({ data: stopToData(firstStop) });
-  prompt = created.markers.findLast((m) => m.map && String(m.__opts.content).includes('map-tutorial-label'));
-  assert.ok(prompt && prompt.__opts.content.includes('再次点击确认'), '第一次点击后地图文字应切换');
-  assert.deepEqual(prompt.__opts.position, firstStop.lnglat || [firstStop.lng, firstStop.lat], '确认提示应跟随实际点击站点');
-
-  onStopClick({ data: stopToData(firstStop) });
-  prompt = created.markers.findLast((m) => m.map && String(m.__opts.content).includes('map-tutorial-label'));
-  assert.ok(prompt && prompt.__opts.content.includes('点击线路名称或标线选择线路'), '确认起始站后应引导选线');
-
-  const lineTag = el('current-info-lines').children[0];
-  assert.equal(typeof lineTag?.onclick, 'function', '当前站线路牌应可点击');
-  lineTag.onclick();
-  prompt = created.markers.findLast((m) => m.map && String(m.__opts.content).includes('map-tutorial-label'));
-  assert.ok(prompt && prompt.__opts.content.includes('点击站点乘车到目的地附近'), '选线后应引导选择下车站');
-
-  const lastStop = state.physStops.find((p) => p.name === '南达');
-  assert.ok(lastStop, '教学数据包含南达站');
-  onCandidateStopClick(stopToData(lastStop));
-  prompt = created.markers.findLast((m) => m.map && String(m.__opts.content).includes('map-tutorial-label'));
-  assert.ok(prompt && prompt.__opts.content.includes('再次点击确认'), '第一次点击下车站后应要求确认');
-  assert.deepEqual(prompt.__opts.position, lastStop.lnglat || [lastStop.lng, lastStop.lat], '下车确认提示应跟随所选站点');
-
-  onCandidateStopClick(stopToData(lastStop));
-  prompt = created.markers.findLast((m) => m.map && String(m.__opts.content).includes('map-tutorial-label'));
-  assert.ok(prompt && prompt.__opts.content.includes('点击终点行走到目的地'), '确认乘车后应引导点击终点');
-  assert.deepEqual(prompt.__opts.position, state.DEST, '最后一步提示应移动到终点');
-  assert.ok(el('mode-hud').classList.contains('hidden'),'第一关不显示时间限制');
+  assert.ok(el('tutorial-guide-title').textContent.includes('熟悉地图'), '手动缩放不会跳过第一步');
+  assert.equal(el('tutorial-guide-title').textContent, '熟悉地图操作', '标题只使用步骤名称');
+  const practiceStop = state.physStops.find(p => p.name === '迎宾桥');
+  const previousToast = el('center-toast').textContent;
+  onStopMouseOver({ data: stopToData(practiceStop) });
+  await wait(60);
+  assert.ok(el('infocard').classList.contains('hidden'), '地图操作阶段不显示悬停预览');
+  onStopClick({ data: stopToData(practiceStop) });
+  assert.equal(state.pendingStart, null, '地图操作阶段误点不锁定站点');
+  assert.equal(el('center-toast').textContent, previousToast, '地图操作阶段误点静默忽略');
+  const originPin = state.endpointOverlays.find(m => String(m.__opts?.content).includes('pin origin'));
+  const destinationPin = state.endpointOverlays.find(m => String(m.__opts?.content).includes('pin dest'));
+  destinationPin.__ev.click[0]();
+  assert.ok(el('tutorial-guide-title').textContent.includes('熟悉地图'), '聚焦终点不能完成起点目标');
+  adjustView(new BoundsStub(focusedBounds.sw, focusedBounds.ne));
+  assert.equal(el('tutorial-guide-title').textContent, '选择上车站', '手动移到起点并放大也能进入下一步');
+  assert.ok(el('tutorial-guide-text').textContent.includes('起点红圈的步行范围'), '说明从哪里选择上车站');
+  assert.ok(el('tutorial-guide-text').textContent.includes('将鼠标移到站点上'), '说明悬停预览的操作方式');
+  assert.ok(el('tutorial-guide-text').textContent.includes('单击一下即可锁定'), '说明单击锁定站点');
+  adjustView(wideBounds);
+  assert.ok(el('tutorial-guide-title').textContent.includes('熟悉地图'), '视野太宽时退回地图操作');
+  originPin.__ev.click[0]();
+  assert.equal(el('tutorial-guide-title').textContent, '选择上车站');
+  const alternate = state.physStops.find(p => p.name === '州文体艺术中心');
+  onStopMouseOver({ data: stopToData(alternate) });
+  await wait(60);
+  assert.ok(!el('infocard').classList.contains('hidden'), '选站阶段悬停可预览');
+  assert.equal(state.pendingStart, null, '悬停不锁定站点');
+  assert.equal(el('tutorial-guide-title').textContent, '选择上车站', '悬停不推进教程');
+  onStopClick({ data: stopToData(alternate) });
+  assert.equal(state.pendingStart.logical.name, alternate.name, '允许自由预览其他上车站');
+  assert.equal(el('tutorial-guide-title').textContent, '选择乘车线路', '单击锁定后进入线路选择');
+  const previewLine = el('info-lines').children[0];
+  assert.equal(typeof previewLine.onclick, 'function', '锁定站点后线路名称板可选择');
+  previewLine.onclick();
+  previewLine.onclick();
+  assert.equal(state.selectedLineName, previewLine.textContent, '锁定期间可取消并重新选择线路');
+  cancelRoutePreview(null, true);
+  assert.equal(state.pendingStart, null, '可取消锁定的上车站');
+  assert.equal(el('tutorial-guide-title').textContent, '选择上车站', '取消后继续自由选择站点');
+  const line3 = state.linesMap.get('L_2e1682b2b792');
+  const line2 = state.linesMap.get('L_d3aa69375f93');
+  const physical = (line, name) => {
+    const stop = line.stops.find(s => s.name === name);
+    return state.physStops.find(p => String(p.id) === String(stop.id));
+  };
+  const board = physical(line3, '迎宾桥');
+  const transfer = physical(line3, '博州妇幼保健院');
+  const dest = physical(line2, '博尔塔拉火车站');
+  assert.ok(board && transfer && dest, '测试旅程使用真实公交站');
+  onStopClick({ data: stopToData(board) });
+  assert.ok(el('tutorial-guide-text').textContent.includes(board.name));
+  adjustView(wideBounds);
+  assert.equal(el('tutorial-guide-title').textContent, '选择乘车线路', '锁定后缩小不再退回地图操作');
+  assert.equal(state.pendingStart.logical.name, board.name, '缩放保留预览');
+  assert.equal(isMapPracticePending(), false, '开始预览后不再限制地图视野');
+  adjustView(new BoundsStub(focusedBounds.sw, focusedBounds.ne));
+  assert.equal(el('tutorial-guide-title').textContent, '选择乘车线路', '恢复视野后继续线路选择');
+  assert.equal(state.selectedLineName, '3路', '预览只有一条线路时自动选择，同名上下行合并计算');
+  onStopClick({ data: stopToData(board) });
+  assert.equal(state.routeStops.length, 1);
+  assert.equal(state.selectedLineName, '3路', '确认上车后保留单线路自动选择');
+  const pickLine = name => {
+    if (state.selectedLineName !== name) el('current-info-lines').children.find(tag => tag.textContent === name).onclick();
+  };
+  pickLine('3路');
+  assert.ok(el('tutorial-guide-text').textContent.includes('3路'));
+  assert.ok(el('tutorial-guide-text').textContent.includes('途中下车换乘'), '无需一条线直接到终点');
+  const intermediate = physical(line3, '天山南路');
+  onCandidateStopClick(stopToData(intermediate));
+  onCandidateStopClick(stopToData(intermediate));
+  assert.equal(state.routeStops.at(-1).logical.name, intermediate.name, '可自由选择中间下车站');
+  if (state.selectedLineName) undoRoute();
+  undoRoute();
+  assert.equal(state.routeStops.length, 1, '可撤回自己的选择');
+  pickLine('3路');
+  onCandidateStopClick(stopToData(transfer));
+  onCandidateStopClick(stopToData(transfer));
+  assert.equal(state.routeStops.length, 2);
+  assert.equal(state.selectedLineName, null, '换乘站有多条线路时保持手动选择');
+  assert.ok(el('tutorial-guide-title').textContent.includes('换乘'), '到达中途站后介绍换乘');
+  assert.ok(el('tutorial-guide-text').textContent.includes(transfer.name));
+  pickLine('2路');
+  onCandidateStopClick(stopToData(dest));
+  assert.ok(el('tutorial-guide-text').textContent.includes(dest.name));
+  onCandidateStopClick(stopToData(dest));
+  assert.deepEqual(state.routeRides.map(line => line.name), ['3路', '2路']);
+  assert.ok(el('tutorial-guide-progress').textContent.includes('已换乘 1 次'));
+  assert.ok(el('tutorial-guide-title').textContent.includes('终点'));
+  const { findOptimalRoute } = await import('../frontend/js/core/router-api.js');
+  const { routerWalkFn } = await import('../frontend/js/map/walk.js');
+  const best = await findOptimalRoute(state.routerGraph, state.ORIGIN, state.DEST,
+    { allowMetro: true, busSpeedFactor: 1 }, routerWalkFn);
+  assert.equal(best.legs.filter(leg => leg.type === 'ride').length, 2, '固定起终点的最快路线恰好换乘一次');
+  finishRoute();
+  await wait(100);
+  assert.equal(state.finished, true, '普通规则到达即可通关');
+  assert.ok(el('tutorial-guide').classList.contains('hidden'));
+  adjustView(wideBounds);
+  restartLevel();
+  assert.equal(state.finished, false);
+  assert.ok(!el('tutorial-guide').classList.contains('hidden'), '重玩恢复文字操作框');
+  assert.ok(el('tutorial-guide-title').textContent.includes('熟悉地图'), '重玩从地图操作练习开始');
   resetRoute();
+  state.map.getBounds = originalGetBounds;
+  state.map.setBounds = originalSetBounds;
 });
 
 await step('教学关通关后回菜单，旧北京关不再进入', async () => {
-  assert.deepEqual(LEVELS.map((l) => l.id), ['wenshan_intro', 'shuanghe_transfer', 'kokdala_walk_range', 'datong_brt'], '故事模式为单线、换乘、限时、快慢车四关教学');
-  assert.ok(LEVELS[0].hideShowAllStops && !LEVELS[1].hideShowAllStops, '全图显示从第二关才出现');
+  assert.deepEqual(LEVELS.map((l) => l.id), ['guided_intro'], '故事模式只保留新的操作教程');
   state.currentLevel = LEVELS[LEVELS.length - 1];
   nextLevel();
   assert.ok(!el('main-menu').classList.contains('hidden'), '最后一关完成后回到主菜单');
   assert.equal(state.storyUnlocked, LEVELS.length + 1, '全部教学关已通关');
   updateButtons();
   openStoryMenu();
-  assert.ok(!el('story-level-list').children[0].innerHTML.includes(LEVELS[0].title), '选关圆环不显示关卡标题');
+  assert.ok(el('story-level-list').children[0].innerHTML.includes(LEVELS[0].title), '选关显示新手教程入口');
   openTowerMenu();
   assert.equal(el('tower-guest-notice').classList.contains('hidden'),false,'游客进入无尽模式时显示存档提醒');
   account.user={id:'test-user',name:'测试玩家'};

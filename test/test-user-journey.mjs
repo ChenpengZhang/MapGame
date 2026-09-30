@@ -6,7 +6,7 @@
 import assert from 'node:assert/strict';
 import { installAllStubs, elements, created, store } from './stubs.mjs';
 
-installAllStubs({ useFull: true }); // 全量 beijing-transit.json（故事关卡坐标都在北京，需真实站点）
+installAllStubs({ useFull: true }); // 完整旅程使用真实城市数据，故事关按其 cityId 懒加载。
 
 const { state } = await import('../frontend/js/core/state.js');
 const { buildGraph } = await import('../frontend/js/core/router-api.js');
@@ -67,9 +67,10 @@ await step('关闭单句开场 → 交还操作权', () => {
   const lv = LEVELS[0];
   for (let i = 0; i < lv.story.length; i++) storyNext();
   assert.equal(state.storyActive, false, '剧情结束后解锁地图');
-  assert.equal(state.originWalkRangeCircle, null, '教学关不显示起点步行范围圈');
-  const prompt = created.markers.findLast((m) => m.map && String(m.__opts.content).includes('map-tutorial-label'));
-  assert.ok(prompt && prompt.__opts.content.includes('放大地图显示公交站'), '初始缩放不足时显示放大提示');
+  assert.ok(state.originWalkRangeCircle && state.destinationWalkRangeCircle, '教学关保留普通玩法的步行范围圈');
+  assert.ok(!el('tutorial-guide').classList.contains('hidden'), '欢迎结束后显示固定操作提示');
+  assert.equal(el('tutorial-guide-title').textContent, '熟悉地图操作', '先引导玩家熟悉地图');
+  assert.ok(!created.markers.some(m => m.map && String(m.__opts.content).includes('map-tutorial-label')), '教学不额外添加地图文字标注');
   assert.ok(el('mode-hud').classList.contains('hidden'),'第一关不显示时间限制');
 });
 

@@ -540,6 +540,47 @@ html, body {
   color: #111; cursor: pointer; overflow: visible;
   transition: transform .15s, filter .15s;
 }
+.story-placeholder {
+  flex: 0 0 180px; padding: 24px 16px; border: 1px solid #ffffff25;
+  border-radius: 18px; background: #ffffff0b; color: #e2e8f0;
+  display: flex; flex-direction: column; align-items: center; gap: 14px;
+  font: inherit; font-size: 18px;
+}
+.story-placeholder:disabled { cursor: default; }
+.story-placeholder:not(:disabled):hover { border-color: #19b7c9; background: #19b7c917; cursor: pointer; }
+#tutorial-guide {
+  position: absolute; top: 72px; right: 14px; z-index: 650;
+  width: min(320px, calc(100vw - 28px)); box-sizing: border-box;
+  padding: 18px; border: 1px solid #19b7c970; border-radius: 16px;
+  background: #111c30f2; color: var(--ink); box-shadow: var(--shadow-lg);
+  pointer-events: auto;
+}
+#tutorial-guide-progress { color: #67d9e5; font-size: 12px; margin: 0 0 8px; }
+#tutorial-guide-title { font-size: 19px; margin: 0 0 10px; }
+#tutorial-guide-text { font-size: 13px; line-height: 1.8; margin: 0; }
+#tutorial-guide-action { font-size: 13px; line-height: 1.7; margin: 12px 0 0; padding-top: 10px; border-top: 1px solid #ffffff20; color: #67d9e5; }
+#tutorial-guide.guide-mistake { border-color: #f6b35c; }
+#tutorial-guide-action { white-space: pre-line; }
+#tutorial-guide.guide-mistake #tutorial-guide-action { color: #f6b35c; }
+.menu-open #tutorial-guide { display: none; }
+@media (max-width: 600px) {
+  #tutorial-guide { top: 58px; padding: 12px 14px; width: calc(100vw - 28px); }
+  #app:has(#tutorial-guide:not(.hidden)) .btn-group { top: auto; bottom: 10px; z-index: 700; }
+  #app:has(#tutorial-guide:not(.hidden)) #left-col { bottom: 62px; }
+  #tutorial-guide-title { font-size: 16px; margin-bottom: 6px; }
+  #tutorial-guide-text { font-size: 12px; line-height: 1.6; }
+  #tutorial-guide-action { margin-top: 8px; padding-top: 6px; }
+}
+.story-placeholder-number {
+  display: grid; place-items: center; width: 56px; height: 56px;
+  border-radius: 50%; border: 3px solid #19b7c9; color: #fff; font-size: 24px;
+}
+.story-placeholder small { color: #94a3b8; font-size: 13px; }
+.story-placeholder.upcoming .story-placeholder-number { border-color: #64748b; }
+@media (max-width: 480px) {
+  #story-level-list { gap: 14px; }
+  .story-placeholder { flex-basis: 130px; padding: 20px 10px; }
+}
 .story-level:not(:last-child)::after {
   content: ''; position: absolute; left: 100%; top: calc(50% - 3px);
   width: 32px; height: 6px; background: rgba(255,255,255,.22);
@@ -632,6 +673,29 @@ html, body {
 .story-speaker.phone { color: var(--accent); font-weight: 700; }
 .story-speaker.action { color: var(--ink-faint); }
 .story-text { font-size: 17px; line-height: 1.8; min-height: 44px; color: var(--ink-strong); }
+#story-dialog.welcome {
+  inset: 0; z-index: 1500; align-items: center; pointer-events: auto;
+  background: radial-gradient(ellipse at 50% 38%, #193447 0%, #0b1120 65%);
+}
+#story-dialog.welcome .story-dialog-inner {
+  width: min(640px, calc(100% - 40px)); box-sizing: border-box; margin: 0;
+  padding: 48px 20px; text-align: center; background: transparent;
+  border: 0; box-shadow: none; backdrop-filter: none; -webkit-backdrop-filter: none;
+}
+#story-welcome-title {
+  margin: 0 0 28px; font-size: clamp(27px, 4vw, 38px); line-height: 1.5;
+  font-weight: 700; letter-spacing: .02em; color: #f1f5f9;
+}
+#story-dialog.welcome .story-speaker { display: none; }
+#story-dialog.welcome .story-text {
+  white-space: pre-line; font-size: 16px; line-height: 2; color: #b8c8d7;
+}
+#story-dialog.welcome .story-actions { justify-content: center; margin-top: 40px; }
+#story-dialog.welcome #story-next-btn {
+  min-width: 140px; justify-content: center; padding: 12px 28px;
+  background: #28b7c7; color: #071d26; font-weight: 700;
+  box-shadow: 0 8px 30px #19b7c925;
+}
 /* 剧情只能通过按钮推进；玩家点到别处时按钮抖动发光，提示“点这里继续” */
 .story-actions { display: flex; justify-content: flex-end; margin-top: 10px; }
 #story-next-btn {
@@ -1127,6 +1191,13 @@ html, body {
     <!-- 查看地图时返回结果的开关 -->
     <button id="result-toggle-btn" class="hidden">结果</button>
 
+    <aside id="tutorial-guide" class="hidden" aria-label="新手教程提示" aria-live="polite" aria-atomic="true">
+      <p id="tutorial-guide-progress"></p>
+      <h2 id="tutorial-guide-title"></h2>
+      <p id="tutorial-guide-text"></p>
+      <p id="tutorial-guide-action"></p>
+    </aside>
+
     <!-- 主菜单 -->
     <div id="main-menu">
       <div class="main-inner">
@@ -1154,6 +1225,7 @@ html, body {
     <!-- 剧情窗口（下半屏 Galgame） -->
     <div id="story-dialog" class="hidden">
       <div class="story-dialog-inner">
+        <h2 id="story-welcome-title" class="hidden"></h2>
         <div class="story-speaker" id="story-speaker"></div>
         <div class="story-text" id="story-text"></div>
         <div class="story-actions"><button id="story-next-btn" type="button"><span id="story-next-label">继续</span> <span class="icon icon-nav-arrow-right" aria-hidden="true"></span></button></div>
