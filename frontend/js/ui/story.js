@@ -29,6 +29,7 @@ export function playStory(level, onDone) {
   _storyLines = level.story || [];
   _storyIndex = 0;
   _storyOnDone = onDone || null;
+  $('story-dialog')?.classList.toggle('welcome', _storyLines[0]?.type === 'welcome');
   show('story-dialog');
   renderStoryLine();
 }
@@ -46,6 +47,11 @@ function renderStoryLine() {
   }
   const speaker = $('story-speaker');
   const text = $('story-text');
+  const welcomeTitle = $('story-welcome-title');
+  if (welcomeTitle) {
+    welcomeTitle.textContent = line.title || '';
+    welcomeTitle.classList.toggle('hidden', line.type !== 'welcome');
+  }
   if (speaker) {
     if (line.type === 'player') {
       speaker.textContent = '我';

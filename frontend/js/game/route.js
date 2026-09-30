@@ -25,7 +25,7 @@ import { makeMassMarks, stopToData } from '../map/stop-marks.js';
 import { fadeInOverlay, setMassMarksMap, removeOverlay } from '../map/anim.js';
 import { hideBaseStops, updateStopsByZoom } from '../map/stop-layer.js';
 import { setOriginWalkRangeVisible, setBlindMap } from '../map/map-init.js';
-import { clearMapTutorial, resetMapTutorialPrompt, setMapTutorialStage, isTutorialTransferStop, getTutorialTransfer, setTutorialTransferPoint, showTutorialMistake, clearTutorialMistake } from '../map/tutorial-layer.js';
+import { clearMapTutorial, resetMapTutorialPrompt, setMapTutorialStage, isTutorialTransferStop, getTutorialTransfer, setTutorialTransferPoint, showTutorialMistake, clearTutorialMistake, isMapPracticePending } from '../map/tutorial-layer.js';
 import { addStopMarker, stopTraveler, drawRideSegment, drawTransferWalk, drawWalkTransfer, rideEndpoint, drawWalkLeg, clearGroupOverlays } from '../map/route-layer.js';
 import { makeTransitLineLayers } from '../map/transit-line-style.js';
 import { isNativeAmap, registerPickableLine } from '../map/native-picker.js';
@@ -60,6 +60,17 @@ function physicalPoint(phys) {
   return phys && (phys.lnglat || [phys.lng, phys.lat]);
 }
 
+/** 同名上下行算一条线路；终点站无后续站点的方向不算可乘。 */
+function selectOnlyLine(stop) {
+  const names = new Set((stop.line_ids || []).map(getLine).filter((line) => {
+    if (!line || (state.scenario.noMetro && line.mode === 'metro')) return false;
+    const index = stopIndexInLine(line, stop);
+    return index >= 0 && (!line.oneWay || line.isLoop || index < line.stops.length - 1);
+  }).map((line) => line.name));
+  state.selectedLineName = names.size === 1 ? [...names][0] : null;
+  state.selectedLineId = null;
+}
+
 /** 同一物理点允许 id 相同，或同名线路拆点后坐标完全重合。 */
 function samePhysicalSelection(pending, phys) {
   if (!pending || !phys) return false;
@@ -74,7 +85,7 @@ function samePhysicalSelection(pending, phys) {
 
 /** 点当前站线路板：选中后只显示并采用该线路；再次点击则恢复全部线路。 */
 function toggleCurrentLine(lineName, lineId = null) {
-  if (!state.routeStops.length || state.finished) return;
+  if ((!state.routeStops.length && !state.pendingStart) || state.finished) return;
   clearTutorialMistake(); // 选错线路后改选/取消线路本身就是纠正，不必再点上一步
   if (state.selectedLineName === lineName) {
     state.selectedLineName = null;
@@ -85,6 +96,16 @@ function toggleCurrentLine(lineName, lineId = null) {
   }
   state.pendingCandidate = null;
   clearHighlight();
+  if (!state.routeStops.length) {
+    const pending = state.pendingStart;
+    renderHighlight(pending.logical, pending.point, toggleCurrentLine);
+    showCandidateNetwork(pending.logical, pending.point, pending.physicalStopId);
+    setMapTutorialStage('selectLine', pending.point);
+    setStatus(state.selectedLineName
+      ? `已锁定 ${pending.logical.name}，已选择 ${state.selectedLineName}；再次点击站点确认，点击空白处取消`
+      : `已锁定 ${pending.logical.name}，请选择线路；点击空白处取消`);
+    return;
+  }
   const current = state.routeStops[state.routeStops.length - 1];
   showCurrentStopInfo(current.logical, toggleCurrentLine);
   showCandidateNetwork(current.logical, current.point, current.physicalStopId);
@@ -99,6 +120,11 @@ function toggleCurrentLine(lineName, lineId = null) {
  * 并从当前站平移过去，让新手看清“坐到哪里下车”。
  */
 function promptRideStage(current) {
+  if (state.currentLevel?.mapTutorial?.panelOnly) {
+    const nearDest = haversineKm(current.point, state.DEST) * 1000 <= MAX_WALK_M;
+    setMapTutorialStage(nearDest ? 'finish' : state.selectedLineName ? 'rideStop' : 'selectLine');
+    return;
+  }
   if (!state.selectedLineName) {
     setMapTutorialStage('selectLine', current.point);
     return;
@@ -163,6 +189,10 @@ function onCandidateLineClick(line, event) {
 /** 基础站点层的点击回调（由 app.js 注入到 map/stop-layer.js） */
 export function onStopClick(e) {
   if (state.storyActive) return; // 剧情/教学期间禁止开始规划
+  if (isMapPracticePending()) {
+    clearHighlight();
+    return;
+  }
   const phys = e && e.data;
   const logical = resolveStop(phys);
   if (!phys || !logical || state.routeStops.length) return;
@@ -183,7 +213,8 @@ export function onStopClick(e) {
 function previewStart(d) {
   state.pendingStart = d;
   state.pendingCandidate = null;
-  renderHighlight(d.logical, d.point);
+  selectOnlyLine(d.logical);
+  renderHighlight(d.logical, d.point, toggleCurrentLine);
   showCandidateNetwork(d.logical, d.point, d.physicalStopId); // 起点预览也展示所有经过线路及沿途站点
   // 起点尚未确认时也给出明确的取消入口；其它规划按钮要等确认起点后再出现。
   show('btn-group');
@@ -191,8 +222,8 @@ function previewStart(d) {
   hide('show-all-btn');
   hide('force-walk-row');
   setText('reset-btn', '取消');
-  setMapTutorialStage('confirm', d.point);
-  setStatus('已预览 ' + d.logical.name + '，再次点击同一站确定；点击地图空白处取消');
+  setMapTutorialStage('selectLine', d.point);
+  setStatus('已锁定 ' + d.logical.name + '，可以选择线路；再次点击同一站确认，点击地图空白处取消');
 }
 
 /** 第二步：再次点击同一物理站确认起点。 */
@@ -205,9 +236,16 @@ function confirmStart() {
 
 /** 开始规划：以该站为首站 */
 function startRoute(d) {
+  const chosenLineName = state.selectedLineName;
+  const chosenLineId = state.selectedLineId;
   resetRoute();
   state.routeOverlayGroups = [[]]; // 第一组：首站标记 + 首段步行
   state.routeStops = [d];
+  selectOnlyLine(d.logical);
+  if (chosenLineName) {
+    state.selectedLineName = chosenLineName;
+    state.selectedLineId = chosenLineId;
+  }
   // 起点步行阶段已经完成：隐藏原起点范围。候选步行站会由当前站重新计算，
   // 因而与原范围重叠的站只要仍在当前站 1.5km 内就会自然保留。
   setOriginWalkRangeVisible(false);
@@ -223,7 +261,7 @@ function startRoute(d) {
   });
 
   showCandidateNetwork(d.logical, d.point, d.physicalStopId);
-  setMapTutorialStage('selectLine', d.point);
+  promptRideStage(d);
   checkTutorialProgress();
   renderRoutePanel();
   show('btn-group');
@@ -250,6 +288,7 @@ export function onCandidateStopClick(phys) {
     return;
   }
   if (!state.routeStops.length || state.finished) return;
+
 
   const prev = state.routeStops[state.routeStops.length - 1];
   if (sameLogical(logical, prev.logical)) return;
@@ -292,6 +331,8 @@ export function cancelRoutePreview(_event, force = false) {
   if (!hadPreview && !hadLineSelection) return;
   if (hadPreview) cancelPreview();
   if (wasStart) {
+    state.selectedLineName = null;
+    state.selectedLineId = null;
     clearCandidate();
     hide('btn-group');
     resetMapTutorialPrompt();
@@ -416,6 +457,8 @@ function planStops(best) {
  */
 async function checkTutorialProgress() {
   const level = state.currentLevel;
+  // 自由操作教程只解释操作，不以最优线路、站序或时限评判玩家。
+  if (level?.mapTutorial?.panelOnly) return;
   if (!level?.mapTutorial || !state.routerGraph || !state.routeStops.length || state.finished) return;
   const revision = state.routeRevision || 0;
   const steps = state.routeStops.length;
@@ -468,10 +511,12 @@ function commitRide(logical, prev, line) {
 
   state.selectedLineName = null; // 线路选择只约束当前这一段；到站后重新选择
   state.selectedLineId = null;
+  selectOnlyLine(cur.logical);
   clearHighlight(); // 清掉预览悬浮高亮
   showCurrentStopInfo(cur.logical, toggleCurrentLine);
   showCandidateNetwork(cur.logical, cur.point, cur.physicalStopId);
-  setMapTutorialStage('finish', state.DEST);
+  if (state.currentLevel?.mapTutorial?.panelOnly) promptRideStage(cur);
+  else setMapTutorialStage('finish', state.DEST);
   renderRoutePanel();
   setStatus(ridingHint());
   checkTutorialProgress();
@@ -506,12 +551,12 @@ function commitWalkTransfer(logical, prev, force,selectedPhys) {
   addStopMarker(state.routeStops.length, cur.point);
   drawWalkTransfer(prev.point, cur.point);
 
-  state.selectedLineName = null;
-  state.selectedLineId = null;
+  selectOnlyLine(cur.logical);
   clearHighlight();
   showCurrentStopInfo(cur.logical, toggleCurrentLine);
   showCandidateNetwork(cur.logical, cur.point, cur.physicalStopId);
-  setMapTutorialStage('selectLine', cur.point);
+  if (state.currentLevel?.mapTutorial?.panelOnly) promptRideStage(cur);
+  else setMapTutorialStage('selectLine', cur.point);
   renderRoutePanel();
   setStatus(ridingHint());
   checkTutorialProgress();
@@ -521,13 +566,14 @@ function commitWalkTransfer(logical, prev, force,selectedPhys) {
 // ============ 终点：完成规划 ============
 
 /** 点"终"图钉（或终点步行）后完成规划，并触发最优路线对比 */
-export function finishRoute() {
+export function finishRoute({ silentOutOfRange = false } = {}) {
   if (state.finished) return;
+  if (isMapPracticePending()) return;
 
   // 未选择任何站点：直接从起点步行到终点
   if (!state.routeStops.length) {
     if (haversineKm(state.ORIGIN, state.DEST) * 1000 > MAX_WALK_M) {
-      showCenterToast('起点到终点超过 1.5km，无法直接步行到达，请先选站点');
+      if (!silentOutOfRange) showCenterToast('起点到终点超过 1.5km，无法直接步行到达，请先选站点');
       return;
     }
     clearMapTutorial();
@@ -552,7 +598,7 @@ export function finishRoute() {
   // 终点步行上限：不允许超过 1.5km
   const last = state.routeStops[state.routeStops.length - 1];
   if (haversineKm(last.point, state.DEST) * 1000 > MAX_WALK_M) {
-    showCenterToast('距离终点步行超过 1.5km，请先换乘到更近的站点');
+    if (!silentOutOfRange) showCenterToast('距离终点步行超过 1.5km，请先换乘到更近的站点');
     return;
   }
   clearMapTutorial();
@@ -651,7 +697,8 @@ export function undoRoute() {
     clearHighlight();
     showCurrentStopInfo(prev.logical, toggleCurrentLine);
     showCandidateNetwork(prev.logical, prev.point, prev.physicalStopId);
-    setMapTutorialStage('selectLine', prev.point);
+    if (state.currentLevel?.mapTutorial?.panelOnly) promptRideStage(prev);
+    else setMapTutorialStage('selectLine', prev.point);
     renderRoutePanel();
     setStatus('已撤回一步，可继续选择');
     return;

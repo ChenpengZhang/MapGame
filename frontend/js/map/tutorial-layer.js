@@ -7,7 +7,9 @@
  */
 
 import { state } from '../core/state.js';
-import { BUS_MIN_ZOOM, MAX_WALK_M } from '../core/config.js';
+import { MAX_WALK_M } from '../core/config.js';
+import { busMinZoom } from './stop-layer.js';
+import { haversineKm } from '../core/router-api.js';
 
 let promptConfig = null;
 let promptMarker = null;
@@ -15,6 +17,41 @@ let promptStage = null;
 let promptPosition = null;
 let busStopsRevealed = false;
 let zoomListener = null;
+let mapPracticeCompleted = false;
+let boardingPreviewStarted = false;
+let viewportListener = null;
+
+/** 判断实际可见地图，不要求采用某一种聚焦操作。少量容差避免边缘反复跳步。 */
+function originViewportReady() {
+  if (!state.map || !state.ORIGIN || state.map.getZoom() < busMinZoom()) return false;
+  const bounds = state.map.getBounds?.();
+  if (!bounds) return false;
+  const sw = bounds.getSouthWest(), ne = bounds.getNorthEast();
+  const mapRect = document.getElementById('map')?.getBoundingClientRect?.();
+  const barRect = document.getElementById('topbar')?.getBoundingClientRect?.();
+  const inset = mapRect && barRect
+    ? Math.max(0, Math.min(mapRect.bottom, barRect.bottom) - mapRect.top) / Math.max(1, mapRect.height) : 0;
+  const topLat = ne.getLat() - (ne.getLat() - sw.getLat()) * inset;
+  const center = [(sw.getLng() + ne.getLng()) / 2, (sw.getLat() + topLat) / 2];
+  const width = haversineKm([sw.getLng(), center[1]], [ne.getLng(), center[1]]) * 1000;
+  const height = haversineKm([center[0], sw.getLat()], [center[0], topLat]) * 1000;
+  const [lng, lat] = state.ORIGIN;
+  return lng >= sw.getLng() && lng <= ne.getLng() && lat >= sw.getLat() && lat <= topLat
+    && haversineKm(center, state.ORIGIN) * 1000 <= (mapPracticeCompleted ? 850 : 650)
+    && Math.min(width, height) <= (mapPracticeCompleted ? 4700 : 4200);
+}
+
+export function isMapPracticePending() {
+  if (!promptConfig?.mapPractice || boardingPreviewStarted || state.routeStops.length) return false;
+  mapPracticeCompleted = originViewportReady();
+  return !mapPracticeCompleted;
+}
+
+export function completeMapPractice() {
+  if (!promptConfig?.mapPractice) return;
+  mapPracticeCompleted = originViewportReady();
+  renderPrompt();
+}
 
 function escapeHtml(value) {
   return String(value == null ? '' : value)
@@ -34,6 +71,11 @@ function removeMarker() {
 function removeZoomListener() {
   if (state.map && zoomListener) state.map.off('zoomchange', zoomListener);
   zoomListener = null;
+  if (state.map && viewportListener) {
+    state.map.off('moveend', viewportListener);
+    state.map.off('zoomend', viewportListener);
+  }
+  viewportListener = null;
 }
 
 /** 初始阶段在公交站首次达到显示级别前，先引导玩家放大地图。 */
@@ -157,6 +199,9 @@ function renderCardTip(tipId, cardId, text) {
 
 function renderPrompt() {
   removeMarker();
+  renderGuidePanel();
+  // 此教程仅使用文字框，保留普通游戏的站点、线路与起终点图层。
+  if (promptConfig?.panelOnly) return;
   if (mistakeReason != null && promptConfig) {
     // 错误状态：清掉地图提示、高亮、注释、名称板气泡与 HUD 闪烁，只留“上一步”提示
     for (const m of highlightMarkers.concat(noteMarkers)) m.setMap(null);
@@ -175,7 +220,7 @@ function renderPrompt() {
   const text = promptConfig ? (override ? override.text : textForStage(promptStage)) : null;
   // 选线路阶段（含换乘站上的“点击你要换乘的线路”）在名称板旁再放一份同样的提示
   const choosingLine = promptStage === 'selectLine' || (!!override && override.text === promptConfig?.transfer?.arrived);
-  renderCardTip('tutorial-current-tip', 'current-infocard', choosingLine ? text : null);
+  renderCardTip('tutorial-current-tip', 'current-infocard', choosingLine && !promptConfig?.panel ? text : null);
   // mapTutorial.anchors[阶段] 可把某一步的提示固定到指定坐标（如“直接点击目标站”锚在目标站）
   const anchor = promptConfig?.anchors?.[promptStage];
   const position = override?.position || anchor || promptPosition || promptConfig?.position;
@@ -189,6 +234,71 @@ function renderPrompt() {
     clickable: false,
   });
   promptMarker.setMap(state.map);
+}
+
+/** 固定文字框随真实操作推进；地图仍可拖动、缩放和点击。 */
+function renderGuidePanel() {
+  if (typeof document === 'undefined') return;
+  const panel = document.getElementById('tutorial-guide');
+  if (!panel) return;
+  const enabled = !!promptConfig?.panel;
+  panel.classList.toggle('hidden', !enabled);
+  if (!enabled) return;
+  const stops = state.routeStops || [];
+  const rides = (state.routeRides || []).filter(Boolean);
+  const currentName = stops[stops.length - 1]?.logical?.name || '';
+  const pendingName = state.pendingStart?.logical?.name || state.pendingCandidate?.logical?.name || '';
+  const hasRidden = rides.length > 0;
+  const transfers = rides.slice(1).filter((line, index) => line.name !== rides[index].name).length;
+  const tap = state.isTouch ? '轻触' : '单击';
+  let title, text, action;
+  if (isMapPracticePending()) {
+    title = '熟悉地图操作';
+    text = state.isTouch
+      ? '单指拖动地图，双指缩放。起点周围的红圈表示 1.5 公里步行范围，圈内的站点可以步行到达。'
+      : '按住鼠标左键拖动地图，滚动滚轮缩放。起点周围的红圈表示 1.5 公里步行范围，圈内的站点可以步行到达。';
+    action = '查看起点附近的公交站\n提示：点击「起」可快速聚焦。';
+  } else if (promptStage === 'initial' && !busStopsRevealed) {
+    title = '查看附近站点';
+    text = `将地图移到「起」附近并放大，即可看到公交站。也可以${tap}「起」快速聚焦；红圈内的站点都可以步行到达。`;
+    action = '查看起点附近的公交站\n提示：放大地图可显示站点。';
+  } else if (promptStage === 'initial') {
+    title = '选择上车站';
+    text = state.isTouch
+      ? '在起点红圈的步行范围内挑选一个公交站，轻触即可锁定站点，查看站名和经过的线路，并进入线路选择。可以取消选择，也可以轻触其他站点更换。'
+      : '在起点红圈的步行范围内挑选一个公交站。将鼠标移到站点上可以预览站名和经过的线路；单击一下即可锁定车站，进入线路选择。可以取消选择，也可以单击其他站点更换。';
+    action = '选择一个上车站\n提示：点空白处或「取消」可取消选择。';
+  } else if (state.pendingStart && !stops.length) {
+    title = '选择乘车线路';
+    text = `已锁定「${pendingName}」。${tap}站点名称板中的线路名称，或地图上的线路标线，即可选择线路。只有一条线路时会自动选中；选好后再次${tap}站点，确认步行到站。`;
+    action = '选择乘车线路\n提示：仍可取消选择或点击其他站点更换。';
+  } else if (promptStage === 'confirm') {
+    title = '确认这一段行程';
+    text = `再次${tap}「${pendingName}」即可确认到达这里，将这一段行程加入路线。也可以${tap}其他可达站点，继续比较下车位置。`;
+    action = '确认这一段行程\n提示：「上一步」可撤回已确认的选择。';
+  } else if (promptStage === 'finish') {
+    title = '步行到达终点';
+    text = `从「${currentName}」已能步行到达终点。${tap}地图上的「终」即可完成最后一段步行并结束路线，查看本次旅程的用时。`;
+    action = '步行到达终点\n提示：最后一段步行也会计入用时。';
+  } else if (promptStage === 'rideStop') {
+    title = '预览下车站';
+    text = `沿「${state.selectedLineName || '当前线路'}」选择想下车的站点，${tap}一次即可预览。可以一次乘过多个站；到不了终点附近时，可以在途中下车换乘。`;
+    action = '预览一个下车站\n提示：点一次查看，再点一次确认。';
+  } else {
+    title = hasRidden ? '换乘或继续乘车' : '查看并选择线路';
+    text = hasRidden
+      ? `在「${currentName}」的站点名称板中${tap}线路名称，或${tap}地图标线，即可选择接下来乘坐的线路。选择另一条线路就是换乘，也可以沿原线路继续乘车。`
+      : `在站点名称板中${tap}线路名称，或${tap}地图标线，即可选择线路并查看沿途站点。可以自由比较多条线路；只有一条时会自动选中。`;
+    action = hasRidden
+      ? '选择接下来的线路\n提示：选好后可预览沿途的下车站。'
+      : '选择一条线路\n提示：选好后可预览沿途的下车站。';
+  }
+  document.getElementById('tutorial-guide-progress').textContent = transfers > 0
+    ? `新手教程 · 已换乘 ${transfers} 次` : '新手教程 · 操作提示';
+  document.getElementById('tutorial-guide-title').textContent = title;
+  document.getElementById('tutorial-guide-text').textContent = text;
+  document.getElementById('tutorial-guide-action').textContent = action;
+  panel.classList.remove('guide-mistake');
 }
 
 /**
@@ -255,6 +365,7 @@ function setHudFlash(on) {
 /** 按“是否已出发”同步高亮、注释与 HUD 闪烁；每次切换教学阶段时调用。 */
 function syncAnnotations() {
   if (!promptConfig || !state.map) return;
+  if (promptConfig.panelOnly) return;
   const started = hasStarted();
   if (!started) { transferRevealed = false; transferPoint = null; }
   if (promptStage === 'rideToTransfer' || promptStage === 'previewTransfer' || transferReached()) transferRevealed = true;
@@ -284,17 +395,30 @@ export function showMapTutorial(config) {
   removeZoomListener();
   removeMarker();
   clearAnnotations();
+  mistakeReason = null;
   promptConfig = config || null;
+  mapPracticeCompleted = false;
+  boardingPreviewStarted = false;
   syncAnnotations();
   promptStage = null;
   promptPosition = null;
   busStopsRevealed = !promptConfig?.waitForBusStops
-    || !!(state.map && state.map.getZoom() >= BUS_MIN_ZOOM);
+    || !!(state.map && state.map.getZoom() >= busMinZoom());
   if (!promptConfig) return;
+  if (promptConfig.mapPractice && state.map) {
+    viewportListener = () => {
+      if (boardingPreviewStarted || state.routeStops.length) return;
+      mapPracticeCompleted = originViewportReady();
+      // 尚未预览站点时检查视野；开始预览后不再回到地图操作。
+      renderPrompt();
+    };
+    state.map.on('moveend', viewportListener);
+    state.map.on('zoomend', viewportListener);
+  }
   if (promptConfig.waitForBusStops && !busStopsRevealed && state.map) {
     zoomListener = () => {
       // 这是单向状态：一旦玩家看见过公交站，之后缩小地图也不再退回放大提示。
-      if (busStopsRevealed || state.map.getZoom() < BUS_MIN_ZOOM) return;
+      if (busStopsRevealed || state.map.getZoom() < busMinZoom()) return;
       busStopsRevealed = true;
       if (promptStage === 'initial') renderPrompt();
     };
@@ -315,6 +439,9 @@ export function isTutorialTransferStop(logical) {
  */
 export function setMapTutorialStage(stage, position = null, options = {}) {
   cancelSlide();
+  if (promptConfig?.mapPractice && state.pendingStart && (stage === 'selectLine' || stage === 'confirm')) {
+    boardingPreviewStarted = true;
+  }
   promptStage = stage;
   if (Array.isArray(position)) promptPosition = position;
   else if (stage === 'initial') promptPosition = null;
@@ -361,4 +488,6 @@ export function clearMapTutorial() {
   promptStage = null;
   promptPosition = null;
   busStopsRevealed = false;
+  boardingPreviewStarted = false;
+  renderGuidePanel();
 }

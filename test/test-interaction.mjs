@@ -328,7 +328,14 @@ check('选择线路后只显示该线路及其站点，并按该线路乘车', (
   state.isTouch = false;
   resetRoute();
   onStopClick({ data: stopToData(state.physById.get(String(midStop.id))) });
+  const lockedLineTag = elements.get('info-lines').children.find(tag => tag.textContent === '夜9路');
+  assert.equal(typeof lockedLineTag?.onclick, 'function', '锁定上车站后可以直接选线');
+  lockedLineTag.onclick();
+  assert.equal(state.selectedLineName, '夜9路');
+  assert.equal(state.routeStops.length, 0, '锁定期间选线不提前确认步行');
   onStopClick({ data: stopToData(state.physById.get(String(midStop.id))) });
+  assert.equal(state.selectedLineName, '夜9路', '确认步行后保留已选线路');
+  elements.get('current-info-lines').children.find(tag => tag.textContent === '夜9路').onclick();
 
   const target = state.logicalStops.find((s) => s.name === '体育中心');
   assert.ok(target, '应找到体育中心');

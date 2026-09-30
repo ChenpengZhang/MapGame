@@ -22,7 +22,7 @@ import { saveCityId } from '../core/storage.js';
 import { cityById } from '../data/cities.js';
 import { ensureGameDataReady, isGameDataReady } from './data-ready.js';
 import { drawEndpoints, setMapLocked, setBlindMap } from '../map/map-init.js';
-import { showMapTutorial, clearMapTutorial } from '../map/tutorial-layer.js';
+import { showMapTutorial, clearMapTutorial, completeMapPractice } from '../map/tutorial-layer.js';
 import { applyScenario, refreshVisibleStops } from '../map/stop-layer.js';
 import { hideAllPanels, showPanel, setCityLabel, setModeHudVisible, updateFreeButton, updateStoryButton, buildStoryLevels, updateTowerMenuBest, buildCityMenu, setCitySelectLabel, toggleCityMenu } from '../ui/menu.js';
 import { playStory, hideStory } from '../ui/story.js';
@@ -37,6 +37,7 @@ import { stopTowerTimer } from './tower-timer.js';
 /** 把操作权交给玩家（剧情/教学结束后调用） */
 export function beginGameplay(level) {
   setMapLocked(false);
+  showMapTutorial(level.mapTutorial);
 }
 
 // ============ 启动一局 ============
@@ -89,9 +90,8 @@ export function startLevel(level, opts) {
   resetRoute();
   applyScenario();
   // 终点图钉被点击 = 完成规划；回调由玩法层提供（地图层不 import game）
-  drawEndpoints({ onDestClick: finishRoute, showWalkRanges: level.showWalkRanges !== false });
+  drawEndpoints({ onOriginFocus: completeMapPractice, onDestClick: () => finishRoute({ silentOutOfRange: true }), showWalkRanges: level.showWalkRanges !== false });
   void setBlindMap(!!state.scenario.blindMap, cityId); // 无尽“盲棋”：隐藏底图，只画城市轮廓
-  showMapTutorial(level.mapTutorial);
   // 新一局的起点改变后立即按新范围重算基础站点颜色。
   refreshVisibleStops();
 

@@ -30,6 +30,8 @@ export const DATA_VERSION = 7;
 
 export const METRO_MIN_ZOOM = 13;   // 地铁站：比之前晚一级显示，降低中等缩放下的地图拥挤
 export const BUS_MIN_ZOOM = 15;     // 公交站数量较多，放大到该等级再显示以控制密度和性能
+// 新手教程（双河，站点很少）点起点聚焦步行圈后约为 13.x 级：教程内放宽到 13，保证聚焦后即可看到并点选公交站
+export const TUTORIAL_BUS_MIN_ZOOM = 13;
 export const MAX_BUS_RENDER = 8000; // 公交站低缩放时的渲染上限：视野内超过则空间抽稀，避免整城 2.8 万点卡顿
 
 // ============ 配色 ============

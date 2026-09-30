@@ -13,6 +13,7 @@
  */
 
 import { state } from '../core/state.js';
+import { MAX_WALK_M } from '../core/config.js';
 import { $ } from '../core/dom.js';
 import { cityById } from '../data/cities.js';
 import { loadWalkCache } from './walk.js';
@@ -51,6 +52,7 @@ let zoomSpeed = 0.5; // 设置里的"缩放速度"滑块（0-1，默认 0.5）
 /** 设置面板的"缩放速度"滑块调用它（0~1） */
 export function setZoomSpeed(v) {
   zoomSpeed = v;
+  state.map?.setWheelZoomSpeed?.(v);
 }
 
 /**
@@ -74,6 +76,11 @@ export function setMapLocked(locked) {
 function setupZoomInertia() {
   const el = document.getElementById('map');
   if (!el || !state.map) return;
+  if (state.map.enableNativeWheelZoom) {
+    // Leaflet 自身的缩放动画避免逐帧 setView 重置瓦片造成闪屏。
+    state.map.enableNativeWheelZoom(zoomSpeed);
+    return;
+  }
   let velocity = 0;        // 缩放速度（zoom/步）
   let running = false;
   let lastStep = 0;
@@ -152,6 +159,7 @@ export function drawEndpoints(handlers) {
   });
   o.setMap(state.map);
   state.endpointOverlays.push(o);
+  o.on('click', () => focusWalkRange(state.ORIGIN, handlers?.onOriginFocus));
 
   const d = new AMap.Marker({
     position: state.DEST, content: '<div class="pin dest flash">终</div>',
@@ -159,7 +167,11 @@ export function drawEndpoints(handlers) {
   });
   d.setMap(state.map);
   state.endpointOverlays.push(d);
-  if (onDestClick) d.on('click', () => onDestClick());
+  d.on('click', () => {
+    if (state.storyActive) return;
+    focusWalkRange(state.DEST);
+    if (onDestClick) onDestClick();
+  });
 
   // 有范围圈时纳入完整圆圈；隐藏范围圈的教学关只适配两个图钉。
   const bounds = showWalkRanges
@@ -169,6 +181,27 @@ export function drawEndpoints(handlers) {
         ne: [Math.max(state.ORIGIN[0], state.DEST[0]), Math.max(state.ORIGIN[1], state.DEST[1])],
       };
   if (bounds) state.map.setBounds(new AMap.Bounds(bounds.sw, bounds.ne), false, [40, 40, 40, 40]);
+}
+
+/** 聚焦单个步行圈，短边方向在圈外留出约 150 米。 */
+function focusWalkRange(center, onFocused) {
+  if (!state.map || state.storyActive) return;
+  const bounds = walkRangeBounds([center], MAX_WALK_M + 150);
+  if (!bounds) return;
+  const target = new AMap.Bounds(bounds.sw, bounds.ne);
+  const mapRect = $('map')?.getBoundingClientRect?.();
+  const barRect = $('topbar')?.getBoundingClientRect?.();
+  const topInset = mapRect && barRect
+    ? Math.max(0, Math.min(mapRect.bottom, barRect.bottom) - mapRect.top) : 0;
+  const padding = [topInset, 0, 0, 0];
+  if (state.map.focusBounds) state.map.focusBounds(target, padding, onFocused);
+  else {
+    if (onFocused) {
+      const done = () => { state.map.off('moveend', done); onFocused(); };
+      state.map.on('moveend', done);
+    }
+    state.map.setBounds(target, false, padding);
+  }
 }
 
 /** 确认首站后隐藏起点范围；取消整条规划时重新显示。终点范围不受影响。 */

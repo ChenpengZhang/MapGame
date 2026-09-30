@@ -21,13 +21,18 @@
  */
 
 import { state } from '../core/state.js';
-import { METRO_MIN_ZOOM, BUS_MIN_ZOOM, MAX_BUS_RENDER } from '../core/config.js';
+import { METRO_MIN_ZOOM, BUS_MIN_ZOOM, TUTORIAL_BUS_MIN_ZOOM, MAX_BUS_RENDER } from '../core/config.js';
 import { setStatus, $ } from '../core/dom.js';
 import { makeMassMarks, stopToData } from './stop-marks.js';
 import { clickWasPicked } from './native-picker.js';
 import { fadeInOverlay, captureMassMarksCanvas, removeOverlay } from './anim.js';
 import { mapContainer } from './map-init.js';
 import { isWithinWalkRange } from './walk-range.js';
+
+/** 公交站显示阈值：新手教程（地图练习关）放宽，其它模式用全局设置 */
+export function busMinZoom() {
+  return state.currentLevel?.mapTutorial?.mapPractice ? TUTORIAL_BUS_MIN_ZOOM : BUS_MIN_ZOOM;
+}
 
 // ---------- 模块内部状态（只被本文件使用，因此不放进 core/state.js） ----------
 let metroMarks = null;        // 地铁站点层（MassMarks）
@@ -167,7 +172,7 @@ function refreshStopData(mm) {
     const walkable = viewportStops().filter((stop) =>
       isWithinWalkRange(stop, state.ORIGIN)
       && ((stop.mode === 'metro' && !state.scenario.noMetro && z >= METRO_MIN_ZOOM)
-        || (stop.mode === 'bus' && z >= BUS_MIN_ZOOM))
+        || (stop.mode === 'bus' && z >= busMinZoom()))
     );
     setStopData(mm, walkable.map((stop) => stopToData(stop, true)));
     return;
@@ -203,13 +208,13 @@ export function updateStopsByZoom() {
   const showBase = !state.scenario?.realRide && (state.routeStops.length === 0 || state.showAllStops);
   const z = state.map.getZoom();
   setStopsVisible(metroMarks, showBase && !state.scenario.noMetro && z >= METRO_MIN_ZOOM, () => metroMarksShown, (v) => { metroMarksShown = v; });
-  setStopsVisible(busMarks, showBase && z >= BUS_MIN_ZOOM, () => busMarksShown, (v) => { busMarksShown = v; }); // 公交站按缩放等级显隐
+  setStopsVisible(busMarks, showBase && z >= busMinZoom(), () => busMarksShown, (v) => { busMarksShown = v; }); // 公交站按缩放等级显隐
   const showOriginWalk = (showBase || !!state.scenario?.realRide) && state.routeStops.length === 0 && !!state.ORIGIN
-    && ((!state.scenario.noMetro && z >= METRO_MIN_ZOOM) || z >= BUS_MIN_ZOOM);
+    && ((!state.scenario.noMetro && z >= METRO_MIN_ZOOM) || z >= busMinZoom());
   setStopsVisible(originWalkMarks, showOriginWalk, () => originWalkMarksShown, (v) => { originWalkMarksShown = v; });
   // 红色层在地铁级别（13）就已显示，只含地铁站；缩放跨过公交级别时它不会重新 show，
   // 必须立刻补上公交步行站，否则蓝色公交层先出现、要等缩放停止才刷新成红色。
-  const walkIncludesBus = showOriginWalk && z >= BUS_MIN_ZOOM;
+  const walkIncludesBus = showOriginWalk && z >= busMinZoom();
   if (originWalkMarksShown && walkIncludesBus !== originWalkHasBus) refreshStopData(originWalkMarks);
   originWalkHasBus = walkIncludesBus;
 }
