@@ -19,7 +19,7 @@ import { CITIES, cityById } from '../data/cities.js';
 import { loadAmapKey, loadAmapSecurity } from '../core/storage.js';
 
 /** 互斥的五个主面板（同一时间只该出现一个；城市选择是顶栏下拉，不在此列） */
-export const PANELS = ['main-menu', 'story-menu', 'tower-menu', 'free-menu', 'settings-panel'];
+export const PANELS = ['main-menu', 'story-menu', 'tower-menu', 'daily-menu', 'settings-panel'];
 
 /**
  * 同步"菜单态"：只要任意一个全屏面板可见，就给 #app 打上 .menu-open，
@@ -120,14 +120,76 @@ export function buildCityMenu(onPick) {
   const menu = $('city-select-menu');
   if (!menu) return;
   menu.innerHTML = '';
-  const cur = cityById(state.currentCityId);
-  CITIES.forEach((c) => {
-    const item = document.createElement('div');
-    item.className = 'city-item' + (cur && cur.id === c.id ? ' current' : '');
-    item.textContent = c.name;
-    item.addEventListener('click', () => onPick(c.id));
-    menu.appendChild(item);
+  const search = document.createElement('input');
+  search.type = 'search';
+  search.className = 'city-search';
+  search.placeholder = '搜索城市或拼音';
+  search.setAttribute?.('aria-label', '搜索城市');
+  const list = document.createElement('div');
+  list.className = 'city-list';
+  menu.appendChild(search);
+  menu.appendChild(list);
+
+  const render = () => {
+    const matches = sortedCities().filter((c) => cityMatches(c, search.value));
+    list.replaceChildren();
+    if (!matches.length) {
+      const empty = document.createElement('div');
+      empty.className = 'city-empty';
+      empty.textContent = '没有找到该城市';
+      list.appendChild(empty);
+      return matches;
+    }
+    const cur = state.currentCityId;
+    let letter = null;
+    for (const c of matches) {
+      const initial = cityInitial(c);
+      if (initial !== letter) {
+        letter = initial;
+        const head = document.createElement('div');
+        head.className = 'city-letter';
+        head.textContent = letter;
+        list.appendChild(head);
+      }
+      const item = document.createElement('div');
+      item.className = 'city-item' + (c.id === cur ? ' current' : '');
+      item.textContent = c.name;
+      item.addEventListener('click', () => onPick(c.id));
+      list.appendChild(item);
+    }
+    return matches;
+  };
+  render();
+  search.addEventListener('input', render);
+  search.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      const first = render()[0];
+      if (first) onPick(first.id);
+    } else if (e.key === 'Escape') {
+      closeCityMenu();
+    }
   });
+}
+
+/** 可选城市（排除故事模式专用的小城市），按拼音排序（相同拼音按中文名） */
+function sortedCities() {
+  return CITIES.filter((c) => !c.storyOnly).sort((a, b) =>
+    (a.pinyin || a.id).localeCompare(b.pinyin || b.id) || a.name.localeCompare(b.name, 'zh'));
+}
+
+/** 分组用的首字母（大写） */
+function cityInitial(c) {
+  return (c.pinyin || c.id).charAt(0).toUpperCase();
+}
+
+/** 搜索匹配：中文名包含、全拼（忽略空格）前缀/包含、或音节首字母缩写前缀 */
+function cityMatches(c, query) {
+  const q = String(query || '').trim().toLowerCase().replace(/\s+/g, '');
+  if (!q) return true;
+  const syllables = (c.pinyin || c.id).toLowerCase().split(/\s+/);
+  const full = syllables.join('');
+  const initials = syllables.map((x) => x.charAt(0)).join('');
+  return c.name.includes(q) || full.includes(q) || initials.startsWith(q);
 }
 
 /** 更新顶栏当前城市名（如「北京」） */
@@ -143,6 +205,7 @@ export function toggleCityMenu() {
   const willOpen = menu.classList.contains('hidden');
   menu.classList.toggle('hidden', !willOpen);
   wrap.classList.toggle('open', willOpen);
+  if (willOpen) menu.querySelector?.('.city-search')?.focus?.();
 }
 
 /** 关闭城市下拉 */
@@ -163,9 +226,12 @@ export function updateButtons() {
     hide('btn-group');
   } else {
     show('btn-group');
-    show('undo-btn');
+    // 无尽“真实乘坐”：上车后不能撤回、不能重排整条路线，也不能全图显示（出发前仍可取消预览）
+    const realRide = !!state.scenario?.realRide;
+    toggleHidden('undo-btn', realRide);
     // 规划中恢复"显示全图站点"（手机端预览阶段 hide 过）；新手第一关不提供这个功能
-    toggleHidden('show-all-btn', !!state.currentLevel?.hideShowAllStops);
+    toggleHidden('show-all-btn', !!state.currentLevel?.hideShowAllStops || realRide);
+    toggleHidden('reset-btn', realRide && state.routeStops.length > 0);
     setText('reset-btn', '取消');
   }
 }
@@ -199,7 +265,7 @@ export function buildStoryLevels(onPick) {
 // ============ 爬塔菜单的纪录文案 ============
 
 /** 各畸变按钮 id（与 index.html 对应） */
-const TOWER_MENU_IDS = { normal: 'tower-normal', noMetro: 'tower-no-metro', busBoost: 'tower-bus-boost', rain: 'tower-rain' };
+const TOWER_MENU_IDS = { normal: 'tower-normal', noMetro: 'tower-no-metro', busBoost: 'tower-bus-boost', rain: 'tower-rain', blind: 'tower-blind', realRide: 'tower-real-ride' };
 
 /** 刷新四个畸变按钮：标题/二级说明（单一来源 levels.js）+ "最佳 第 N 层 / 进行中 第 M 层" */
 export function updateTowerMenuBest() {

@@ -115,6 +115,7 @@ class MassMarksStub extends OverlayStub {
 
 export function installAMap() {
   globalThis.AMap = {
+    __polyfill: true, // 桩对象模拟的是 Leaflet 兼容层接口（原生高德另走 native-picker）
     __backend: 'leaflet',
     Map: MapStub,
     MassMarks: MassMarksStub,

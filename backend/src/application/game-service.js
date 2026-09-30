@@ -1,5 +1,5 @@
 import { isDeepStrictEqual } from 'node:util';
-import { beijingDate, ensure, RULES_VERSION, settle } from '../domain/rules.js';
+import { beijingDate, BIG_CITIES, ensure, RULES_VERSION, settle } from '../domain/rules.js';
 import { LEVELS } from '../../../frontend/js/data/levels.js';
 
 /** 从第 1 关开始只计算连续通过的前缀；跳着完成的记录不会提前解锁。 */
@@ -14,6 +14,11 @@ export function unlockedStoryCount(completedIds) {
 }
 
 // 下发给客户端的关卡视图：剥离最优耗时 optimalDurationMs，避免玩家直接看到答案。
+/** 每日挑战不向玩家透露最优用时（也不在前端画最优路线），其它模式照常返回 */
+function optimalFor(run, stage) {
+  return run.mode === 'daily' ? {} : { optimal_duration_ms: stage.optimal_duration_ms };
+}
+
 export function publicStage(stage) {
   const { optimalDurationMs, ...puzzle } = stage.puzzle;
   return {
@@ -40,7 +45,9 @@ export class GameService {
       const pending = (async () => {
         const existing = await this.repository.daily(date);
         if (existing) return existing;
-        return this.repository.createDaily(date, await this.transit.generate('beijing', 'normal'));
+        // 每天在大城市之间随机选一个出题；题目首次生成后持久化，当天所有人做同一题
+        const city = BIG_CITIES[Math.floor(Math.random() * BIG_CITIES.length)];
+        return this.repository.createDaily(date, await this.transit.generate(city, 'normal'));
       })();
       this.dailyPending.set(date, pending);
       pending.finally(() => this.dailyPending.delete(date)).catch(() => {});
@@ -155,7 +162,7 @@ export class GameService {
         );
         return {
           ...previous,
-          optimal_duration_ms: stage.optimal_duration_ms,
+          ...optimalFor(run, stage),
           ...(run.mode === 'tower' ? { total_elapsed_ms: Number(run.total_elapsed_ms) || 0 } : {}),
         };
       }
@@ -187,7 +194,7 @@ export class GameService {
         (run.mode === 'tower' && submission.passed ? Number(submission.elapsed_ms) : 0);
       return {
         ...submission,
-        optimal_duration_ms: stage.optimal_duration_ms,
+        ...optimalFor(run, stage),
         ...(run.mode === 'tower' ? { total_elapsed_ms: totalElapsed } : {}),
       };
     });

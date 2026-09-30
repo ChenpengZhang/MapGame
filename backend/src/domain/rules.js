@@ -15,9 +15,15 @@ export const SCENARIOS = Object.freeze({
   noMetro: { allowMetro: false, busSpeedFactor: 1, walkSpeedFactor: 1 },
   busBoost: { allowMetro: true, busSpeedFactor: 1.2, walkSpeedFactor: 1 },
   rain: { allowMetro: true, busSpeedFactor: 0.5, walkSpeedFactor: 0.5 },
+  // 以下两种只改变前端呈现/操作限制，寻路与计时同普通模式：
+  blind: { allowMetro: true, busSpeedFactor: 1, walkSpeedFactor: 1 },    // 盲棋：不显示底图，只有城市轮廓
+  realRide: { allowMetro: true, busSpeedFactor: 1, walkSpeedFactor: 1 }, // 真实乘坐：不能撤回、不能全图显示
 });
 
-export const CITIES = ['beijing', 'shanghai', 'guangzhou', 'shenzhen', 'wenshan', 'shuanghe', 'kokdala', 'datong'];
+export const CITIES = ['beijing', 'shanghai', 'guangzhou', 'shenzhen', 'wenshan', 'shuanghe', 'kokdala', 'datong',
+  'chengdu', 'chongqing', 'hangzhou', 'wuhan', 'nanjing', 'tianjin'];
+// 大城市（公交 + 地铁 500 条线以上）：每日挑战每天在其中随机选一个城市出题
+export const BIG_CITIES = ['beijing', 'shanghai', 'guangzhou', 'shenzhen', 'chengdu', 'chongqing', 'hangzhou', 'wuhan', 'nanjing', 'tianjin'];
 export const RULES_VERSION = 1;
 export const DATA_VERSION = 7;
 

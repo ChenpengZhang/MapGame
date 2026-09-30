@@ -167,6 +167,7 @@ class MassMarksStub extends OverlayStub {
 }
 
 globalThis.AMap = {
+  __polyfill: true, // 桩对象模拟的是 Leaflet 兼容层接口（原生高德另走 native-picker）
   __backend: 'leaflet', // 与免 Key 默认路径一致（massmarks 无 canvas）
   Map: MapStub,
   MassMarks: MassMarksStub,
@@ -200,7 +201,7 @@ const { startLevel, showMenu,returnHome, openStoryMenu, openTowerMenu, sampleRan
 const { startTower, resetTowerFromLayer1, towerThreshold,openTowerResetConfirm,closeTowerResetConfirm,exitTowerAfterResult } = await import('../frontend/js/game/tower.js');
 const { nextLevel, restartLevel } = await import('../frontend/js/game/flow.js');
 const { clearGuestTowerState,loadTowerState,saveTowerState } = await import('../frontend/js/game/progress.js');
-const { openFreeMenu, startFreeGame } = await import('../frontend/js/game/free.js');
+const { startFreeGame, scenarioHudText } = await import('../frontend/js/game/free.js');
 const { openTowerLeaderboard, closeTowerLeaderboard } = await import('../frontend/js/game/leaderboard.js');
 const { serializeRoute } = await import('../frontend/js/game/online.js');
 const { startTowerTimer,stopTowerTimer } = await import('../frontend/js/game/tower-timer.js');
@@ -500,15 +501,21 @@ await step('爬塔：通过后返回主页进度不丢、中途退出记录当�
   await wait(100);
 });
 
-await step('自由模式：勾选晴雨情景开局', async () => {
-  el('free-no-metro').checked = false;
-  el('free-bus-boost').checked = false;
-  el('free-rain').checked = true;
+await step('随机模式：情景随机，局内 HUD 显示本局情景', async () => {
   await startFreeGame();
   await wait(100);
   assert.equal(state.gameMode, 'random');
+  assert.ok(el('tower-layer-label').textContent.length > 0, '顶部 HUD 显示本局情景效果');
+  assert.equal(el('mode-hud').classList.contains('hidden'), false, '随机模式显示情景 HUD');
+  await startFreeGame('rain');
+  await wait(100);
   assert.equal(state.scenario.walkSpeedFactor, 0.5, '雨天的步行系数已应用');
   assert.equal(state.scenario.busSpeedFactor, 0.5, '雨天的公交系数已应用');
+  assert.equal(el('tower-layer-label').textContent, scenarioHudText('rain'));
+  await startFreeGame('realRide');
+  await wait(100);
+  assert.equal(state.scenario.realRide, true, '随机也可能抽到真实乘坐');
+  assert.equal(el('tower-layer-label').textContent, '无撤回/全图显示', 'HUD 只显示效果，情景名在左上角标题');
 });
 
 await step('单句开场 → 地图内教学 → 交还操作权', async () => {
@@ -582,7 +589,6 @@ await step('教学关通关后回菜单，旧北京关不再进入', async () =>
   openTowerMenu();
   assert.equal(el('tower-guest-notice').classList.contains('hidden'),true,'登录玩家不显示游客提醒');
   account.user=null;
-  openFreeMenu();
   showMenu();
   assert.equal(state.towerActive, false, '已退出爬塔');
   assert.ok(!el('main-menu').classList.contains('hidden'), '主菜单已显示');
@@ -629,6 +635,40 @@ await step('在线无尽：步行换乘序列化、计时器和通关退出', as
   await wait(300);
   assert.equal(el('tower-timer').textContent,frozen,'通关退出后计时已冻结');
   assert.equal(el('main-menu').classList.contains('hidden'),false,'通关退出回到主页');
+});
+
+await step('每日挑战面板：今日题目、游客提示、我的名次', async () => {
+  const { openDailyMenu } = await import('../frontend/js/game/daily.js');
+  const originalFetch = globalThis.fetch;
+  const closesAt = new Date(Date.now() + 5 * 3600000).toISOString();
+  const json = (body) => ({ ok: true, status: 200, json: async () => body });
+  globalThis.fetch = async (url) => {
+    const u = String(url);
+    if (u.endsWith('/api/daily')) return json({ id: 'd1', date: '2026-09-29', city: 'beijing', scenario: 'normal', opensAt: closesAt, closesAt });
+    if (u.includes('/leaderboard?') && u.includes('mode=daily')) {
+      return json({ leaders: [{ rank: '1', name: '甲', duration_ms: 1500000 }], player: { rank: '23', name: '测试玩家', duration_ms: 1860000, is_me: true } });
+    }
+    return originalFetch(url);
+  };
+  try {
+    account.user = null;
+    await openDailyMenu();
+    await wait(20);
+    assert.equal(el('daily-menu').classList.contains('hidden'), false, '每日挑战面板已打开');
+    assert.match(el('daily-info').textContent, /2026-09-29 · 北京 · 距本题截止还有 \d+ 小时/, '显示日期、城市与倒计时');
+    assert.equal(el('daily-start').textContent, '登录后挑战', '游客需要先登录');
+    assert.equal(el('daily-guest-notice').classList.contains('hidden'), false, '游客看到登录说明');
+    account.user = { id: 'test-user', name: '测试玩家' };
+    await openDailyMenu();
+    await wait(20);
+    assert.equal(el('daily-start').textContent, '开始挑战');
+    assert.equal(el('daily-mine').textContent, '今日最好 31.0 分钟 · 第 23 名', '前 20 名以外也显示自己的名次');
+    assert.equal(el('daily-board').children.length, 3, '前 20 + 分隔行 + 自己');
+  } finally {
+    globalThis.fetch = originalFetch;
+    account.user = null;
+    showMenu();
+  }
 });
 
 await step('存档写入（爬塔纪录 best/progress，按城市分开存）', () => {

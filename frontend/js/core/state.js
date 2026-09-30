@@ -66,10 +66,10 @@ export const state = {
   towerLastPass: false,         // 上一层是否通过
   towerStartedAt: null,         // 当前层开始时间（用于页面计时器）
   towerLayerElapsedMs: 0,       // 当前层已用时间（暂停/结算时冻结）
-  towerElapsed: { normal: 0, noMetro: 0, busBoost: 0, rain: 0 }, // 当前连续挑战已通过楼层的累计用时
-  towerBest: { normal: 0, noMetro: 0, busBoost: 0, rain: 0 },     // 各畸变最高层
-  towerProgress: { normal: 0, noMetro: 0, busBoost: 0, rain: 0 }, // 各畸变当前进行到第几层（0 = 无进度）
-  towerRound: { normal: null, noMetro: null, busBoost: null, rain: null }, // 各畸变"本轮"的起终点 {layer,origin,dest}：退出重进沿用，防止刷起终点
+  towerElapsed: { normal: 0, noMetro: 0, busBoost: 0, rain: 0, blind: 0, realRide: 0 }, // 当前连续挑战已通过楼层的累计用时
+  towerBest: { normal: 0, noMetro: 0, busBoost: 0, rain: 0, blind: 0, realRide: 0 },     // 各畸变最高层
+  towerProgress: { normal: 0, noMetro: 0, busBoost: 0, rain: 0, blind: 0, realRide: 0 }, // 各畸变当前进行到第几层（0 = 无进度）
+  towerRound: { normal: null, noMetro: null, busBoost: null, rain: null, blind: null, realRide: null }, // 各畸变"本轮"的起终点 {layer,origin,dest}：退出重进沿用，防止刷起终点
 
   // ---------- 玩家路线链 ----------
   routeStops: [],               // [S1, S2, ...]：{logical, point}

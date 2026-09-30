@@ -20,6 +20,7 @@ import { $ } from '../core/dom.js';
 import { WALK_SPEED_M_PER_MIN } from '../core/config.js';
 import { haversineKm } from '../core/router-api.js';
 import { getLine } from '../data/index-builder.js';
+import { lineSignClass, lineSignInnerHTML, escapeHtml } from '../data/line-sign.js';
 import { computeTotalMinutes, waitMin, rideStats, estimateRideMinutes, transferPenaltyMin, scoreFor } from '../game/time-model.js';
 
 /** 折叠状态：null 表示尚未按设备初始化（手机默认收起、桌面默认展开） */
@@ -29,9 +30,10 @@ let collapsed = null;
  * 把折叠状态应用到面板，并（重新）绑定「收起/展开」按钮。
  * 面板每次重绘都会用 innerHTML 重建，所以按钮的事件要在这里重新挂一次。
  */
-function applyCollapse(panel) {
+function applyCollapse(panel, animate = false) {
   if (collapsed === null) collapsed = !!state.isTouch;
   panel.classList.toggle('collapsed', collapsed);
+  setPanelHeight(panel, animate);
   const btn = $('rp-toggle-btn');
   if (btn) {
     btn.textContent = collapsed ? '展开' : '收起';
@@ -39,11 +41,48 @@ function applyCollapse(panel) {
   }
 }
 
+/** 折叠时只露出标题行的高度（上内边距 + 标题行 + 一点余量） */
+function collapsedHeight(panel) {
+  const title = panel.firstElementChild;
+  const padTop = typeof getComputedStyle === 'function' ? parseFloat(getComputedStyle(panel).paddingTop) || 0 : 0;
+  return Math.ceil(padTop + (title ? title.offsetHeight : 28) + 2);
+}
+
+/**
+ * 折叠/展开的高度过渡：max-height 从“当前实际高度”过渡到目标高度，动画才自然
+ * （直接在 CSS 上限与折叠高度之间过渡，内容较短时会有一段看不见的延迟）。
+ * 展开结束后清掉内联 max-height，恢复 CSS 上限（桌面/手机各自的最大高度）。
+ */
+function setPanelHeight(panel, animate) {
+  if (!panel.style) return;
+  const target = collapsed ? collapsedHeight(panel) : null;
+  if (!animate || typeof panel.scrollHeight !== 'number') {
+    // 重绘面板时直接到位，不播放过渡（只有点“收起/展开”才有动画）
+    panel.style.transition = 'none';
+    panel.style.maxHeight = target == null ? '' : target + 'px';
+    void panel.offsetHeight;
+    panel.style.transition = '';
+    return;
+  }
+  panel.style.maxHeight = panel.getBoundingClientRect().height + 'px';
+  void panel.offsetHeight; // 触发重排，让下一次赋值成为过渡的终点
+  if (target != null) {
+    panel.style.maxHeight = target + 'px';
+  } else {
+    panel.style.maxHeight = panel.scrollHeight + 'px';
+    panel.addEventListener('transitionend', function done(e) {
+      if (e.propertyName !== 'max-height') return;
+      panel.removeEventListener('transitionend', done);
+      if (!collapsed) panel.style.maxHeight = '';
+    });
+  }
+}
+
 /** 收起/展开路线面板（手机端面板太占地方时用） */
 export function toggleRoutePanel() {
   collapsed = !collapsed;
   const panel = $('route-panel');
-  if (panel) applyCollapse(panel);
+  if (panel) applyCollapse(panel, true);
 }
 
 /** 距离格式化：≥1km 显示一位小数，否则显示米 */
@@ -59,9 +98,11 @@ function walkRowHTML(fromName, toName, distKm, timeMin) {
     '<span class="rp-metrics">' + d + '<span class="rp-time">' + timeMin.toFixed(0) + '分</span></span></div>';
 }
 
-function lineRowHTML(lineName, waitMinutes, color) {
-  const bg = color ? ' style="background:' + color + '"' : '';
-  return '<div class="rp-row"><span class="rp-desc">乘 <span class="rp-pill"' + bg + '>' + lineName + '</span> 候车</span>' +
+/** 候车行：线路名用与站点信息卡相同的线路牌（公交放大线路号 / 地铁数字 + 号线） */
+function lineRowHTML(line, waitMinutes) {
+  const bg = line.color ? ' style="background-color:' + line.color + '"' : '';
+  const sign = '<span class="' + lineSignClass(line) + '"' + bg + ' aria-label="' + escapeHtml(line.name) + '">' + lineSignInnerHTML(line) + '</span>';
+  return '<div class="rp-row"><span class="rp-desc">乘 ' + sign + ' 候车</span>' +
     '<span class="rp-metrics"><span class="rp-time">' + waitMinutes.toFixed(0) + '分</span></span></div>';
 }
 
@@ -97,8 +138,8 @@ export function renderRoutePanel() {
     rows.push('<div class="rp-total">总耗时约 <b>' + computeTotalMinutes().toFixed(0) + '</b> 分钟</div>');
     appendOptimalComparison(rows);
     panel.innerHTML = rows.join('');
-    applyCollapse(panel);
     panel.classList.remove('hidden');
+    applyCollapse(panel);
     return;
   }
 
@@ -118,7 +159,7 @@ export function renderRoutePanel() {
       rows.push(walkRowHTML(from.logical.name, to.logical.name, dKm, min));
       continue;
     }
-    rows.push(lineRowHTML(ride.name, waitMin(ride), ride.color));
+    rows.push(lineRowHTML(ride, waitMin(ride)));
     const st = rideStats(ride, from.logical, to.logical);
     rows.push(rideRowHTML(
       from.logical.name, to.logical.name,
@@ -146,8 +187,8 @@ export function renderRoutePanel() {
   appendOptimalComparison(rows);
 
   panel.innerHTML = rows.join('');
+  panel.classList.remove('hidden'); // 先显示再折叠：折叠高度要按标题行的实际高度测量
   applyCollapse(panel);
-  panel.classList.remove('hidden');
 }
 
 /** 追加"最优路线（系统）"明细与评分对比（无最优结果时什么都不做） */
@@ -168,7 +209,7 @@ function appendOptimalComparison(rows) {
       const tp = (la && lb) ? transferPenaltyMin(la, lb) : 0;
       rows.push(transferRowHTML(tp > 0 ? '换乘' : '同站换乘', tp));
     } else {
-      rows.push(lineRowHTML(leg.lineName, leg.waitMin, getLine(leg.lineId)?.color));
+      rows.push(lineRowHTML(getLine(leg.lineId) || { name: leg.lineName, mode: 'bus' }, leg.waitMin));
       rows.push(rideRowHTML(leg.fromName, leg.toName, leg.stops, leg.distanceKm, leg.rideMin));
     }
   }

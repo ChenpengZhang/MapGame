@@ -160,8 +160,11 @@ export const TOWER_SCENARIOS = {
   normal:   { label: '普通', sub: '无特殊效果', scenario: { noMetro: false, busSpeedFactor: 1.0, walkSpeedFactor: 1.0 } },
   noMetro:  { label: '地铁瘫痪', sub: '禁用地铁', scenario: { noMetro: true, busSpeedFactor: 1.0, walkSpeedFactor: 1.0 } },
   busBoost: { label: '一路畅通', sub: '公交加速20%', scenario: { noMetro: false, busSpeedFactor: 1.2, walkSpeedFactor: 1.0 } },
+  // 以下两种寻路计时同普通，只改呈现与操作：
+  blind:    { label: '盲棋', sub: '无地图', scenario: { noMetro: false, busSpeedFactor: 1.0, walkSpeedFactor: 1.0, blindMap: true } },
+  realRide: { label: '真实乘坐', sub: '无撤回/全图显示', scenario: { noMetro: false, busSpeedFactor: 1.0, walkSpeedFactor: 1.0, realRide: true } },
   rain:     { label: '大雨滂沱', sub: '公交/步行减缓50%', scenario: { noMetro: false, busSpeedFactor: 0.5, walkSpeedFactor: 0.5 } },
 };
 
 /** 爬塔畸变的展示顺序（菜单与纪录表按此顺序） */
-export const TOWER_KEYS = ['normal', 'noMetro', 'busBoost', 'rain'];
+export const TOWER_KEYS = ['normal', 'noMetro', 'busBoost', 'rain', 'blind', 'realRide'];

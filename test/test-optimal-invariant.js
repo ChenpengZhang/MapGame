@@ -8,7 +8,9 @@
 // 与 router 报的 totalMin 比较。若 playerBest < optimal - 容差，则 bug 仍在。
 
 const R = require('../shared/router.js');
-const data = require('../data/beijing-transit.json');
+// 用法：node test/test-optimal-invariant.js [城市id]（默认北京）；新城市上线前务必跑一遍（见数据管线文档坑 9）
+const CITY = process.argv[2] || 'beijing';
+const data = require(`../data/${CITY}-transit.json`);
 
 const graph = R.buildGraph(data.lines);
 const MAX_WALK_KM = 1.5;

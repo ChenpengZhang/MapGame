@@ -97,8 +97,15 @@
         zoomControl: false, // 游戏自带滚轮惯性缩放，去掉 Leaflet 默认的 +/- 按钮
         attributionControl: true,
       });
-      L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '&copy; OpenStreetMap' }).addTo(m);
+      this._tiles = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '&copy; OpenStreetMap' }).addTo(m);
+      // 去掉 Leaflet 默认的“国旗 + Leaflet”前缀，只保留 OpenStreetMap 版权署名（OSM 许可要求）
+      if (m.attributionControl) m.attributionControl.setPrefix(false);
       this._map = m;
+    }
+    /** 显示/隐藏底图瓦片（无尽模式“盲棋”用）；覆盖物不受影响 */
+    setBaseLayerVisible(visible) {
+      if (visible) { if (!this._map.hasLayer(this._tiles)) this._tiles.addTo(this._map); }
+      else this._tiles.remove();
     }
     getZoom() { return this._map.getZoom(); }
     setZoom(z) { this._map.setZoom(z); }

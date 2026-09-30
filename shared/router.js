@@ -112,20 +112,38 @@
     return longer.includes(shorter);
   }
 
-  // 机场航站楼特殊匹配：T2/T3/大兴机场的站名不统一，归一化到同一航站楼 key 后视为同名。
-  function airportTerminalKey(name) {
-    name = String(name || '').trim();
-    if (!name) return null;
+  // 机场航站楼特殊匹配：同一航站楼在不同线路上叫法各异（T2 / (T2) / 2号航站楼 / 2航楼 / 国际机场T2…），
+  // 归一化到同一 key 后视为同名；合并仍要求 300m 以内，所以不同机场不会被误并。
+  // 北京的历史规则（首都机场 T2/T3、大兴机场）原样保留，保证北京建图结果不变。
+  function beijingAirportKey(name) {
     if (name.includes('大兴机场') || /^航站楼/.test(name)) return 'daxing';
     const isCapital = name.includes('首都机场') || /^T[23]/.test(name) || /^\d号航/.test(name);
-    if (!isCapital) return null;
+    if (!isCapital) return undefined; // 不是北京机场站名：交给通用规则
     if (/2/.test(name) && !/3/.test(name)) return 't2';
     if (/3/.test(name) && !/2/.test(name)) return 't3';
     return null;
   }
+  const CN_DIGITS = { 一: '1', 二: '2', 三: '3', 四: '4', 五: '5' };
+  function airportTerminalKey(name) {
+    name = String(name || '').trim();
+    if (!name) return null;
+    const beijing = beijingAirportKey(name);
+    if (beijing !== undefined) return beijing;
+    if (!/机场|航站楼|航楼/.test(name) && !/^T[1-5]/i.test(name)) return null;
+    const numbers = new Set();
+    for (const m of name.matchAll(/T\s*([1-5])/gi)) numbers.add(m[1]);
+    for (const m of name.matchAll(/([1-5一二三四五])号?航站?楼/g)) numbers.add(CN_DIGITS[m[1]] || m[1]);
+    if (numbers.size > 1) return null; // “1号2号航楼”这类跨航站楼的站名不参与归一
+    if (numbers.size === 1) return 'T' + [...numbers][0];
+    // 没有航站楼编号：只有“××(国际)机场(站)”本身算机场主站，道路、大门、货运区等不算
+    if (/(路|街|道|巷|口|门|货运|大厦|酒店|宾馆|停车)/.test(name)) return null;
+    return /机场站?$/.test(name) ? 'airport' : null;
+  }
   function airportTerminalMatch(a, b) {
     const ka = airportTerminalKey(a), kb = airportTerminalKey(b);
-    return ka != null && kb != null && ka === kb;
+    if (ka == null || kb == null) return false;
+    // 机场主站（如“天河机场”地铁站）与该机场任一航站楼在 300m 内即视为同一站
+    return ka === kb || ((ka === 'airport') !== (kb === 'airport') && !['daxing', 't2', 't3'].includes(ka === 'airport' ? kb : ka));
   }
 
   // 是否共享线路：同一条线路上的两个不同站不能合并（否则破坏线路拓扑，乘车边会断）

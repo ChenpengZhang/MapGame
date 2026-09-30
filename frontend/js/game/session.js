@@ -21,7 +21,7 @@ import { haversineKm } from '../core/router-api.js';
 import { saveCityId } from '../core/storage.js';
 import { cityById } from '../data/cities.js';
 import { ensureGameDataReady, isGameDataReady } from './data-ready.js';
-import { drawEndpoints, setMapLocked } from '../map/map-init.js';
+import { drawEndpoints, setMapLocked, setBlindMap } from '../map/map-init.js';
 import { showMapTutorial, clearMapTutorial } from '../map/tutorial-layer.js';
 import { applyScenario, refreshVisibleStops } from '../map/stop-layer.js';
 import { hideAllPanels, showPanel, setCityLabel, setModeHudVisible, updateFreeButton, updateStoryButton, buildStoryLevels, updateTowerMenuBest, buildCityMenu, setCitySelectLabel, toggleCityMenu } from '../ui/menu.js';
@@ -74,10 +74,12 @@ export function startLevel(level, opts) {
   state.towerActive = (level.id === 'tower');
   if (!state.towerActive) {
     const hasLimit=Number.isFinite(Number(level.timeLimitMin));
-    setModeHudVisible(hasLimit);
+    // 顶部 HUD：限时关显示时限；随机模式显示本局抽到的情景（level.hudText）
+    setModeHudVisible(hasLimit || !!level.hudText);
     toggleHidden('mode-hud-secondary',true);
     toggleHidden('tower-timer',true);
     if(hasLimit)setText('tower-layer-label','时间 ' + (level.goalText || `≤ ${Number(level.timeLimitMin)} 分钟`));
+    else if(level.hudText)setText('tower-layer-label',level.hudText);
   }
 
   setCityLabel((cityById(cityId) || cityById('beijing')).name + ' · ' + level.title);
@@ -88,6 +90,7 @@ export function startLevel(level, opts) {
   applyScenario();
   // 终点图钉被点击 = 完成规划；回调由玩法层提供（地图层不 import game）
   drawEndpoints({ onDestClick: finishRoute, showWalkRanges: level.showWalkRanges !== false });
+  void setBlindMap(!!state.scenario.blindMap, cityId); // 无尽“盲棋”：隐藏底图，只画城市轮廓
   showMapTutorial(level.mapTutorial);
   // 新一局的起点改变后立即按新范围重算基础站点颜色。
   refreshVisibleStops();
@@ -103,6 +106,9 @@ export function startLevel(level, opts) {
 
 /** 回主菜单：退出当前会话（爬塔中途退出会保存进度） */
 export function showMenu() {
+  // 盲棋中途退出时保持无底图：无尽的起终点会保留、可以续玩，
+  // 若回主页就露出底图，玩家能先看清周围再回来继续。路线已完成（底图已揭晓）则照常恢复。
+  const keepBlind = !!state.scenario?.blindMap && !state.finished;
   const wasOnline=!!state.onlineRound;
   leaveOnlineRound();
   // 先记下爬塔状态：resetRoute 会清掉 finished，必须在它之前取
@@ -113,6 +119,7 @@ export function showMenu() {
   hideStory();
   clearMapTutorial();
   setMapLocked(false);
+  if (!keepBlind) void setBlindMap(false);
   // 爬塔退出：保存最佳纪录；进度只在"未完成的中途退出"时记为当前层。
   // 已完成（通过→已推进到下一层 / 失败→已清空）时，进度已由 showTowerResult 正确更新，这里不再覆盖。
   if (tower && !wasOnline && !account.user) {

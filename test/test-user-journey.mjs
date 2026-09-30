@@ -20,7 +20,6 @@ const { onStopMouseOver, onStopMouseOut } = await import('../frontend/js/map/hov
 const { onStopClick, onCandidateStopClick, cancelRoutePreview, finishRoute } = await import('../frontend/js/game/route.js');
 const { startLevel, showMenu, openStoryMenu, openTowerMenu } = await import('../frontend/js/game/session.js');
 const { nextLevel, restartLevel } = await import('../frontend/js/game/flow.js');
-const { openFreeMenu } = await import('../frontend/js/game/free.js');
 const { storyNext } = await import('../frontend/js/ui/story.js');
 const app = await import('../frontend/js/app.js'); // 入口（bootstrap：桩件里 loadScript 永不回调，属预期）
 
@@ -128,7 +127,6 @@ await step('退出回主菜单：各模式入口都回来、状态清干净', ()
   // 三个模式入口都能再次打开（无残留弹窗）
   openStoryMenu();
   openTowerMenu();
-  openFreeMenu();
   showMenu();
   assert.ok(!el('main-menu').classList.contains('hidden'), '反复进出后主菜单仍正常');
 });

@@ -26,6 +26,8 @@ import { EVENTS, emit } from '../core/bus.js';
 /** 计算并绘制最优路线（玩家点完"终"之后调用；也可用于重算） */
 export function computeOptimal() {
   if (!state.routerGraph) return;
+  // 每日挑战不向玩家公布最速路线：不计算、不绘制、也不在路线面板对比
+  if (state.onlineRound?.command?.mode === 'daily') return;
   const revision=state.routeRevision||0;
   showLoading('正在计算最优路线…');
   findOptimalRoute(

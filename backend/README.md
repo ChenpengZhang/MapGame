@@ -1,7 +1,7 @@
 # MapGame 后端
 
 面向 `https://zcpenguin.com/mapgame/` 的单体 Node.js / PostgreSQL API。
-前端游客玩法仍然本地运行；主页已接入账户、密码找回、游玩记录以及故事/随机/爬塔的服务端验证。每日挑战和排行榜目前提供 API。
+前端游客玩法仍然本地运行；主页已接入账户、密码找回、游玩记录，故事/随机/爬塔/每日挑战的服务端验证，以及无尽榜与每日榜。
 
 ## 架构与边界
 
@@ -137,12 +137,12 @@ node --env-file=.env scripts/test-mail.mjs 你的邮箱@example.com
 | GET `/daily` | 每日题目概况；不返回起终点或最优答案 |
 | GET `/me` | 当前登录用户 ID |
 | GET `/saves` | 当前账户可恢复的爬塔对局 |
-| POST `/runs` | `{"mode":"daily"}` 或 `{"mode":"tower","city":"beijing","scenario":"normal"}` |
+| POST `/runs` | `{"mode":"daily"}` 或 `{"mode":"tower","city":"beijing","scenario":"normal"}`；无尽 scenario 可选 `normal / noMetro / busBoost / rain / blind / realRide` |
 | GET `/runs/:id` | 恢复原对局和计时 |
 | POST `/runs/:id/next` | `{}`；通过后领取下一层，重复请求返回同一层 |
 | POST `/runs/:id/submit` | 提交路线，见下例 |
 | POST `/runs/:id/abandon` | `{}`；放弃当前对局 |
-| GET `/leaderboard?mode=daily&date=2026-09-22` | 每日榜 |
+| GET `/leaderboard?mode=daily&date=2026-09-22` | 每日榜（用时升序，同用时按完成时刻） |
 | GET `/leaderboard?mode=tower&city=beijing&scenario=normal` | 当前地图哈希/规则版本的爬塔榜 |
 
 ```json
@@ -172,7 +172,9 @@ node --env-file=.env scripts/test-mail.mjs 你的邮箱@example.com
 - 同用户并发开始通过用户行锁序列化；提交/下一层通过对局行锁序列化，唯一索引再次兜底。
 - 爬塔每次验证通过即保存，最高层数按实际通过层数记录。通过后点 next 才开始下一题计时。
 - 服务器保存关卡和进度，不保存客户端未提交的半成品路线。半成品仍可本地缓存。
-- 每日按北京时间切日，当前每天固定北京普通模式一题，首次访问生成并唯一持久化。允许多次尝试，取最好成绩。
+- 每日按北京时间切日，每天从大城市（`BIG_CITIES`：北京、上海、广州、深圳、成都、重庆、杭州、武汉、南京、天津）中随机选一个城市出一道普通模式题，首次访问生成并唯一持久化。允许多次尝试，取最好成绩。
+- 每日挑战不向玩家公布最优路线：提交结果里不返回 `optimal_duration_ms`，前端也不计算、不绘制最优路线。
+- 每日榜排名第一键为公共交通用时（升序），第二键为该成绩的完成时刻（同用时更早完成者靠前）。
 - 每日榜按路线耗时；爬塔先按已验证通过层数降序，同层再按已通过各层的累计实际游玩时间 `elapsed_ms` 升序。接口返回前 20 名；已登录玩家不在前 20 时额外返回其本人名次。随机起终点的路线模拟耗时 `duration_ms` 不参与无尽同层排名。
 - 固定每日题不用于严格手速排名：提前看题、脚本解题无法仅靠计时排除。
 - 地图使用 SHA-256 与规则版本固定题目；当前进程缓存已加载地图。更新数据必须重启服务。

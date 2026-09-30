@@ -30,7 +30,7 @@ import { initMap, failMapSetup, setZoomSpeed } from './map/map-init.js';
 import { toggleShowAllStops } from './map/stop-layer.js';
 import { onStopClick, onCandidateStopClick, finishRoute, resetRoute, undoRoute, setForceWalk, setWalkTransferEnabled } from './game/route.js';
 import { showMenu,returnHome, openStoryMenu, openTowerMenu, openCityMenu, startLevel, selectCity } from './game/session.js';
-import { openFreeMenu, startFreeGame } from './game/free.js';
+import { startFreeGame } from './game/free.js';
 import { startTower,openTowerResetConfirm,closeTowerResetConfirm,confirmTowerReset,exitTowerAfterResult } from './game/tower.js';
 import { openTowerLeaderboard,closeTowerLeaderboard } from './game/leaderboard.js';
 // 注意：import game/flow.js 会执行它的模块体，从而注册"最优路线就绪"的订阅（结算弹窗）
@@ -39,6 +39,7 @@ import { loadStoryProgress, loadTowerState } from './game/progress.js';
 import { buildStoryLevels, openSettingsPanel, closeSettingsPanel, setCityLabel, setCitySelectLabel, closeCityMenu, updateStoryButton, refreshMenuChrome } from './ui/menu.js';
 import { hideResultOverlay } from './ui/result.js';
 import { storyNext } from './ui/story.js';
+import { openDailyMenu, startDaily } from './game/daily.js';
 
 // ============ 1. 引导 ============
 
@@ -53,7 +54,11 @@ async function bootstrap() {
     if (amapKey) {
       // 配置了高德 Key → 用高德底图（真实高德脚本会覆盖 amap-polyfill.js 里的兼容层）
       window._AMapSecurityConfig = { securityJsCode: loadAmapSecurity() || '' };
+      // 先移除兼容层：高德脚本会在已有的 window.AMap 上合并属性而非整体替换，
+      // 残留的 __polyfill 标记会让代码误以为仍在 Leaflet 上（原生拾取器不安装 → 站点点不中）。
+      if (window.AMap && window.AMap.__polyfill) delete window.AMap;
       await loadScript('https://webapi.amap.com/maps?v=2.0&key=' + encodeURIComponent(amapKey));
+      if (window.AMap) { delete window.AMap.__polyfill; window.AMap.__backend = 'amap'; }
     } else {
       // 未配置 Key → 免 Key 的 Leaflet + OSM（amap-polyfill.js 提供 AMap 兼容层）
       await loadScript('https://unpkg.com/leaflet@1.9.4/dist/leaflet.js');
@@ -103,17 +108,19 @@ function bindUiEvents() {
   on('tower-btn', openTowerMenu);
   on('tower-back-btn', showMenu);
   on('tower-leaderboard',openTowerLeaderboard);on('leaderboard-close',closeTowerLeaderboard);
-  on('free-btn', openFreeMenu);
-  on('free-start-btn', startFreeGame);
-  on('free-back-btn', showMenu);
+  on('free-btn', () => startFreeGame()); // 全随机：直接开局（情景随机）
   on('city-select-btn', openCityMenu);
-  on('online-btn', () => setStatus('排位模式尚未开放，敬请期待'));
+  on('daily-btn', openDailyMenu);
+  on('daily-start', startDaily);
+  on('daily-back-btn', showMenu);
 
   // ---- 爬塔：四种畸变 ----
   on('tower-normal', () => startTower('normal'));
   on('tower-no-metro', () => startTower('noMetro'));
   on('tower-bus-boost', () => startTower('busBoost'));
   on('tower-rain', () => startTower('rain'));
+  on('tower-blind', () => startTower('blind'));
+  on('tower-real-ride', () => startTower('realRide'));
 
   // ---- 设置面板 ----
   on('settings-btn', openSettingsPanel);
@@ -130,6 +137,10 @@ function bindUiEvents() {
     const enabled = !!input.checked;
     setWalkTransferEnabled(enabled);
     saveWalkTransfer(enabled);
+    // 系统最优不计算远距离步行换乘，开启后玩家可能比“最优”更快，需要明确告知
+    showCenterToast(enabled
+      ? '步行换乘打开后，可能会出现比系统最优更快的路线'
+      : '已关闭步行换乘');
   }, 'change');
   on('force-walk-toggle', () => {
     setForceWalk($('force-walk-toggle').checked);
@@ -165,8 +176,9 @@ function bindUiEvents() {
 state.isTouch = isTouchDevice(); // 判定触摸设备：手机端启用两阶段选站 + 更大的站点热区
 state.walkTransfer = loadWalkTransfer(); // 步行换乘开关（持久化在 localStorage）
 state.currentCityId = loadCityId('beijing'); // 恢复上次选的城市（默认北京）
-if (!cityById(state.currentCityId)) state.currentCityId = 'beijing'; // 校验无效值
+if (!cityById(state.currentCityId) || cityById(state.currentCityId).storyOnly) state.currentCityId = 'beijing'; // 校验无效值；故事专用小城市不能作为当前城市
 preventPagePinch();             // 禁用页面级双指缩放（地图自身的双指缩放保留）
+trackDrawerHeight();            // 手机底部抽屉的高度 → CSS 变量，地图右下角的版权署名随之上移
 // 自动化测试/调试钩子：暴露只读状态引用 + 关键动作，供浏览器回归探针驱动流程（不影响游戏逻辑）
 if (typeof window !== 'undefined') {
   window.__MG = {
@@ -184,3 +196,17 @@ buildStoryLevels(startLevel); // 预生成关卡卡片（打开故事菜单时�
 refreshMenuChrome();          // 首屏即为主菜单，隐藏地图上的游戏 UI
 bootstrap();
 void initializeAccount();
+
+/**
+ * 手机端路线面板/站点卡片是贴底的抽屉，会盖住地图右下角的 OpenStreetMap 署名。
+ * 把抽屉的实际高度写进 --drawer-h，CSS 据此把地图底部控件抬到抽屉上方（展开/收起时跟着移动）。
+ */
+function trackDrawerHeight() {
+  const col = $('left-col');
+  const app = $('app');
+  if (!col || !app || typeof ResizeObserver !== 'function') return;
+  const update = () => app.style.setProperty('--drawer-h', Math.round(col.getBoundingClientRect().height) + 'px');
+  new ResizeObserver(update).observe(col);
+  update();
+}
+

@@ -36,6 +36,13 @@ const CITIES = {
   kokdala:   { dir: 'Kokdala', prefix: 'kokdala', zh: '可克达拉' },
   // 大同：中型城市，快速公交607线与普通 32路 走同一条通道，用作第四关“选对线路”教学
   datong:    { dir: 'Datong', prefix: 'datong', zh: '大同' },
+  // 大城市（公交 + 地铁 500 条以上），用于每日挑战随机选城与无尽模式
+  chengdu:   { dir: 'Chengdu',   zh: '成都' },
+  chongqing: { dir: 'Chongqing', zh: '重庆' },
+  hangzhou:  { dir: 'Hangzhou',  zh: '杭州' },
+  wuhan:     { dir: 'Wuhan',     zh: '武汉' },
+  nanjing:   { dir: 'nanking', prefix: 'nanking', zh: '南京' },
+  tianjin:   { dir: 'Tianjin',   zh: '天津' },
 };
 
 // ---------- 幽灵站修正（坑2：未开通/预留站仍出现在数据里，需按线路+站名剔除） ----------
@@ -49,6 +56,17 @@ const GHOST_STOPS = {
   shuanghe: {},
   kokdala: {},
   datong: {},
+  chengdu: {},
+  chongqing: {},
+  hangzhou: {},
+  wuhan: {},
+  nanjing: {},
+  tianjin: {},
+};
+
+// ---------- 邻市地铁改名（坑 15：邻市线路延伸进本市，需带城市名以免与本市线路重名） ----------
+const METRO_RENAMES = {
+  hangzhou: { '轨道交通1号线': '绍兴1号线' },
 };
 
 // ---------- WGS-84 → GCJ-02 ----------
@@ -316,6 +334,12 @@ const BOUNDARY_FILES = {
   guangzhou: 'data/boundaries/guangzhou.json',
   shenzhen: 'data/boundaries/shenzhen.json',
   wenshan: 'data/boundaries/wenshan.json',
+  chengdu: 'data/boundaries/chengdu.json',
+  chongqing: 'data/boundaries/chongqing.json',
+  hangzhou: 'data/boundaries/hangzhou.json',
+  wuhan: 'data/boundaries/wuhan.json',
+  nanjing: 'data/boundaries/nanjing.json',
+  tianjin: 'data/boundaries/tianjin.json',
 };
 
 // 跨市公交的线路名标识：单字邻市（佛=佛山/莞=东莞）只认开头，多字邻市名可出现在任意位置。
@@ -598,6 +622,18 @@ function convertCity(cityKey) {
       });
       branchIndex++;
     }
+  }
+
+  // 坑 14：地铁支线/交路在线路名后带“（起点—终点）”（重庆 3号线（举人坝—鱼洞）、成都 1号线（韦家碾—五根松）…）。
+  // 它们确实是独立的支线，保留为单独线路（id 不同、各自寻路），但展示名去掉括号说明，与主线同名：
+  // 乘客眼里就是“3号线”，名称牌按线路名去重后也只显示一个，选中线路名时两条都会被纳入。
+  // 坑 15：邻市地铁延伸进本市（杭州数据里的“轨道交通1号线”其实是绍兴地铁1号线，在姑娘桥与杭州 5号线换乘）。
+  // 边界裁剪只作用于公交，这类线路保留可乘，但必须改名带上城市，否则名称牌会与本市 1号线 重名。
+  const renames = METRO_RENAMES[cityKey] || {};
+  for (const line of lines) {
+    if (line.mode !== 'metro') continue;
+    line.name = line.name.replace(/\s*[（(][^（）()]*[—–\-][^（）()]*[)）]\s*$/, '');
+    if (renames[line.name]) line.name = renames[line.name];
   }
 
   const metroCount = lines.filter((l) => l.mode === 'metro').length;

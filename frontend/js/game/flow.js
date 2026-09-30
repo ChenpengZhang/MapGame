@@ -58,6 +58,7 @@ export function showLevelResult() {
     title,
     message,
     detail,
+    sign: { outcome: win ? 'pass' : 'fail' },
     nextLabel: hasNext ? '下一关' : '通关·回菜单',
     showNext: win,
   });

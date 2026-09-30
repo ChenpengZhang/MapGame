@@ -80,6 +80,7 @@ class MapStub {
   setStatus() {} setZoomAndCenter() {} setBounds() {}
 }
 globalThis.AMap = {
+  __polyfill: true, // 桩对象模拟的是 Leaflet 兼容层接口（原生高德另走 native-picker）
   Polyline: PolylineStub, Circle: CircleStub, Marker: MarkerStub, MassMarks: MassMarksStub,
   Map: MapStub, Pixel: class { constructor(x, y) { this.x = x; this.y = y; } },
   Size: class { constructor(w, h) { this.width = w; this.height = h; } },

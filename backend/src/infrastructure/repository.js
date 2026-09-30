@@ -226,13 +226,15 @@ export class Repository {
     }
     return (
       await this.db.query(
+        // 每日榜：每人取当日最好一次（用时最短，同用时取最早完成）；
+        // 排名第一键为公共交通用时，第二键为完成时刻（同用时更早完成者靠前）。
         `WITH personal AS (
       SELECT g.user_id,u.name,r.duration_ms,r.achieved_at,
         row_number() OVER(PARTITION BY g.user_id ORDER BY r.duration_ms ASC,r.achieved_at,g.id) AS choice
       FROM timed_run_results r JOIN game_runs g ON g.id=r.run_id JOIN "user" u ON u.id=g.user_id
       JOIN daily_challenges d ON d.id=g.daily_challenge_id
       WHERE g.mode='daily' AND g.status<>'invalid' AND r.invalidated_at IS NULL AND d.challenge_date=$1::date
-    ), ranked AS (SELECT user_id,name,duration_ms,achieved_at,rank() OVER(ORDER BY duration_ms ASC) AS rank,
+    ), ranked AS (SELECT user_id,name,duration_ms,achieved_at,rank() OVER(ORDER BY duration_ms ASC,achieved_at ASC) AS rank,
       row_number() OVER(ORDER BY duration_ms ASC,achieved_at,user_id) AS position
       FROM personal WHERE choice=1)
       SELECT name,duration_ms,achieved_at,rank,position,user_id=$2 AS is_me FROM ranked

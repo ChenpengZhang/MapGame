@@ -22,7 +22,7 @@ import { computeTotalMinutes } from './time-model.js';
 import { saveTowerState } from './progress.js';
 import { startLevel, ensureStopsReady, sampleRandomEndpoints,showMenu } from './session.js';
 import { resetRoute } from './route.js';
-import { showResultOverlay } from '../ui/result.js';
+import { showResultOverlay, towerSign } from '../ui/result.js';
 import { startTowerTimer,stopTowerTimer } from './tower-timer.js';
 
 /** 爬塔难度：第 1 层要求 ≤100%（2 倍最优以内），线性收紧到第 12 层 ≤1%，之后保持 1% */
@@ -135,6 +135,7 @@ export function showTowerResult() {
 
   showResultOverlay({
     title, message, detail,
+    sign: towerSign(pass, state.towerLayer),
     restartLabel,
     showNext: false,        // 爬塔没有"下一关"，只有"下一层"
     showExit: pass,

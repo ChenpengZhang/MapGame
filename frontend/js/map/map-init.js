@@ -17,6 +17,7 @@ import { $ } from '../core/dom.js';
 import { cityById } from '../data/cities.js';
 import { loadWalkCache } from './walk.js';
 import { createWalkRangeCircle, walkRangeBounds } from './walk-range.js';
+import { installNativePicker } from './native-picker.js';
 
 // 地图 SDK 需异步加载；用户可能在底图完成前就点击了故事关卡。
 // 用一次性就绪信号让数据/站点层等待地图，而不是对空的 state.map 注册事件。
@@ -37,6 +38,7 @@ export function failMapSetup(error) {
 export function initMap() {
   const city = cityById(state.currentCityId) || cityById('beijing');
   state.map = new AMap.Map('map', { center: city.center, zoom: 11, viewMode: '2D', scrollWheel: false });
+  installNativePicker(state.map); // 原生高德：按像素距离拾取站点/线路（必须先于其它地图点击监听注册）
   setupZoomInertia();
   loadWalkCache();
   finishMapSetup(null);
@@ -88,13 +90,16 @@ function setupZoomInertia() {
     catch (e) { state.map.setZoom(z); }
   }
   function tick(now) {
-    if (Math.abs(velocity) < EPS) { running = false; return; }
+    if (Math.abs(velocity) < EPS) { stop(); return; }
     if (now - lastStep < STEP_MS) { requestAnimationFrame(tick); return; }
     lastStep = now;
     applyZoom(state.map.getZoom() + velocity);
     velocity *= DECAY;
-    if (Math.abs(velocity) < EPS) { running = false; return; }
+    if (Math.abs(velocity) < EPS) { stop(); return; }
     requestAnimationFrame(tick);
+  }
+  function stop() {
+    running = false;
   }
   function onWheel(e) {
     if (e.ctrlKey || e.metaKey) return;   // 保留 Ctrl/⌘+滚轮给浏览器
@@ -185,3 +190,52 @@ export function isLeafletBackend() {
 export function mapContainer() {
   return (state.map && state.map.getContainer) ? state.map.getContainer() : $('map');
 }
+
+// ============ 盲棋：隐藏底图，只画城市轮廓 ============
+
+let outlineOverlays = [];
+let savedBaseLayers = null; // 原生高德：盲棋期间暂存的底图图层
+let outlineRequest = 0;
+
+/**
+ * 切换“盲棋”呈现：blind=true 时隐藏底图瓦片、给地图容器换成素色底，并按城市行政边界画轮廓线；
+ * blind=false 时恢复底图并清掉轮廓。站点、线路、路线等覆盖物不受影响。
+ * 边界文件为 DataV 行政区 GeoJSON（GCJ-02），与转换脚本裁剪公交用的是同一份。
+ */
+export async function setBlindMap(blind, cityId = state.currentCityId) {
+  const request = ++outlineRequest;
+  for (const o of outlineOverlays) o.setMap(null);
+  outlineOverlays = [];
+  if (!state.map) return;
+  if (state.map.setBaseLayerVisible) state.map.setBaseLayerVisible(!blind);
+  else if (state.map.getLayers && state.map.setLayers) {
+    // 原生高德：进入盲棋时记下原有图层（默认是矢量底图）再清空；退出时原样放回。
+    // 不能用 new AMap.TileLayer() 代替——那是栅格瓦片，文字被烘焙在图片里，会整体变大变糊。
+    if (blind && !savedBaseLayers) {
+      savedBaseLayers = state.map.getLayers();
+      state.map.setLayers([]);
+    } else if (!blind && savedBaseLayers) {
+      state.map.setLayers(savedBaseLayers);
+      savedBaseLayers = null;
+    }
+  }
+  $('map')?.classList.toggle('blind-map', !!blind);
+  if (!blind) return;
+  try {
+    const geo = await fetch(`data/boundaries/${cityId}.json`).then((r) => (r.ok ? r.json() : null));
+    if (!geo || request !== outlineRequest) return;
+    const geometry = geo.features?.[0]?.geometry;
+    const polygons = geometry?.type === 'MultiPolygon' ? geometry.coordinates : geometry ? [geometry.coordinates] : [];
+    for (const polygon of polygons) {
+      for (const ring of polygon) {
+        const line = new AMap.Polyline({
+          path: ring, strokeColor: '#5b6b7b', strokeWeight: 2, strokeOpacity: 0.8,
+          lineJoin: 'round', zIndex: 40, interactive: false,
+        });
+        line.setMap(state.map);
+        outlineOverlays.push(line);
+      }
+    }
+  } catch (e) { /* 边界缺失时只是没有轮廓，不影响游玩 */ }
+}
+

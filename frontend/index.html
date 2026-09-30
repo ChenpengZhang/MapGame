@@ -3,10 +3,9 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1.0, user-scalable=no" />
-  <title>RouteGuesser · 城市公共交通制霸</title>
+  <title>TransitGuesser · 公交导航模拟器</title>
   <link rel="stylesheet" href="css/account.css?v=5" />
   <link rel="icon" type="image/svg+xml" href="assets/map.svg" />
-    <link rel="stylesheet" href="fonts/ChillRoundF/ChillRoundF.css" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <style>
 @font-face {
@@ -17,7 +16,7 @@
   font-display: swap;
 }
 /* ==========================================================================
-   城市公共交通制霸 —— 深色主题
+   TransitGuesser 公交导航模拟器 —— 深色主题
    设计范式：简约深色（slate 底 + 青/橙强调色）+ 圆角玻璃卡片 + 点阵纹理
    · 深蓝黑底、中性灰文字层级，青(cyan)/橙(orange) 点缀
    · 圆角玻璃卡：半透明深色 + 背景模糊 + 1px 浅色细描边(ring) + 柔阴影
@@ -26,10 +25,10 @@
    ========================================================================== */
 
 :root {
-  /* 字体：本地打包的 ChillRoundF（寒蝉全圆体），回退到系统圆体/黑体 */
-  --font-sans: "ChillRoundF", "HarmonyOS Sans SC", "MiSans", "OPPO Sans 4.0",
-    "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Segoe UI",
-    system-ui, -apple-system, sans-serif;
+  /* 字体：与公交线路名称牌一致——拉丁字母与数字用本地打包的 Roboto Condensed，
+     中文用思源黑体 / 苹方 / 微软雅黑。（原 ChillRoundF 寒蝉全圆体仍在 fonts/ 下，换回只需改这里并恢复 <head> 里的样式表链接） */
+  --font-sans: "Roboto Condensed Local", "Noto Sans CJK SC", "Source Han Sans SC", "PingFang SC",
+    "Hiragino Sans GB", "Microsoft YaHei", system-ui, -apple-system, sans-serif;
 
   /* 中性色（文字层级） */
   --ink-strong: #f1f5f9;
@@ -131,8 +130,27 @@ html, body {
   -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
   border: 1px solid var(--ring); border-radius: var(--r-md);
   box-shadow: var(--shadow-lg); padding: 6px; z-index: 1200;
-  display: flex; flex-direction: column; gap: 2px;
+  display: flex; flex-direction: column; gap: 6px;
+  width: 240px;
 }
+/* 搜索框固定在顶部，下面的城市列表可滚动；按拼音首字母分组 */
+.city-select-menu .city-search {
+  width: 100%; box-sizing: border-box; padding: 8px 12px;
+  border: 1px solid var(--ring); border-radius: 8px; outline: none;
+  background: rgba(255,255,255,0.06); color: var(--ink-strong); font: inherit; font-size: 14px;
+}
+.city-select-menu .city-search:focus { border-color: var(--accent); }
+.city-select-menu .city-list {
+  display: flex; flex-direction: column; gap: 2px;
+  max-height: min(360px, 60vh); overflow-y: auto; overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+.city-select-menu .city-letter {
+  position: sticky; top: 0; z-index: 1; padding: 4px 10px 2px;
+  font-size: 11px; font-weight: 700; letter-spacing: .08em; color: var(--ink-muted);
+  background: var(--surface-glass-strong);
+}
+.city-select-menu .city-empty { padding: 12px 10px; font-size: 13px; color: var(--ink-muted); text-align: center; }
 .city-select-menu .city-item {
   display: flex; align-items: center; justify-content: space-between; gap: 6px;
   padding: 9px 14px; border-radius: 8px; cursor: pointer;
@@ -217,8 +235,9 @@ html, body {
 }
 #route-panel .rp-toggle:hover { color: var(--ink-strong); border-color: var(--ring-strong); }
 /* 折叠态：只保留标题行，隐藏其余内容 */
-#route-panel.collapsed > *:not(:first-child) { display: none; }
-#route-panel.collapsed { max-height: 44px; overflow: hidden; }
+/* 折叠态：只露出标题行。折叠/展开由 ui/route-panel.js 按实际内容高度过渡 max-height，形成自然的缩放动画 */
+#route-panel { transition: max-height .28s cubic-bezier(.4,0,.2,1); }
+#route-panel.collapsed { overflow: hidden; }
 #route-panel .rp-total { color: var(--accent); font-weight: 700; }
 #route-panel .rp-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin: 2px 0; }
 #route-panel .rp-desc { flex: 1; min-width: 0; }
@@ -241,41 +260,41 @@ html, body {
 .stop-infocard .info-kicker { color: var(--ink-muted); font-size: 10px; font-weight: 700; letter-spacing: .08em; }
 .stop-infocard .infocard-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .stop-infocard .line-list { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
-.stop-infocard .line-tag {
+:is(.stop-infocard, #route-panel) .line-tag {
   display: inline-flex; height: 30px; box-sizing: border-box; align-items: center; justify-content: center;
   padding: 3px 8px; border: 0; border-radius: 2px;
   font: inherit; color: #fff; font-weight: 600; box-shadow: var(--shadow-sm);
 }
-.stop-infocard .line-main { line-height: 1; }
-.stop-infocard .line-tag.selectable { cursor: pointer; transition: transform .12s, box-shadow .12s, opacity .12s; }
-.stop-infocard .line-tag.selectable:hover { transform: translateY(-1px); box-shadow: 0 0 0 2px rgba(255,255,255,.75), var(--shadow-sm); }
-.stop-infocard .line-tag.selected { box-shadow: 0 0 0 3px #fff, 0 0 0 5px var(--accent); }
-.stop-infocard.collapsed .line-list { display: none; }
+:is(.stop-infocard, #route-panel) .line-main { line-height: 1; }
+:is(.stop-infocard, #route-panel) .line-tag.selectable { cursor: pointer; transition: transform .12s, box-shadow .12s, opacity .12s; }
+:is(.stop-infocard, #route-panel) .line-tag.selectable:hover { transform: translateY(-1px); box-shadow: 0 0 0 2px rgba(255,255,255,.75), var(--shadow-sm); }
+:is(.stop-infocard, #route-panel) .line-tag.selected { box-shadow: 0 0 0 3px #fff, 0 0 0 5px var(--accent); }
+.stop-infocard .line-list { max-height: 60vh; overflow-y: auto; transition: max-height .25s cubic-bezier(.4,0,.2,1), opacity .2s, margin .25s, padding .25s; }
 
 /* 地铁线路牌：大数字在左，“号线 / Line N”位于右侧上下角。 */
-.stop-infocard .metro-line {
+:is(.stop-infocard, #route-panel) .metro-line {
   min-width: 54px; display: inline-grid; grid-template-columns: auto auto; align-items: stretch;
   column-gap: 3px; padding: 3px 5px;
   font-family: "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
 }
-.stop-infocard .metro-line-main {
+:is(.stop-infocard, #route-panel) .metro-line-main {
   align-self: center; font: 700 21px/1 "Roboto Condensed Local", Arial, sans-serif;
 }
-.stop-infocard .metro-line-side {
+:is(.stop-infocard, #route-panel) .metro-line-side {
   display: flex; min-width: 22px; height: 100%; flex-direction: column;
   align-items: flex-start; justify-content: center; gap: 1px;
 }
-.stop-infocard .metro-line-suffix { font-size: 7px; font-weight: 700; line-height: 1; white-space: nowrap; }
-.stop-infocard .metro-line-en {
+:is(.stop-infocard, #route-panel) .metro-line-suffix { font-size: 7px; font-weight: 700; line-height: 1; white-space: nowrap; }
+:is(.stop-infocard, #route-panel) .metro-line-en {
   font: 600 7px/1 "Roboto Condensed Local", Arial, sans-serif; white-space: nowrap;
 }
-.stop-infocard .metro-line.text-line { min-width: 48px; grid-template-columns: auto auto; }
-.stop-infocard .metro-line.text-line .metro-line-main {
+:is(.stop-infocard, #route-panel) .metro-line.text-line { min-width: 48px; grid-template-columns: auto auto; }
+:is(.stop-infocard, #route-panel) .metro-line.text-line .metro-line-main {
   font-family: "Noto Sans CJK SC", "Source Han Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
   font-size: 11px; line-height: 1.05;
 }
-.stop-infocard .metro-line.text-line .metro-line-suffix { font-size: 6px; }
-.stop-infocard .metro-line.text-line .metro-line-en { font-size: 6px; }
+:is(.stop-infocard, #route-panel) .metro-line.text-line .metro-line-suffix { font-size: 6px; }
+:is(.stop-infocard, #route-panel) .metro-line.text-line .metro-line-en { font-size: 6px; }
 
 /* 公交和地铁站点预览共用天津站牌式外框；区别只在线路牌内部。 */
 .stop-infocard.bus-board,
@@ -297,19 +316,19 @@ html, body {
 .stop-infocard.metro-board .infocard-head { gap: 4px; }
 .stop-infocard.bus-board .line-list,
 .stop-infocard.metro-board .line-list { align-items: flex-start; gap: 3px; margin-top: 4px; padding-top: 4px; border-top: 1px solid #c5cbd0; }
-.stop-infocard .bus-line {
+:is(.stop-infocard, #route-panel) .bus-line {
   min-width: 43px; height: 25px; border-radius: 0; padding: 0 4px;
   align-items: center; justify-content: center;
 }
-.stop-infocard .bus-line-content {
+:is(.stop-infocard, #route-panel) .bus-line-content {
   display: inline-flex; align-items: baseline; line-height: 1;
 }
-.stop-infocard .bus-line .line-main {
+:is(.stop-infocard, #route-panel) .bus-line .line-main {
   font: 600 18px/1 "Roboto Condensed Local", Arial, Helvetica, sans-serif;
 }
 /* 汉字字面比拉丁基线低约 0.1em；只做视觉上移（不影响布局），让“密/路”底边与数字底边齐平。 */
-.stop-infocard .bus-line .line-prefix,
-.stop-infocard .bus-line .line-suffix {
+:is(.stop-infocard, #route-panel) .bus-line .line-prefix,
+:is(.stop-infocard, #route-panel) .bus-line .line-suffix {
   margin: 0 1px; font-family: "Noto Sans CJK SC", "Source Han Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
   font-size: 7px; font-weight: 600; line-height: 1;
   transform: translateY(-0.09em);
@@ -317,13 +336,13 @@ html, body {
 /* 支持 text-box 的浏览器把行框裁到“大写字母高度 ~ 基线”，内容块即数字字面本身，
    站牌的 align-items/justify-content:center 因而按可见字形上下左右居中，而不受字体行高影响。 */
 @supports (text-box: trim-both cap alphabetic) {
-  .stop-infocard .bus-line:not(.text-line) .line-main,
-  .stop-infocard .bus-line:not(.text-line) .line-prefix,
-  .stop-infocard .bus-line:not(.text-line) .line-suffix { text-box: trim-both cap alphabetic; }
+  :is(.stop-infocard, #route-panel) .bus-line:not(.text-line) .line-main,
+  :is(.stop-infocard, #route-panel) .bus-line:not(.text-line) .line-prefix,
+  :is(.stop-infocard, #route-panel) .bus-line:not(.text-line) .line-suffix { text-box: trim-both cap alphabetic; }
 }
-.stop-infocard .bus-line.text-line { min-width: 0; max-width: 100%; align-items: center; justify-content: center; }
-.stop-infocard .bus-line.text-line .bus-line-content { align-items: center; }
-.stop-infocard .bus-line.text-line .line-main {
+:is(.stop-infocard, #route-panel) .bus-line.text-line { min-width: 0; max-width: 100%; align-items: center; justify-content: center; }
+:is(.stop-infocard, #route-panel) .bus-line.text-line .bus-line-content { align-items: center; }
+:is(.stop-infocard, #route-panel) .bus-line.text-line .line-main {
   font-family: "Noto Sans CJK SC", "Source Han Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
   font-size: 10px; line-height: 1.1; white-space: normal; text-align: center;
 }
@@ -460,7 +479,7 @@ html, body {
    主菜单
    ========================================================================== */
 /* 一级 + 二级菜单共用：半透明遮罩，让地图作为低 alpha 背景透出 */
-#main-menu, #story-menu, #free-menu, #tower-menu {
+#main-menu, #story-menu, #tower-menu, #daily-menu {
   background: rgba(13, 20, 34, 0.80);
   -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px);
 }
@@ -564,28 +583,6 @@ html, body {
   font-size: 14px; color: #fff; background: rgba(255,255,255,0.14);
 }
 .story-back:hover { background: rgba(255,255,255,0.24); }
-
-/* ==========================================================================
-   自由模式情景选择
-   ========================================================================== */
-#free-menu {
-  position: fixed; inset: 0; z-index: 910;
-  display: flex; align-items: center; justify-content: center;
-}
-.free-menu-inner {
-  background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.15);
-  border-radius: 14px; padding: 28px 32px; color: #fff; width: 380px; max-width: 92%; text-align: left;
-}
-.free-menu-inner h2 { text-align: center; font-size: 24px; margin-bottom: 6px; }
-.free-sub { text-align: center; color: #9fb0c3; font-size: 13px; margin-bottom: 18px; }
-.free-opts { display: flex; flex-direction: column; gap: 12px; margin-bottom: 20px; }
-.free-opts label { display: flex; align-items: center; gap: 8px; font-size: 15px; cursor: pointer; }
-.free-btns { display: flex; gap: 10px; justify-content: center; }
-.free-btns button { padding: 10px 22px; border: none; border-radius: 8px; cursor: pointer; font-size: 15px; color: #fff; }
-#free-start-btn { background: #27ae60; }
-#free-start-btn:hover { background: #1e8449; }
-#free-back-btn { background: rgba(255,255,255,0.14); }
-#free-back-btn:hover { background: rgba(255,255,255,0.24); }
 
 /* ==========================================================================
    无尽模式爬塔畸变选择
@@ -778,15 +775,19 @@ html, body {
   #legend { left: 10px; bottom: 10px; padding: 7px 9px; gap: 4px; font-size: 10px; }
 
   /* 顶部 HUD 与底部操作条：保持一致的上下间距（HUD 不再贴着顶栏） */
-  #mode-hud { top: 62px; font-size: 12px; padding: 5px 12px; max-width: 76vw; }
+  /* HUD 始终单行：计时变长时压缩字号与间距，不换行，避免压到下面的操作按钮 */
+  #mode-hud { top: 62px; font-size: 11px; padding: 5px 10px; gap: 6px; max-width: calc(100vw - 64px); white-space: nowrap; }
+  #mode-hud > * { flex: none; }
+  #mode-hud #tower-layer-label, #mode-hud #mode-hud-secondary { overflow: hidden; text-overflow: ellipsis; flex: 0 1 auto; min-width: 0; }
   #tower-restart-btn { top:62px;right:10px;width:32px;height:32px;font-size:19px; }
   .btn-group { right: 10px; top: 104px; bottom: auto; flex-wrap: wrap; justify-content: flex-end; max-width: 74vw; }
   .btn-group button { padding: 7px 12px; font-size: 12px; }
   #result-toggle-btn { right: 10px; top: 104px; bottom: auto; padding: 7px 12px; font-size: 12px; }
 
   /* 路线面板 / 信息卡：改成底部抽屉 */
+  /* 底部抽屉：路线面板与站点卡片等宽、紧贴堆叠（不留缝，避免露出下面的地图和图例） */
   #left-col {
-    left: 0; right: 0; top: auto; bottom: 0; max-width: none; gap: 8px;
+    left: 0; right: 0; top: auto; bottom: 0; max-width: none; gap: 0;
     max-height: calc(100dvh - 64px); overflow-y: auto; overscroll-behavior: contain; scrollbar-width: none;
   }
   #left-col::-webkit-scrollbar { display: none; }
@@ -794,6 +795,7 @@ html, body {
   .stop-infocard.metro-board { border-radius: 0; }
   .stop-infocard.bus-board { border-radius: 0; }
   #route-panel { max-height: 42vh; }
+  .stop-infocard.bus-board, .stop-infocard.metro-board { width: auto; }
   .stop-infocard .line-list {
     max-height: min(24vh, 150px); overflow-y: auto; overscroll-behavior: contain;
     scrollbar-width: thin; -webkit-overflow-scrolling: touch;
@@ -810,16 +812,10 @@ html, body {
 /* ==========================================================================
    公交站牌风格：路线规划 / 图例 / 结算
    参照天津公交站牌：米白底、顶部灰色压条、黑字、细灰分隔线、方角、
-   站牌红（线路号）作唯一强调色；文字使用点阵像素字体营造复古感。
+   站牌红作唯一强调色；字体与站点信息卡（公交站名牌）一致，线路名同样画成线路牌。
    ========================================================================== */
-@font-face {
-  font-family: "Fusion Pixel 12px";
-  src: url("fonts/FusionPixel/fusion-pixel-12px-proportional-zh_hans.woff2") format("woff2");
-  font-display: swap;
-}
 :root {
-  --font-pixel: "Fusion Pixel 12px", "Zpix", "Ark Pixel 12px", "Unifont",
-    "SimSun", "Songti SC", monospace;
+  --font-sign: "Noto Sans CJK SC", "Source Han Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
   --sign-bg: rgba(250, 250, 246, .97);
   --sign-ink: #111;
   --sign-muted: #5f6b74;
@@ -829,8 +825,7 @@ html, body {
   --sign-shadow: 0 4px 14px rgba(15, 23, 42, .28);
 }
 #legend, #route-panel, .result-inner, #result-toggle-btn {
-  font-family: var(--font-pixel);
-  -webkit-font-smoothing: none; font-smooth: never;
+  font-family: var(--font-sign);
   color: var(--sign-ink); background: var(--sign-bg);
   -webkit-backdrop-filter: none; backdrop-filter: none;
   border: 0; border-top: 4px solid var(--sign-bar); border-radius: 0;
@@ -839,68 +834,89 @@ html, body {
 
 /* 图例：站牌线路图的小圆点 + 名称 */
 #legend { padding: 6px 9px; gap: 4px; font-size: 12px; }
-#legend .row { font-weight: 400; gap: 6px; }
+#legend .row { font-weight: 600; gap: 6px; }
 #legend .dot { border: 1.5px solid #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.35); }
 
 /* 路线规划：像站牌上的“所有车站”列表 */
-#route-panel { padding: 6px 9px 8px; font-size: 12px; line-height: 1.6; }
+/* 字号与下方站点信息卡一致：标题 12px 粗体、正文 11px、收起按钮 8px、内边距 6px 7px */
+#route-panel { padding: 6px 7px 7px; font-size: 11px; line-height: 1.6; }
 #route-panel::-webkit-scrollbar-thumb { background: var(--sign-rule); border-radius: 0; }
 #route-panel .rp-title {
-  font-size: 14px; font-weight: 400; color: var(--sign-ink);
+  font-size: 12px; font-weight: 700; color: var(--sign-ink);
   margin: 0 0 4px; padding-bottom: 4px; border-bottom: 1px solid var(--sign-rule);
 }
 #route-panel .rp-title.rp-opt { margin-top: 8px; padding-top: 6px; border-top: 1px solid var(--sign-rule); }
 #route-panel .rp-toggle, .stop-infocard .info-toggle {
-  font-family: inherit; font-weight: 400; border: 1px solid #aeb8c2; border-radius: 0;
-  background: #eef2f5; color: #334155; padding: 0 6px;
+  font-family: inherit; font-weight: 400; border: 1px solid #aeb8c2; border-radius: 2px;
+  background: #eef2f5; color: #334155; padding: 1px 5px; font-size: 8px; line-height: 1.4;
+}
+/* 触屏点按后 :hover 会“粘住”，旧的深色主题悬停色（近白）会让按钮文字在米白底上消失 */
+#route-panel .rp-toggle:hover, #route-panel .rp-toggle:focus, .stop-infocard .info-toggle:hover {
+  color: #334155; border-color: #8a96a3; background: #e2e8ee;
+}
+.stop-infocard.collapsed .line-list {
+  max-height: 0; opacity: 0; margin-top: 0; padding-top: 0; border-top-width: 0; overflow: hidden;
 }
 #route-panel .rp-row { margin: 1px 0; }
 #route-panel .rp-desc { color: var(--sign-ink); }
 #route-panel .rp-note { color: var(--sign-muted); }
-#route-panel .rp-pill {
-  padding: 0 5px; border-radius: 0; font-weight: 400; font-size: 12px;
-  background: var(--sign-red); color: #fff;
+/* 线路名用站点信息卡同款线路牌（样式见 :is(.stop-infocard, #route-panel) .line-tag 等规则） */
+#route-panel .line-tag { vertical-align: middle; margin: 2px 0; }
+#route-panel .rp-row { align-items: center; }
+#route-panel .rp-pill.rp-transfer {
+  padding: 0 5px; border-radius: 0; font-size: 11px; font-weight: 600;
+  background: transparent; color: var(--sign-muted); border: 1px solid var(--sign-rule);
 }
-#route-panel .rp-pill.rp-transfer { background: transparent; color: var(--sign-muted); border: 1px solid var(--sign-rule); }
 #route-panel .rp-stops, #route-panel .rp-km, #route-panel .rp-time { color: var(--sign-muted); font-weight: 400; }
 #route-panel .rp-time { color: var(--sign-ink); min-width: 3.5em; text-align: right; }
 #route-panel .rp-total {
   margin-top: 4px; padding-top: 4px; border-top: 1px solid var(--sign-rule);
-  color: var(--sign-ink); font-weight: 400;
+  color: var(--sign-ink); font-weight: 700;
 }
-#route-panel .rp-total b { color: var(--sign-red); font-weight: 400; font-size: 16px; }
+#route-panel .rp-total b { color: var(--sign-red); font-weight: 700; font-size: 13px; }
 #route-panel .rp-score { color: var(--sign-ink); }
 
-/* 结算：大号站牌 —— 红色标题牌 + 列表化的用时对比 + 方角按钮 */
+/* 结算：整张卡就是一块站牌 —— 白底圆角；文案、用时和按钮都居中排在站牌下方，
+   主按钮用线路色（通过绿 / 未通过红），其余按钮为白底描边胶囊 */
 #result-overlay { background: rgba(4, 8, 18, .45); -webkit-backdrop-filter: none; backdrop-filter: none; }
 .result-inner {
-  width: 420px; padding: 0 0 14px; text-align: left;
+  width: 420px; padding: 0 0 20px; text-align: center; overflow: hidden;
+  background: #fff; border: 0; border-radius: 16px;
+  box-shadow: 0 18px 40px rgba(0,0,0,.35);
   animation: result-pop .28s ease-out both;
 }
-#result-title {
-  margin: 0; padding: 10px 16px; font-size: 26px; font-weight: 400;
-  background: var(--sign-red); color: #fff;
-}
-#result-message { margin: 10px 16px; font-size: 14px; line-height: 1.7; color: var(--sign-ink); }
+#result-title { margin: 0; padding: 22px 16px 6px; font-size: 26px; font-weight: 800; color: #111; }
+#result-message { margin: 14px 28px 4px; font-size: 14px; line-height: 1.7; color: #222; }
 #result-times {
-  margin: 0 16px 14px; padding: 6px 0; border-radius: 0; background: transparent;
-  border-top: 1px solid var(--sign-rule); border-bottom: 1px solid var(--sign-rule);
-  font-size: 13px; color: var(--sign-ink);
+  margin: 2px 28px 18px; padding: 0; border: 0; border-radius: 0; background: transparent;
+  font-size: 12px; color: #6b7680;
 }
-#result-sync { margin: 0 16px; color: var(--sign-muted); }
-.result-btns { justify-content: flex-start; gap: 6px; padding: 0 16px; }
+#result-sync { margin: 0 28px 10px; color: var(--sign-muted); }
+.result-btns { justify-content: center; gap: 10px; padding: 0 24px; }
 .result-btns button, #result-retry {
-  font-family: inherit; font-weight: 400; font-size: 13px; padding: 5px 14px;
-  border-radius: 0; box-shadow: none; color: var(--sign-ink);
-  background: #eef2f5; border: 1px solid #aeb8c2;
+  font-family: inherit; font-weight: 700; font-size: 14px; padding: 8px 20px;
+  border-radius: 999px; box-shadow: none; color: #111;
+  background: #fff; border: 1.5px solid #cfd6dc;
 }
-.result-btns button:hover { transform: none; box-shadow: none; filter: none; background: #e2e8ee; }
-#result-next { background: var(--sign-red); border-color: var(--sign-red); color: #fff; }
-#result-next:hover { background: #a50d26; }
-#result-restart, #result-viewmap, #result-exit { background: #eef2f5; }
-#result-toggle-btn { padding: 4px 12px; font-size: 13px; font-weight: 400; }
+.result-btns button:hover { transform: none; box-shadow: none; filter: none; background: #f2f5f7; }
+#result-next, #result-restart, #result-viewmap, #result-exit { background: #fff; }
+/* 主按钮（id 选择器才能压过上面按 id 设置的白底） */
+.result-btns :is(#result-next, #result-restart).primary { color: #fff; border-color: transparent; }
+.result-inner.outcome-pass :is(#result-next, #result-restart).primary { background: #009a44; }
+.result-inner.outcome-pass :is(#result-next, #result-restart).primary:hover { background: #008a3c; }
+.result-inner.outcome-fail :is(#result-next, #result-restart).primary { background: #b8123d; }
+.result-inner.outcome-fail :is(#result-next, #result-restart).primary:hover { background: #a10f35; }
+.result-inner.outcome-none :is(#result-next, #result-restart).primary { background: #334155; }
+#result-toggle-btn { padding: 4px 12px; font-size: 13px; font-weight: 700; }
 @media (max-width: 760px) {
   #route-panel { border-radius: 0; }
+}
+/* 手机底部抽屉：背景不透明，并在抽屉展开时隐藏左下角图例（否则会从抽屉后面透出来） */
+@media (max-width: 600px) {
+  #route-panel, .stop-infocard.bus-board, .stop-infocard.metro-board { background: #fafaf6; }
+  #app:has(#left-col > :not(.hidden)) #legend { display: none; }
+  /* 地图右下角的版权署名始终停在抽屉上方（--drawer-h 由 app.js 按抽屉实际高度更新） */
+  #map .leaflet-bottom { bottom: var(--drawer-h, 0px); transition: bottom .28s cubic-bezier(.4,0,.2,1); }
 }
 
 /* 图标：统一取自 Iconoir（MIT，assets/icons/）；用作蒙版，颜色跟随 currentColor */
@@ -922,6 +938,7 @@ html, body {
 .icon-nav-arrow-right { --icon: url("assets/icons/nav-arrow-right.svg"); }
 .icon-xmark { --icon: url("assets/icons/xmark.svg"); }
 .icon-refresh { --icon: url("assets/icons/refresh.svg"); }
+.icon-calendar { --icon: url("assets/icons/calendar.svg"); }
 .icon-walking { --icon: url("assets/icons/walking.svg"); }
 .icon-bus { --icon: url("assets/icons/bus.svg"); }
 .icon-bus-side { --icon: url("assets/icons/bus-side.svg"); } /* Tabler Icons（MIT）：侧面巴士，用于加载动画 */
@@ -1014,6 +1031,65 @@ html, body {
   0%, 100% { box-shadow: 0 0 0 0 rgba(251,146,60,0); }
   50% { box-shadow: 0 0 0 5px rgba(251,146,60,.6); }
 }
+
+/* 每日挑战面板：沿用无尽模式菜单的布局，加一张当日排行 */
+#daily-menu { position: fixed; inset: 0; z-index: 910; display: flex; align-items: center; justify-content: center; }
+.daily-inner { max-width: 520px; }
+.daily-mine { min-height: 20px; margin: -10px 0 14px; color: var(--accent); font-size: 14px; font-weight: 700; }
+.daily-board-wrap { max-height: 300px; overflow-y: auto; margin-bottom: 18px; border: 1px solid rgba(255,255,255,.12); border-radius: 10px; }
+.daily-board { width: 100%; border-collapse: collapse; font-size: 13px; color: #dbe4ee; }
+.daily-board th { position: sticky; top: 0; background: #16233a; color: #9fb0c3; font-weight: 600; padding: 7px 10px; text-align: left; }
+.daily-board td { padding: 6px 10px; border-top: 1px solid rgba(255,255,255,.06); text-align: left; }
+.daily-board tr.leaderboard-own td { color: var(--accent); font-weight: 700; }
+.daily-board .leaderboard-empty, .daily-board .leaderboard-divider { text-align: center; color: #9fb0c3; }
+.daily-start {
+  display: block; width: 100%; margin-bottom: 16px; padding: 13px 0; border: 0; border-radius: 12px;
+  background: var(--accent); color: #fff; font: inherit; font-size: 16px; font-weight: 700; cursor: pointer;
+}
+.daily-start:hover { filter: brightness(1.08); }
+.daily-start:disabled { opacity: .5; cursor: default; }
+
+/* 无尽模式“盲棋”：没有底图时地图容器用素色底，只剩城市轮廓与站点线路 */
+#map.blind-map { background: #eef0ec; }
+
+/* 结算站牌（日本车站站名牌风格）：大号站名 + 读音 + 一行说明、线路色带（三段即按钮）、罗马字行、用时。
+   整个弹窗就是这块站牌，没有额外的按钮区 */
+.result-sign { padding: 16px 0 12px; background: #fff; text-align: center; color: #111; }
+.result-sign .sign-name { font-size: 40px; font-weight: 800; letter-spacing: .45em; text-indent: .45em; line-height: 1.1; }
+.result-sign .sign-reading { margin: 4px 0 2px; font-size: 13px; font-weight: 700; letter-spacing: .08em; }
+.result-sign .sign-note #result-message { margin: 2px 24px 10px; font-size: 13px; line-height: 1.55; color: #333; }
+.result-sign .sign-note:empty { height: 8px; }
+.result-sign .sign-band {
+  display: grid; grid-template-columns: 1fr 58px 1fr; align-items: stretch; height: 44px;
+  color: #fff;
+}
+.result-sign .sign-slot, .result-sign .sign-here { display: flex; align-items: stretch; justify-content: center; min-width: 0; }
+.result-sign .sign-band button {
+  flex: 1; margin: 0; padding: 0 6px; border: 0; border-radius: 0; background: transparent !important;
+  color: #fff; font: inherit; font-size: 18px; font-weight: 800; letter-spacing: .06em; cursor: pointer;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; box-shadow: none;
+  transition: background .15s;
+}
+.result-sign .sign-band button:hover { background: rgba(0,0,0,.14) !important; }
+.result-sign .sign-here button { font-size: 13px; letter-spacing: 0; color: #fff; }
+/* 箭头一侧（主操作）的文字避开箭头尖 */
+.result-sign.pass #result-slot-right button { padding-right: 22px; }
+.result-sign.fail #result-slot-left button { padding-left: 22px; }
+.result-sign .sign-roman {
+  display: grid; grid-template-columns: 1fr 58px 1fr; margin-top: 6px;
+  font-size: 12px; font-weight: 600; color: #333;
+}
+.result-sign .sign-roman > span { text-align: center; white-space: nowrap; }
+.result-sign .sign-roman-here { grid-column: 2; font-size: 15px; font-weight: 800; color: #111; overflow: visible; }
+.result-sign .sign-detail #result-times { margin: 8px 20px 0; padding: 0; border: 0; background: transparent; font-size: 12px; color: #6b7680; }
+/* 通过：JR 绿色线带，箭头向右；未通过：红色线带，箭头向左 */
+.result-sign.pass .sign-band { background: #009a44; clip-path: polygon(0 0, calc(100% - 18px) 0, 100% 50%, calc(100% - 18px) 100%, 0 100%); }
+.result-sign.pass .sign-here { background: #7fd13b; }
+.result-sign.fail .sign-band { background: #b8123d; clip-path: polygon(18px 0, 100% 0, 100% 100%, 18px 100%, 0 50%); }
+.result-sign.fail .sign-here { background: #7ac143; }
+.result-sign:not(.hidden) + #result-title { display: none; }
+.result-inner.has-sign { padding-bottom: 0; width: 460px; }
+.result-inner.has-sign .result-btns { display: none; }
 </style>
   <!-- GoatCounter 访问统计（自建，见 stats.zcpenguin.com） -->
   <script data-goatcounter="https://stats.zcpenguin.com/count" async src="//stats.zcpenguin.com/count.js"></script>
@@ -1030,7 +1106,7 @@ html, body {
         </button>
         <div class="city-select-menu hidden" id="city-select-menu"></div>
       </div>
-      <div class="title">RouteGuesser<span class="sub" id="city-label">北京</span></div>
+      <div class="title">TransitGuesser<span class="sub" id="city-label">北京</span></div>
       <div class="topbar-right">
         <div class="account-entry" id="account-entry">
           <button class="account-trigger" id="account-button" type="button">登录 / 注册</button>
@@ -1110,6 +1186,16 @@ html, body {
     <!-- 关卡结束结果 -->
     <div id="result-overlay" class="hidden">
       <div class="result-inner">
+        <!-- 结算站牌：参照日本车站站名牌。通过 = 绿色线带、箭头向右（继续前进）；未通过 = 红色线带、箭头向左（退回重来） -->
+        <div id="result-sign" class="result-sign hidden" aria-hidden="true">
+          <div class="sign-name" id="result-sign-name"></div>
+          <div class="sign-reading" id="result-sign-reading"></div>
+          <div class="sign-note" id="result-slot-message"></div>
+          <!-- 线带三段即按钮：箭头一侧是主操作，另一侧是次操作，中间方块查看地图（由 ui/result.js 把按钮放进来） -->
+          <div class="sign-band"><div class="sign-slot" id="result-slot-left"></div><div class="sign-here" id="result-slot-center"></div><div class="sign-slot" id="result-slot-right"></div></div>
+          <div class="sign-roman"><span id="result-sign-left-en"></span><span class="sign-roman-here" id="result-sign-en"></span><span id="result-sign-right-en"></span></div>
+          <div class="sign-detail" id="result-slot-times"></div>
+        </div>
         <div id="result-title">恭喜！</div>
         <div id="result-message"></div>
         <div id="result-times"></div>
@@ -1130,13 +1216,13 @@ html, body {
     <!-- 主菜单 -->
     <div id="main-menu">
       <div class="main-inner">
-        <h1>RouteGuesser</h1>
-        <p class="main-sub">城市公共交通制霸</p>
+        <h1>TransitGuesser</h1>
+        <p class="main-sub">公交导航模拟器</p>
         <div class="main-btns">
           <button id="story-btn"><span class="btn-emoji"><span class="icon icon-open-book" aria-hidden="true"></span></span><span class="btn-label">故事模式</span></button>
           <button id="tower-btn"><span class="btn-emoji"><span class="icon icon-tower" aria-hidden="true"></span></span><span class="btn-label">无尽模式</span></button>
           <button id="free-btn"><span class="btn-emoji"><span class="icon icon-dice-five" aria-hidden="true"></span></span><span class="btn-label">随机模式</span></button>
-          <button id="online-btn" class="locked"><span class="btn-emoji"><span class="icon icon-trophy" aria-hidden="true"></span></span><span class="btn-label">排位模式（敬请期待）</span></button>
+          <button id="daily-btn"><span class="btn-emoji"><span class="icon icon-calendar" aria-hidden="true"></span></span><span class="btn-label">每日挑战</span></button>
           <button id="settings-btn"><span class="btn-emoji"><span class="icon icon-settings" aria-hidden="true"></span></span><span class="btn-label">设置</span></button>
         </div>
       </div>
@@ -1161,21 +1247,6 @@ html, body {
     </div>
 
     <!-- 随机模式：情景选择 -->
-    <div id="free-menu" class="hidden">
-      <div class="free-menu-inner">
-        <h2>随机模式</h2>
-        <p class="free-sub">选择要加载的情景（可多选）</p>
-        <div class="free-opts">
-          <label><input type="checkbox" id="free-no-metro"> 地下瘫痪（禁用地铁）</label>
-          <label><input type="checkbox" id="free-bus-boost"> 一路畅通（公交加速20%）</label>
-          <label><input type="checkbox" id="free-rain"> 大雨滂沱（公交/步行减缓50%）</label>
-        </div>
-        <div class="free-btns">
-          <button id="free-start-btn">开始</button>
-          <button id="free-back-btn"><span class="icon icon-nav-arrow-left" aria-hidden="true"></span>返回</button>
-        </div>
-      </div>
-    </div>
 
     <!-- 无尽模式：爬塔畸变选择（成绩分别记录） -->
     <div id="tower-menu" class="hidden">
@@ -1187,8 +1258,28 @@ html, body {
           <button id="tower-no-metro" class="tower-opt"><span class="tower-opt-label">地铁瘫痪</span><span class="tower-opt-sub">禁用地铁</span><span class="tower-best">暂无纪录</span></button>
           <button id="tower-bus-boost" class="tower-opt"><span class="tower-opt-label">一路畅通</span><span class="tower-opt-sub">公交加速20%</span><span class="tower-best">暂无纪录</span></button>
           <button id="tower-rain" class="tower-opt"><span class="tower-opt-label">大雨滂沱</span><span class="tower-opt-sub">公交/步行减缓50%</span><span class="tower-best">暂无纪录</span></button>
+          <button id="tower-blind" class="tower-opt"><span class="tower-opt-label">盲棋</span><span class="tower-opt-sub">无地图</span><span class="tower-best">暂无纪录</span></button>
+          <button id="tower-real-ride" class="tower-opt"><span class="tower-opt-label">真实乘坐</span><span class="tower-opt-sub">无撤回/全图显示</span><span class="tower-best">暂无纪录</span></button>
         </div>
         <div class="tower-menu-links"><button id="tower-leaderboard" type="button">排行榜</button><button id="tower-back-btn" type="button"><span class="icon icon-nav-arrow-left" aria-hidden="true"></span>返回</button></div>
+      </div>
+    </div>
+
+    <!-- 每日挑战：今日题目、我的成绩与当日排行（需登录才能挑战） -->
+    <div id="daily-menu" class="hidden">
+      <div class="tower-menu-inner daily-inner">
+        <h2>每日挑战</h2>
+        <p class="tower-sub" id="daily-info">正在获取今日题目…</p>
+        <p class="daily-mine" id="daily-mine"></p>
+        <div class="daily-board-wrap">
+          <table class="leaderboard-table daily-board">
+            <thead><tr><th scope="col">名次</th><th scope="col">玩家</th><th scope="col">公交用时</th></tr></thead>
+            <tbody id="daily-board"></tbody>
+          </table>
+        </div>
+        <p id="daily-guest-notice" class="tower-guest-notice hidden">每日挑战需要登录，成绩计入当日排行榜；每天可以多次尝试。</p>
+        <button id="daily-start" class="daily-start" type="button">开始挑战</button>
+        <div class="tower-menu-links"><button id="daily-back-btn" type="button"><span class="icon icon-nav-arrow-left" aria-hidden="true"></span>返回</button></div>
       </div>
     </div>
 
@@ -1219,7 +1310,8 @@ html, body {
           <span>步行换乘</span>
         </label>
         <div class="settings-hint" style="margin-top:4px;">
-          允许在 1.5km 内步行到另一站换乘。
+          允许在 1.5km 内步行到另一站换乘，按步行速度计时。<br>
+          ⚠️ 由于算法复杂度限制，系统「最优」不计算远距离步行换乘，玩家可能规划出<b>比系统最优还快</b>的路线。
         </div>
 
         <label style="margin-top:14px;">高德地图 Key（可选）</label>
@@ -1264,6 +1356,6 @@ html, body {
   -->
   <script src="shared/router.js?v=5"></script>
   <script src="js/amap-polyfill.js"></script>
-  <script src="js/app.js?v=63" type="module"></script>
+  <script src="js/app.js?v=67" type="module"></script>
 </body>
 </html>

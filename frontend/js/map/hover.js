@@ -17,54 +17,13 @@ import { resolveStop, getLine } from '../data/index-builder.js';
 import { hide, $ } from '../core/dom.js';
 import { makeTransitLineLayers } from './transit-line-style.js';
 import { makeMassMarks, stopToData } from './stop-marks.js';
+import { lineSignClass, lineSignInnerHTML } from '../data/line-sign.js';
 
 let hoverTimer = null;
 const cards = {
   preview: { card: 'infocard', stop: 'info-stop', latin: 'info-latin', lines: 'info-lines', toggle: 'info-toggle', walk: 'info-walk', collapsed: null, lineCount: 0 },
   current: { card: 'current-infocard', stop: 'current-info-stop', latin: 'current-info-latin', lines: 'current-info-lines', toggle: 'current-info-toggle', walk: 'current-info-walk', collapsed: null, lineCount: 0 },
 };
-
-function escapeHtml(value) {
-  return String(value == null ? '' : value)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
-
-/** 公交牌以线路号为主体；名称前缀、“路”及方向说明都缩为同一级。 */
-function splitBusLineName(name) {
-  const value = String(name || '').trim();
-  const numbered = value.match(/^(.*?)([A-Za-zＡ-Ｚａ-ｚ]?[0-9０-９]+[A-Za-zＡ-Ｚａ-ｚ]?)(.*)$/);
-  if (numbered) {
-    return { prefix: numbered[1], main: numbered[2], suffix: numbered[3] };
-  }
-  return { prefix: '', main: value, suffix: '' };
-}
-
-/** 地铁线路牌：大号线路数字在左，“号线 / Line N”在右侧上下排列。 */
-function metroLineName(name) {
-  const chinese = String(name || '').trim().replace(/^地铁/, '');
-  const numbered = chinese.match(/^([A-Za-zＡ-Ｚａ-ｚ]?[0-9０-９]+)(.*)$/);
-  if (numbered) {
-    return { main: numbered[1], suffix: numbered[2], english: `Line ${numbered[1]}` };
-  }
-  const named = chinese.match(/^(.+?)(线.*)$/);
-  return {
-    main: named ? named[1] : chinese,
-    suffix: named ? named[2] : '',
-    english: 'Metro Line',
-  };
-}
-
-/**
- * 唯一判定规则：有数字就突出数字并缩小前后缀；没有数字才整体缩小居中。
- */
-function isTextLine(line) {
-  const value = String(line.name || '').trim();
-  return !/[0-9０-９]/.test(value);
-}
 
 /** MassMarks 的 mouseover 回调：防抖后渲染高亮（触摸设备不使用悬浮事件） */
 export function onStopMouseOver(e) {
@@ -259,31 +218,13 @@ function showInfoCard(d, lines, kind = 'preview', onLineToggle = null) {
     box.replaceChildren();
     for (const l of lines) {
       const selectable = kind === 'current' && typeof onLineToggle === 'function';
-      const textLine = isTextLine(l);
       const tag = document.createElement(selectable ? 'button' : 'span');
-      tag.className = 'line-tag ' + (l.mode === 'metro' ? 'metro-line' : 'bus-line')
-        + (textLine ? ' text-line' : '')
+      tag.className = lineSignClass(l)
         + (selectable ? ' selectable' : '') + (state.selectedLineName === l.name ? ' selected' : '');
       tag.style.backgroundColor = l.color || (l.mode === 'metro' ? '#e74c3c' : '#f39c12');
       // 先赋纯文本，既为无 innerHTML 的简化环境兜底，也便于辅助技术读取原名称。
       tag.textContent = l.name;
-      if (textLine) {
-        tag.innerHTML = `<span class="line-main">${escapeHtml(String(l.name).replace(/^地铁/, ''))}</span>`;
-      } else if (l.mode === 'metro') {
-        const label = metroLineName(l.name);
-        tag.innerHTML = `<span class="metro-line-main">${escapeHtml(label.main)}</span>`
-          + '<span class="metro-line-side">'
-          + `<span class="metro-line-suffix">${escapeHtml(label.suffix)}</span>`
-          + `<span class="metro-line-en">${escapeHtml(label.english)}</span>`
-          + '</span>';
-      } else {
-        const parts = splitBusLineName(l.name);
-        tag.innerHTML = '<span class="bus-line-content">'
-          + (parts.prefix ? `<span class="line-prefix">${escapeHtml(parts.prefix)}</span>` : '')
-          + `<span class="line-main">${escapeHtml(parts.main)}</span>`
-          + (parts.suffix ? `<span class="line-suffix">${escapeHtml(parts.suffix)}</span>` : '')
-          + '</span>';
-      }
+      tag.innerHTML = lineSignInnerHTML(l);
       tag.setAttribute?.('aria-label', l.name);
       if (selectable) {
         tag.type = 'button';

@@ -24,10 +24,11 @@ import { resolveStop, getLine, getPhys, findStopInLine, stopIndexInLine, distM }
 import { makeMassMarks, stopToData } from '../map/stop-marks.js';
 import { fadeInOverlay, setMassMarksMap, removeOverlay } from '../map/anim.js';
 import { hideBaseStops, updateStopsByZoom } from '../map/stop-layer.js';
-import { setOriginWalkRangeVisible } from '../map/map-init.js';
+import { setOriginWalkRangeVisible, setBlindMap } from '../map/map-init.js';
 import { clearMapTutorial, resetMapTutorialPrompt, setMapTutorialStage, isTutorialTransferStop, getTutorialTransfer, setTutorialTransferPoint, showTutorialMistake, clearTutorialMistake } from '../map/tutorial-layer.js';
 import { addStopMarker, stopTraveler, drawRideSegment, drawTransferWalk, drawWalkTransfer, rideEndpoint, drawWalkLeg, clearGroupOverlays } from '../map/route-layer.js';
 import { makeTransitLineLayers } from '../map/transit-line-style.js';
+import { isNativeAmap, registerPickableLine } from '../map/native-picker.js';
 import { onStopMouseOver, onStopMouseOut, clearHighlight, renderHighlight, cancelPreview, showCurrentStopInfo, clearCurrentStopInfo } from '../map/hover.js';
 import { clearOptimal } from '../map/optimal-layer.js';
 import { haversineKm, findOptimalRoute } from '../core/router-api.js';
@@ -541,6 +542,7 @@ export function finishRoute() {
       clearCandidate();
       updateButtons();
       renderRoutePanel();
+      revealBlindMap();
       emit(EVENTS.ROUTE_FINISHED);
       computeOptimal();
     });
@@ -567,9 +569,15 @@ export function finishRoute() {
     clearCandidate();   // 到达后隐藏候选站点/线路
     updateButtons();    // 完成后切换为"重新开始"
     renderRoutePanel();
+    revealBlindMap();
     emit(EVENTS.ROUTE_FINISHED);
     computeOptimal();
   });
+}
+
+/** 盲棋：路线完成后揭晓底图，方便对照自己的路线与最优路线 */
+function revealBlindMap() {
+  if (state.scenario?.blindMap) void setBlindMap(false);
 }
 
 // ============ 重置与撤回 ============
@@ -614,6 +622,11 @@ export function resetRoute() {
 /** 撤回上一步：仅规划中可用（完成后由"重新开始"重置） */
 export function undoRoute() {
   if (state.finished) return; // 完成后不可撤回
+  // 真实乘坐：已确认的站和车都不能撤回；只允许取消尚未确认的预览
+  if (state.scenario?.realRide && !(state.pendingStart || state.pendingCandidate)) {
+    showCenterToast('真实乘坐模式下不能撤回');
+    return;
+  }
   clearTutorialMistake();
   // 预选中点"上一步"= 取消预选，而不是撤回已确认的路线
   if (state.pendingStart || state.pendingCandidate) {
@@ -776,9 +789,12 @@ function addCandidateLine(line, path) {
     lineJoin: 'round', zIndex: zIndex + 1, interactive: true,
   });
   hitArea.__lineName = line.name;
+  hitArea.__hitWidth = state.isTouch ? 24 : 16;
   hitArea.__lineId = String(line.id);
   hitArea.__lineHitArea = true;
-  hitArea.on('click', chooseLine);
+  // 原生高德：折线热区不接事件（会吞掉站点点击），由 native-picker 按像素距离拾取
+  if (isNativeAmap()) registerPickableLine(hitArea, path, hitArea.__hitWidth, chooseLine);
+  else hitArea.on('click', chooseLine);
   hitArea.setMap(state.map);
   state.candidateOverlays.push(hitArea);
 }

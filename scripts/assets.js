@@ -10,6 +10,7 @@ function publicAssets(root) {
     ['/shared/router.js', 'shared/router.js'],
   ]);
   function collect(directory, publicDirectory, allowed) {
+    if (!fs.existsSync(path.join(root,directory))) return; // 可选目录（如精简包里没有的边界数据）
     for (const entry of fs.readdirSync(path.join(root,directory),{ withFileTypes:true })) {
       if (entry.name.startsWith('.') || entry.isSymbolicLink()) continue;
       const relative = `${directory}/${entry.name}`;
@@ -22,7 +23,9 @@ function publicAssets(root) {
   collect('frontend/assets','/assets',new Set(['.svg','.png','.jpg','.jpeg','.webp']));
   collect('frontend/js','/js',new Set(['.js']));
   collect('frontend/fonts','/fonts',new Set(['.css','.woff2','.woff','.ttf','.txt']));
-  for (const name of ['sample','beijing-transit','guangzhou-transit','shanghai-transit','shenzhen-transit','wenshan-transit','shuanghe-transit','kokdala-transit','datong-transit']) {
+  // 城市行政边界（DataV GeoJSON）：无尽模式“盲棋”用来画城市轮廓
+  collect('data/boundaries','/data/boundaries',new Set(['.json']));
+  for (const name of ['sample','beijing-transit','guangzhou-transit','shanghai-transit','shenzhen-transit','wenshan-transit','shuanghe-transit','kokdala-transit','datong-transit','chengdu-transit','chongqing-transit','hangzhou-transit','wuhan-transit','nanjing-transit','tianjin-transit']) {
     const relative = `data/${name}.json`;
     if (fs.existsSync(path.join(root,relative))) assets.set(`/${relative}`,relative);
   }

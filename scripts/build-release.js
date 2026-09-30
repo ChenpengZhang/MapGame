@@ -54,6 +54,13 @@ const INCLUDE = [
   'data/shuanghe-transit.json', // 双河换乘教学关数据
   'data/kokdala-transit.json',  // 可克达拉限时教学关数据
   'data/datong-transit.json',   // 大同快慢车教学关数据
+  'data/chengdu-transit.json',
+  'data/chongqing-transit.json',
+  'data/hangzhou-transit.json',
+  'data/wuhan-transit.json',
+  'data/nanjing-transit.json',
+  'data/tianjin-transit.json',
+  'data/boundaries',            // 城市行政边界：无尽模式“盲棋”画城市轮廓
   'data/sample.json',           // 演示兜底
   'README.md',
 ];

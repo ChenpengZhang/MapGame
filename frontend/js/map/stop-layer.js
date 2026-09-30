@@ -24,6 +24,7 @@ import { state } from '../core/state.js';
 import { METRO_MIN_ZOOM, BUS_MIN_ZOOM, MAX_BUS_RENDER } from '../core/config.js';
 import { setStatus, $ } from '../core/dom.js';
 import { makeMassMarks, stopToData } from './stop-marks.js';
+import { clickWasPicked } from './native-picker.js';
 import { fadeInOverlay, captureMassMarksCanvas, removeOverlay } from './anim.js';
 import { mapContainer } from './map-init.js';
 import { isWithinWalkRange } from './walk-range.js';
@@ -91,6 +92,8 @@ export function renderStops(handlers) {
   const onZoomEnd = () => { updateStopsByZoom(); scheduleRefreshStops(); };
   // 两端一致：点击地图空白处取消预选；平移、缩放和点地图控件不会走取消逻辑。
   const onMapClick = (e) => {
+    // 原生高德：点击已被 native-picker 当作站点/线路处理，不能再当成点空白取消刚选中的站
+    if (clickWasPicked(e)) return;
     const original = e && (e.originalEvent || e.originEvent);
     const t = original && original.target;
     const onInteractive = t && t.closest ? t.closest('.leaflet-interactive') : null;
@@ -196,11 +199,12 @@ export function scheduleRefreshStops() {
  */
 export function updateStopsByZoom() {
   if (!state.map) return;
-  const showBase = state.routeStops.length === 0 || state.showAllStops;
+  // 真实乘坐：出发前只显示起点 1.5km 内可步行到达的站（红色层），不显示全城蓝/橙站点
+  const showBase = !state.scenario?.realRide && (state.routeStops.length === 0 || state.showAllStops);
   const z = state.map.getZoom();
   setStopsVisible(metroMarks, showBase && !state.scenario.noMetro && z >= METRO_MIN_ZOOM, () => metroMarksShown, (v) => { metroMarksShown = v; });
   setStopsVisible(busMarks, showBase && z >= BUS_MIN_ZOOM, () => busMarksShown, (v) => { busMarksShown = v; }); // 公交站按缩放等级显隐
-  const showOriginWalk = showBase && state.routeStops.length === 0 && !!state.ORIGIN
+  const showOriginWalk = (showBase || !!state.scenario?.realRide) && state.routeStops.length === 0 && !!state.ORIGIN
     && ((!state.scenario.noMetro && z >= METRO_MIN_ZOOM) || z >= BUS_MIN_ZOOM);
   setStopsVisible(originWalkMarks, showOriginWalk, () => originWalkMarksShown, (v) => { originWalkMarksShown = v; });
   // 红色层在地铁级别（13）就已显示，只含地铁站；缩放跨过公交级别时它不会重新 show，
@@ -263,6 +267,7 @@ export function hideBaseStops() {
 
 /** 切换"全图显示站点"（开启时仍可预览站点，但确定/继续规划会被阻止） */
 export function toggleShowAllStops() {
+  if (state.scenario?.realRide) return; // 真实乘坐不能全图显示
   if (stopHandlers.onMapClick) stopHandlers.onMapClick(null, true);
   state.showAllStops = !state.showAllStops;
   const btn = $('show-all-btn');
@@ -294,6 +299,7 @@ export function applyScenario() {
   const old = state.metroBase;
   state.metroBase = [];
   for (const p of old) removeOverlay(p);
-  if (!state.scenario.noMetro) renderMetroContext();
+  // 盲棋不画灰色地铁底图：它本身就是一张“地图”，会泄露城市骨架
+  if (!state.scenario.noMetro && !state.scenario.blindMap) renderMetroContext();
   updateStopsByZoom();
 }

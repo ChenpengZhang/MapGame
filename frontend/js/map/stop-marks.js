@@ -12,6 +12,7 @@
  */
 
 import { METRO_STOP_COLOR, BUS_STOP_COLOR, WALK_STOP_COLOR } from '../core/config.js';
+import { isNativeAmap, makeMassMarksPickable } from './native-picker.js';
 
 const METRO_DOT_SIZE = 12;
 const BUS_DOT_SIZE = 7;
@@ -40,10 +41,10 @@ export function makeMassMarks(data, options = {}) {
   const { metroIcon, busIcon, walkIcon } = getIcons();
   const allowWalkStyle = options.allowWalkStyle !== false;
   const styles = [
-    { url: metroIcon, size: new AMap.Size(METRO_DOT_SIZE, METRO_DOT_SIZE), anchor: new AMap.Pixel(METRO_DOT_SIZE / 2, METRO_DOT_SIZE / 2) },
-    { url: busIcon, size: new AMap.Size(BUS_DOT_SIZE, BUS_DOT_SIZE), anchor: new AMap.Pixel(BUS_DOT_SIZE / 2, BUS_DOT_SIZE / 2) },
+    iconStyle(metroIcon, METRO_DOT_SIZE),
+    iconStyle(busIcon, BUS_DOT_SIZE),
     // 关闭步行换乘的图层根本不装载红色步行图标；即使意外收到 style=2 也回退为蓝点。
-    { url: allowWalkStyle ? walkIcon : busIcon, size: new AMap.Size(WALK_DOT_SIZE, WALK_DOT_SIZE), anchor: new AMap.Pixel(WALK_DOT_SIZE / 2, WALK_DOT_SIZE / 2) },
+    iconStyle(allowWalkStyle ? walkIcon : busIcon, WALK_DOT_SIZE),
   ];
   if (options.inverseLineStops) {
     const styleByKey = new Map();
@@ -53,8 +54,7 @@ export function makeMassMarks(data, options = {}) {
       const key = `${point.lineColor}|${size}`;
       if (!styleByKey.has(key)) {
         styleByKey.set(key, styles.length);
-        const icon = circleIcon(point.lineColor, size, true);
-        styles.push({ url: icon, size: new AMap.Size(size, size), anchor: new AMap.Pixel(size / 2, size / 2) });
+        styles.push(iconStyle(circleIcon(point.lineColor, size, true), size));
       }
       point.style = styleByKey.get(key);
     }
@@ -69,6 +69,8 @@ export function makeMassMarks(data, options = {}) {
     interactive: options.interactive !== false,
   });
   mm.__baseOpacity = 0.9;
+  // 原生高德的海量点命中范围只有图标大小：改由 native-picker 按与兼容层一致的半径拾取
+  if (isNativeAmap() && options.interactive !== false) makeMassMarksPickable(mm, data, options.zIndex ?? 110);
   return mm;
 }
 
@@ -90,14 +92,29 @@ export function stopToData(p, walkable, lineColor = null) {
   };
 }
 
-/** 画一个带白边的实心圆，返回 dataURL（用作 MassMarks 的图标） */
+/** 图标画布比圆点直径多 2px 给白边留位置；显示尺寸（CSS 像素）与画布一致 */
+function iconBox(size) {
+  return size + 2;
+}
+
+function iconStyle(url, size) {
+  const box = iconBox(size);
+  return { url, size: new AMap.Size(box, box), anchor: new AMap.Pixel(box / 2, box / 2) };
+}
+
+/**
+ * 画一个带白边的实心圆，返回 dataURL（用作 MassMarks 的图标）。
+ * 与 Leaflet 兼容层的圆点同尺寸：半径 = size/2，外加描边；按屏幕像素比绘制，高清屏下不发虚、不缩水。
+ */
 function circleIcon(color, size, inverse = false) {
-  const radius = size / 2;
+  const ratio = Math.max(1, Math.round((typeof window !== 'undefined' && window.devicePixelRatio) || 1));
+  const box = iconBox(size);
   const c = document.createElement('canvas');
-  c.width = c.height = size;
+  c.width = c.height = box * ratio;
   const ctx = c.getContext('2d');
+  ctx.scale?.(ratio, ratio);
   ctx.beginPath();
-  ctx.arc(radius, radius, Math.max(1, radius - 1), 0, Math.PI * 2);
+  ctx.arc(box / 2, box / 2, size / 2, 0, Math.PI * 2);
   ctx.fillStyle = inverse ? '#ffffff' : color;
   ctx.fill();
   ctx.lineWidth = inverse ? 2 : 1.5;
