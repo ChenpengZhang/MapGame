@@ -25,7 +25,7 @@ import { makeMassMarks, stopToData } from '../map/stop-marks.js';
 import { fadeInOverlay, setMassMarksMap, removeOverlay } from '../map/anim.js';
 import { hideBaseStops, updateStopsByZoom } from '../map/stop-layer.js';
 import { setOriginWalkRangeVisible, setBlindMap } from '../map/map-init.js';
-import { clearMapTutorial, resetMapTutorialPrompt, setMapTutorialStage, isTutorialTransferStop, getTutorialTransfer, setTutorialTransferPoint, showTutorialMistake, clearTutorialMistake, isMapPracticePending } from '../map/tutorial-layer.js';
+import { clearMapTutorial, resetMapTutorialPrompt, setMapTutorialStage, isTutorialTransferStop, getTutorialTransfer, setTutorialTransferPoint, setTutorialAlightHint, getTutorialAlightHint, showTutorialMistake, clearTutorialMistake, isMapPracticePending } from '../map/tutorial-layer.js';
 import { addStopMarker, stopTraveler, drawRideSegment, drawTransferWalk, drawWalkTransfer, rideEndpoint, drawWalkLeg, clearGroupOverlays } from '../map/route-layer.js';
 import { makeTransitLineLayers } from '../map/transit-line-style.js';
 import { isNativeAmap, registerPickableLine } from '../map/native-picker.js';
@@ -121,6 +121,9 @@ function toggleCurrentLine(lineName, lineId = null) {
  */
 function promptRideStage(current) {
   if (state.currentLevel?.mapTutorial?.panelOnly) {
+    const hint = getTutorialAlightHint();
+    const reached = hint && state.routeStops.some((s) => s.logical?.name === hint.stopName);
+    setTutorialAlightHint(hint && !reached && state.selectedLineName ? linePlatform(current, hint.stopName) : null);
     const nearDest = haversineKm(current.point, state.DEST) * 1000 <= MAX_WALK_M;
     setMapTutorialStage(nearDest ? 'finish' : state.selectedLineName ? 'rideStop' : 'selectLine');
     return;
@@ -133,13 +136,7 @@ function promptRideStage(current) {
   const transfer = getTutorialTransfer();
   if (transfer && !state.routeStops.some((s) => s.logical?.name === transfer.stopName)) {
     // 找到所选线路在换乘站停靠的实际站台：换乘站道路两侧各有站台，高亮要对准玩家会下车的那个
-    let platform = null;
-    for (const line of allowedLines(current.logical.line_ids, current.physicalStopId)) {
-      const stops = line.stops || [];
-      const from = stopIndexInLine(line, current.logical);
-      const st = stops.find((x, i) => x.name === transfer.stopName && (!line.oneWay || line.isLoop || i > from));
-      if (st) { platform = [st.lng, st.lat]; break; }
-    }
+    const platform = linePlatform(current, transfer.stopName);
     setTutorialTransferPoint(platform);
     if (platform) setMapTutorialStage('rideToTransfer', platform, { animateFrom: current.point });
     else showTutorialMistake('这条线路到不了换乘站');
@@ -152,6 +149,17 @@ function promptRideStage(current) {
     return;
   }
   setMapTutorialStage('rideStop', alight, { animateFrom: current.point });
+}
+
+/** 当前可乘（已按所选线路过滤）的线路里，从 current 往后停靠 stopName 的实际站台坐标；没有则 null */
+function linePlatform(current, stopName) {
+  for (const line of allowedLines(current.logical.line_ids, current.physicalStopId)) {
+    const stops = line.stops || [];
+    const from = stopIndexInLine(line, current.logical);
+    const st = stops.find((x, i) => x.name === stopName && (!line.oneWay || line.isLoop || i > from));
+    if (st) return [st.lng, st.lat];
+  }
+  return null;
 }
 
 function alightHintPoint(current) {
@@ -529,8 +537,11 @@ function commitRide(logical, prev, line) {
  * @returns {boolean} 是否成功步行换乘
  */
 function commitWalkTransfer(logical, prev, force,selectedPhys) {
-  const targetPhys=selectedPhys || getPhys(Object.values(logical.stopByLine || {})[0]);
-  if(!targetPhys)return false;
+  // selectedPhys 可能是地图点数据（stopToData：坐标在 lnglat 里，没有 lng/lat），按 id 取回真实物理站
+  const targetPhys = (selectedPhys && (getPhys(String(selectedPhys.id)) || (selectedPhys.lnglat
+    ? { ...selectedPhys, lng: selectedPhys.lnglat[0], lat: selectedPhys.lnglat[1] } : selectedPhys)))
+    || getPhys(Object.values(logical.stopByLine || {})[0]);
+  if (!targetPhys || !Number.isFinite(targetPhys.lng) || !Number.isFinite(targetPhys.lat)) return false;
   const dM = distM(
     { lng: prev.point[0], lat: prev.point[1] },
     { lng: targetPhys.lng, lat: targetPhys.lat },

@@ -33,10 +33,12 @@ export const LEVELS = [{
   origin: { name: '迎宾桥附近', lng: 82.0628, lat: 44.8597 },
   dest: { name: '火车站附近', lng: 82.111, lat: 44.905 },
   scenario: { noMetro: false, busSpeedFactor: 1, walkSpeedFactor: 1 },
-  story: [{ type: 'welcome', title: '欢迎来到 TransitGuesser', text: '乘上公交，换乘地铁，探索城市。\n规划从起点到终点的路线，尽可能快地抵达。' }],
-  success: '教程完成！你已经亲手规划了一条路线。选站、乘车和换乘的操作在其他模式中也一样，可以去无尽模式的普通难度继续探索！',
+  story: [{ type: 'welcome', title: '欢迎来到 TransitGuesser', text: '用真实的公交和地铁探索城市。\n规划从起点到终点的路线，尽可能快地抵达。' }],
+  success: '教程完成！你已经学会了如何规划一条路线。',
   mapTutorial: {
     panel: true, panelOnly: true, mapPractice: true, waitForBusStops: true,
+    // 乘上能到换乘站的线路后，在文字框里建议在此下车换乘
+    alightHint: { stopName: '博州妇幼保健院' },
   },
 }];
 

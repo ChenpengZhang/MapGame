@@ -329,6 +329,25 @@ await step('设置里的步行换乘按钮直接控制状态和候选图层', ()
   assert.equal(localStorage.getItem('mg_walk_transfer'), '0', '关闭状态应写入持久化设置');
 });
 
+await step('步行换乘：确认红色步行站后接一段步行（地图点数据只有 lnglat）', () => {
+  const toggle = el('walk-transfer-toggle');
+  toggle.checked = true;
+  toggle.dispatch('change', { currentTarget: toggle });
+  const walkPoint = state.candidateMarks.data.find((point) => point.style === 2);
+  assert.ok(walkPoint, '候选层中应有红色步行可达站');
+  const before = state.routeStops.length;
+  onCandidateStopClick(walkPoint);
+  onCandidateStopClick(walkPoint);
+  assert.equal(state.routeStops.length, before + 1, '确认后路线增加一站');
+  assert.equal(state.routeRides.at(-1), null, '新增一段为步行换乘');
+  assert.ok(state.routeStops.at(-1).point.every(Number.isFinite), '新站坐标有效（不是 NaN）');
+  if (state.selectedLineName) undoRoute(); // 到站自动选中的唯一线路先被撤回
+  undoRoute();
+  assert.equal(state.routeStops.length, before, '撤回步行换乘');
+  toggle.checked = false;
+  toggle.dispatch('change', { currentTarget: toggle });
+});
+
 await step('换乘一步：两站共线 → 接一段乘车 + 站点序号图钉', () => {
   const physB = globalThis.__smokeB;
   const before = state.routeOverlayGroups.length;
@@ -584,7 +603,7 @@ await step('自由选线换乘教程：欢迎、提示、换乘、撤回与通�
   assert.equal(el('tutorial-guide-title').textContent, '选择上车站', '悬停不推进教程');
   onStopClick({ data: stopToData(alternate) });
   assert.equal(state.pendingStart.logical.name, alternate.name, '允许自由预览其他上车站');
-  assert.equal(el('tutorial-guide-title').textContent, '选择乘车线路', '单击锁定后进入线路选择');
+  assert.equal(el('tutorial-guide-title').textContent, '确认上车站', '单击锁定后进入线路选择');
   const previewLine = el('info-lines').children[0];
   assert.equal(typeof previewLine.onclick, 'function', '锁定站点后线路名称板可选择');
   previewLine.onclick();
@@ -606,11 +625,11 @@ await step('自由选线换乘教程：欢迎、提示、换乘、撤回与通�
   onStopClick({ data: stopToData(board) });
   assert.ok(el('tutorial-guide-text').textContent.includes(board.name));
   adjustView(wideBounds);
-  assert.equal(el('tutorial-guide-title').textContent, '选择乘车线路', '锁定后缩小不再退回地图操作');
+  assert.equal(el('tutorial-guide-title').textContent, '确认上车站', '锁定后缩小不再退回地图操作');
   assert.equal(state.pendingStart.logical.name, board.name, '缩放保留预览');
   assert.equal(isMapPracticePending(), false, '开始预览后不再限制地图视野');
   adjustView(new BoundsStub(focusedBounds.sw, focusedBounds.ne));
-  assert.equal(el('tutorial-guide-title').textContent, '选择乘车线路', '恢复视野后继续线路选择');
+  assert.equal(el('tutorial-guide-title').textContent, '确认上车站', '恢复视野后继续线路选择');
   assert.equal(state.selectedLineName, '3路', '预览只有一条线路时自动选择，同名上下行合并计算');
   onStopClick({ data: stopToData(board) });
   assert.equal(state.routeStops.length, 1);
@@ -621,6 +640,7 @@ await step('自由选线换乘教程：欢迎、提示、换乘、撤回与通�
   pickLine('3路');
   assert.ok(el('tutorial-guide-text').textContent.includes('3路'));
   assert.ok(el('tutorial-guide-text').textContent.includes('途中下车换乘'), '无需一条线直接到终点');
+  assert.equal(el('tutorial-guide-action').textContent, '预览一个下车站\n提示：点一次查看，再点一次确认。在「博州妇幼保健院」下车换乘。', '乘上 3路 后在提示里建议换乘站');
   const intermediate = physical(line3, '天山南路');
   onCandidateStopClick(stopToData(intermediate));
   onCandidateStopClick(stopToData(intermediate));
@@ -635,12 +655,12 @@ await step('自由选线换乘教程：欢迎、提示、换乘、撤回与通�
   assert.equal(state.selectedLineName, null, '换乘站有多条线路时保持手动选择');
   assert.ok(el('tutorial-guide-title').textContent.includes('换乘'), '到达中途站后介绍换乘');
   assert.ok(el('tutorial-guide-text').textContent.includes(transfer.name));
+  assert.ok(!el('tutorial-guide-action').textContent.includes('下车换乘'), '到达换乘站后不再建议下车');
   pickLine('2路');
   onCandidateStopClick(stopToData(dest));
   assert.ok(el('tutorial-guide-text').textContent.includes(dest.name));
   onCandidateStopClick(stopToData(dest));
   assert.deepEqual(state.routeRides.map(line => line.name), ['3路', '2路']);
-  assert.ok(el('tutorial-guide-progress').textContent.includes('已换乘 1 次'));
   assert.ok(el('tutorial-guide-title').textContent.includes('终点'));
   const { findOptimalRoute } = await import('../frontend/js/core/router-api.js');
   const { routerWalkFn } = await import('../frontend/js/map/walk.js');
@@ -733,7 +753,7 @@ await step('每日挑战面板：今日题目、游客提示、我的名次', as
     const u = String(url);
     if (u.endsWith('/api/daily')) return json({ id: 'd1', date: '2026-09-29', city: 'beijing', scenario: 'normal', opensAt: closesAt, closesAt });
     if (u.includes('/leaderboard?') && u.includes('mode=daily')) {
-      return json({ leaders: [{ rank: '1', name: '甲', duration_ms: 1500000 }], player: { rank: '23', name: '测试玩家', duration_ms: 1860000, is_me: true } });
+      return json({ leaders: [{ rank: '1', name: '甲', duration_ms: 1500000, achieved_at: '2026-09-29T08:05:09' }], player: { rank: '23', name: '测试玩家', duration_ms: 1860000, is_me: true } });
     }
     return originalFetch(url);
   };
@@ -751,6 +771,7 @@ await step('每日挑战面板：今日题目、游客提示、我的名次', as
     assert.equal(el('daily-start').textContent, '开始挑战');
     assert.equal(el('daily-mine').textContent, '今日最好 31.0 分钟 · 第 23 名', '前 20 名以外也显示自己的名次');
     assert.equal(el('daily-board').children.length, 3, '前 20 + 分隔行 + 自己');
+    assert.equal(el('daily-board').children[0].children[3].textContent, '08:05:09', '第二排名键完成时间显示在列表中');
   } finally {
     globalThis.fetch = originalFetch;
     account.user = null;

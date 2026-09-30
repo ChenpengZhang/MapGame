@@ -574,7 +574,6 @@ html, body {
   background: #111c30f2; color: var(--ink); box-shadow: var(--shadow-lg);
   pointer-events: auto;
 }
-#tutorial-guide-progress { color: #67d9e5; font-size: 12px; margin: 0 0 8px; }
 #tutorial-guide-title { font-size: 19px; margin: 0 0 10px; }
 #tutorial-guide-text { font-size: 13px; line-height: 1.8; margin: 0; }
 #tutorial-guide-action { font-size: 13px; line-height: 1.7; margin: 12px 0 0; padding-top: 10px; border-top: 1px solid #ffffff20; color: #67d9e5; }
@@ -584,8 +583,8 @@ html, body {
 .menu-open #tutorial-guide { display: none; }
 @media (max-width: 600px) {
   #tutorial-guide { top: 58px; padding: 12px 14px; width: calc(100vw - 28px); }
-  #app:has(#tutorial-guide:not(.hidden)) .btn-group { top: auto; bottom: 10px; z-index: 700; }
-  #app:has(#tutorial-guide:not(.hidden)) #left-col { bottom: 62px; }
+  /* 上一步 / 全图站点 / 取消 紧贴在教程文字框下方（框高随文案变化，由 tutorial-layer 写入 --tutorial-guide-bottom） */
+  #app:has(#tutorial-guide:not(.hidden)) .btn-group { top: calc(var(--tutorial-guide-bottom, 240px) + 8px); bottom: auto; z-index: 700; }
   #tutorial-guide-title { font-size: 16px; margin-bottom: 6px; }
   #tutorial-guide-text { font-size: 12px; line-height: 1.6; }
   #tutorial-guide-action { margin-top: 8px; padding-top: 6px; }
@@ -1124,27 +1123,27 @@ html, body {
 .result-sign .sign-note #result-message { margin: 2px 24px 10px; font-size: 13px; line-height: 1.55; color: #333; }
 .result-sign .sign-note:empty { height: 8px; }
 .result-sign .sign-band {
-  display: grid; grid-template-columns: 1fr 58px 1fr; align-items: stretch; height: 44px;
+  display: grid; grid-template-columns: 1fr 104px 1fr; align-items: stretch; height: 44px;
   color: #fff;
 }
 .result-sign .sign-slot, .result-sign .sign-here { display: flex; align-items: stretch; justify-content: center; min-width: 0; }
 .result-sign .sign-band button {
   flex: 1; margin: 0; padding: 0 6px; border: 0; border-radius: 0; background: transparent !important;
-  color: #fff; font: inherit; font-size: 18px; font-weight: 800; letter-spacing: .06em; cursor: pointer;
+  color: #fff; font: inherit; font-size: 15px; font-weight: 800; letter-spacing: .04em; cursor: pointer;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; box-shadow: none;
   transition: background .15s;
 }
 .result-sign .sign-band button:hover { background: rgba(0,0,0,.14) !important; }
-.result-sign .sign-here button { font-size: 13px; letter-spacing: 0; color: #fff; }
+.result-sign .sign-here button { color: #fff; }
 /* 箭头一侧（主操作）的文字避开箭头尖 */
 .result-sign.pass #result-slot-right button { padding-right: 22px; }
 .result-sign.fail #result-slot-left button { padding-left: 22px; }
 .result-sign .sign-roman {
-  display: grid; grid-template-columns: 1fr 58px 1fr; margin-top: 6px;
+  display: grid; grid-template-columns: 1fr 104px 1fr; margin-top: 6px;
   font-size: 12px; font-weight: 600; color: #333;
 }
 .result-sign .sign-roman > span { text-align: center; white-space: nowrap; }
-.result-sign .sign-roman-here { grid-column: 2; font-size: 15px; font-weight: 800; color: #111; overflow: visible; }
+.result-sign .sign-roman-here { grid-column: 2; }
 .result-sign .sign-detail #result-times { margin: 8px 20px 0; padding: 0; border: 0; background: transparent; font-size: 12px; color: #6b7680; }
 /* 通过：JR 绿色线带，箭头向右；未通过：红色线带，箭头向左 */
 .result-sign.pass .sign-band { background: #009a44; clip-path: polygon(0 0, calc(100% - 18px) 0, 100% 50%, calc(100% - 18px) 100%, 0 100%); }
@@ -1278,7 +1277,6 @@ html, body {
     <button id="result-toggle-btn" class="hidden">结果</button>
 
     <aside id="tutorial-guide" class="hidden" aria-label="新手教程提示" aria-live="polite" aria-atomic="true">
-      <p id="tutorial-guide-progress"></p>
       <h2 id="tutorial-guide-title"></h2>
       <p id="tutorial-guide-text"></p>
       <p id="tutorial-guide-action"></p>
@@ -1345,7 +1343,7 @@ html, body {
         <p class="daily-mine" id="daily-mine"></p>
         <div class="daily-board-wrap">
           <table class="leaderboard-table daily-board">
-            <thead><tr><th scope="col">名次</th><th scope="col">玩家</th><th scope="col">公交用时</th></tr></thead>
+            <thead><tr><th scope="col">名次</th><th scope="col">玩家</th><th scope="col">公交用时</th><th scope="col">完成时间</th></tr></thead>
             <tbody id="daily-board"></tbody>
           </table>
         </div>
@@ -1428,6 +1426,6 @@ html, body {
   -->
   <script src="shared/router.js?v=5"></script>
   <script src="js/amap-polyfill.js"></script>
-  <script src="js/app.js?v=68" type="module"></script>
+  <script src="js/app.js?v=76" type="module"></script>
 </body>
 </html>

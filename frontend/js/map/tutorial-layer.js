@@ -236,6 +236,25 @@ function renderPrompt() {
   promptMarker.setMap(state.map);
 }
 
+/** 记下文字框底边位置，手机端把操作按钮放在它正下方（文案长短不同，框高会变） */
+let guideResizeBound = false;
+function syncGuideBottom() {
+  const panel = document.getElementById('tutorial-guide');
+  const app = document.getElementById('app');
+  if (!panel || !app?.style?.setProperty || !panel.getBoundingClientRect) return;
+  const measure = () => {
+    const rect = panel.getBoundingClientRect();
+    const base = app.getBoundingClientRect?.().top || 0;
+    if (rect.height) app.style.setProperty('--tutorial-guide-bottom', Math.round(rect.bottom - base) + 'px');
+  };
+  measure();
+  if (typeof requestAnimationFrame === 'function') requestAnimationFrame(measure); // 换行后的实际高度
+  if (!guideResizeBound && typeof window !== 'undefined' && window.addEventListener) {
+    guideResizeBound = true;
+    window.addEventListener('resize', measure);
+  }
+}
+
 /** 固定文字框随真实操作推进；地图仍可拖动、缩放和点击。 */
 function renderGuidePanel() {
   if (typeof document === 'undefined') return;
@@ -249,7 +268,6 @@ function renderGuidePanel() {
   const currentName = stops[stops.length - 1]?.logical?.name || '';
   const pendingName = state.pendingStart?.logical?.name || state.pendingCandidate?.logical?.name || '';
   const hasRidden = rides.length > 0;
-  const transfers = rides.slice(1).filter((line, index) => line.name !== rides[index].name).length;
   const tap = state.isTouch ? '轻触' : '单击';
   let title, text, action;
   if (isMapPracticePending()) {
@@ -269,13 +287,13 @@ function renderGuidePanel() {
       : '在起点红圈的步行范围内挑选一个公交站。将鼠标移到站点上可以预览站名和经过的线路；单击一下即可锁定车站，进入线路选择。可以取消选择，也可以单击其他站点更换。';
     action = '选择一个上车站\n提示：点空白处或「取消」可取消选择。';
   } else if (state.pendingStart && !stops.length) {
-    title = '选择乘车线路';
-    text = `已锁定「${pendingName}」。${tap}站点名称板中的线路名称，或地图上的线路标线，即可选择线路。只有一条线路时会自动选中；选好后再次${tap}站点，确认步行到站。`;
-    action = '选择乘车线路\n提示：仍可取消选择或点击其他站点更换。';
+    title = '确认上车站';
+    text = `已锁定「${pendingName}」。再次${tap}「${pendingName}」即可确认步行到这里上车。确认前也可以${tap}站点名称板中的线路名称或地图上的线路标线选择线路，只有一条线路时会自动选中。`;
+    action = `再次${tap}「${pendingName}」确认\n提示：仍可取消选择或点击其他站点更换。`;
   } else if (promptStage === 'confirm') {
     title = '确认这一段行程';
     text = `再次${tap}「${pendingName}」即可确认到达这里，将这一段行程加入路线。也可以${tap}其他可达站点，继续比较下车位置。`;
-    action = '确认这一段行程\n提示：「上一步」可撤回已确认的选择。';
+    action = '提示：「上一步」可撤回已确认的选择。';
   } else if (promptStage === 'finish') {
     title = '步行到达终点';
     text = `从「${currentName}」已能步行到达终点。${tap}地图上的「终」即可完成最后一段步行并结束路线，查看本次旅程的用时。`;
@@ -284,6 +302,7 @@ function renderGuidePanel() {
     title = '预览下车站';
     text = `沿「${state.selectedLineName || '当前线路'}」选择想下车的站点，${tap}一次即可预览。可以一次乘过多个站；到不了终点附近时，可以在途中下车换乘。`;
     action = '预览一个下车站\n提示：点一次查看，再点一次确认。';
+    if (alightHintPoint) action += `在「${promptConfig.alightHint.stopName}」下车换乘。`;
   } else {
     title = hasRidden ? '换乘或继续乘车' : '查看并选择线路';
     text = hasRidden
@@ -293,11 +312,10 @@ function renderGuidePanel() {
       ? '选择接下来的线路\n提示：选好后可预览沿途的下车站。'
       : '选择一条线路\n提示：选好后可预览沿途的下车站。';
   }
-  document.getElementById('tutorial-guide-progress').textContent = transfers > 0
-    ? `新手教程 · 已换乘 ${transfers} 次` : '新手教程 · 操作提示';
   document.getElementById('tutorial-guide-title').textContent = title;
   document.getElementById('tutorial-guide-text').textContent = text;
   document.getElementById('tutorial-guide-action').textContent = action;
+  syncGuideBottom();
   panel.classList.remove('guide-mistake');
 }
 
@@ -347,6 +365,7 @@ function noteMarker(center, text) {
 }
 
 function clearAnnotations() {
+  alightHintPoint = null;
   for (const m of highlightMarkers.concat(noteMarkers)) m.setMap(null);
   highlightMarkers = [];
   noteMarkers = [];
@@ -388,6 +407,22 @@ function syncAnnotations() {
     if (center && note.text) noteMarkers.push(noteMarker(center, note.text));
   }
   setHudFlash(!!promptConfig.flashHud && !started);
+}
+
+// ============ 下车换乘提示（自由教程 mapTutorial.alightHint） ============
+// 玩家所乘线路会经过建议的换乘站时，只在右侧文字框里建议在此下车（地图上不加高亮）；
+// 到站、撤回或改选线路后由玩法层重新设置。
+let alightHintPoint = null;
+
+/** 玩法层告知所乘线路在建议换乘站的站台坐标；传 null 取消提示 */
+export function setTutorialAlightHint(point) {
+  alightHintPoint = promptConfig?.alightHint && Array.isArray(point) ? point : null;
+  renderGuidePanel();
+}
+
+/** 自由教程的建议下车站配置（无则为 null） */
+export function getTutorialAlightHint() {
+  return promptConfig?.alightHint || null;
 }
 
 /** 为当前关卡启用地图教学；传空值时关闭。 */
@@ -472,6 +507,7 @@ function cancelSlide() {
 
 /** 重新开始本关时恢复第一步提示。 */
 export function resetMapTutorialPrompt() {
+  if (alightHintPoint) setTutorialAlightHint(null);
   if (promptConfig) setMapTutorialStage('initial');
 }
 

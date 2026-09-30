@@ -246,7 +246,7 @@ export function buildStoryLevels(onPick) {
   const tutorial = document.createElement('button');
   tutorial.type = 'button';
   tutorial.className = 'story-placeholder';
-  tutorial.innerHTML = '<span class="story-placeholder-number">1</span><span>新手教程</span><small>自由选线 · 体验换乘</small>';
+  tutorial.innerHTML = '<span class="story-placeholder-number">1</span><span>新手教程</span><small>规划第一条路线</small>';
   tutorial.addEventListener('click', () => onPick(LEVELS[0]));
   list.appendChild(tutorial);
   const upcoming = document.createElement('div');

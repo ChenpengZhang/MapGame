@@ -32,9 +32,9 @@ import { $, show, hide, setText, toggleHidden } from '../core/dom.js';
  */
 /** 站牌三种结果：站名、拼音读音、罗马字（英文） */
 const SIGN_OUTCOMES = {
-  pass: { name: '通过', reading: 'tōng guò', en: 'Pass', cls: 'pass' },
-  fail: { name: '未通过', reading: 'wèi tōng guò', en: 'Failed', cls: 'fail' },
-  done: { name: '完成', reading: 'wán chéng', en: 'Finished', cls: 'pass' },
+  pass: { name: '通过', en: 'Passed', cls: 'pass' },
+  fail: { name: '未通过', en: 'Failed', cls: 'fail' },
+  done: { name: '完成', en: 'Finished', cls: 'pass' },
 };
 
 /**
@@ -48,15 +48,14 @@ function renderSign(sign) {
   if (!cfg) { el.classList.add('hidden'); return null; }
   el.className = 'result-sign ' + cfg.cls;
   setText('result-sign-name', cfg.name);
-  setText('result-sign-reading', cfg.reading);
-  setText('result-sign-en', cfg.en);
+  setText('result-sign-reading', cfg.en); // 站名下方的英文（原为拼音）
   return cfg;
 }
 
 /** 按钮文案对应的罗马字（显示在线带下方，与站牌“相邻站”的英文位置一致） */
 const BUTTON_EN = {
   下一关: 'Next', 下一层: 'Next floor', 重新开始: 'Restart', 重新挑战: 'Retry', 再试一次: 'Try again',
-  退出: 'Exit', '通关·回菜单': 'Finish',
+  退出: 'Exit', '通关·回菜单': 'Finish', 查看最快: 'View fastest', 查看地图: 'View map',
 };
 function buttonEn(btn) {
   return btn ? (BUTTON_EN[btn.textContent.trim()] || '') : '';
@@ -94,12 +93,10 @@ function placeIntoSign(cfg) {
   for (const b of [restart, viewmap, next, exit]) if (b) btns.appendChild(b);
   if (left) slotL.appendChild(left);
   if (right) slotR.appendChild(right);
-  if (viewmap) {
-    viewmap.textContent = viewmap.textContent.replace(/^查看/, ''); // 方块较窄：“最快 / 地图”
-    slotC.appendChild(viewmap);
-  }
+  if (viewmap) slotC.appendChild(viewmap);
   setText('result-sign-left-en', buttonEn(left));
   setText('result-sign-right-en', buttonEn(right));
+  setText('result-sign-en', shown(viewmap) ? buttonEn(viewmap) : '');
 }
 
 /** 爬塔结算站牌：通过 = 第 n 层 → 第 n+1 层（箭头向右）；未通过 = 箭头向左退回第 1 层 */

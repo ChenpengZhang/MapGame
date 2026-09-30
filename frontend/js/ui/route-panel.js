@@ -179,8 +179,6 @@ export function renderRoutePanel() {
   if (state.finished) {
     const last = state.routeStops[state.routeStops.length - 1];
     rows.push(walkRowHTML(last.logical.name, state.DEST_NAME, haversineKm(last.point, state.DEST), state.walkToDestMin));
-  } else {
-    rows.push('<div class="rp-desc rp-note">…（继续选站，或点击「终」图钉完成）</div>');
   }
   rows.push('<div class="rp-total">总耗时约 <b>' + computeTotalMinutes().toFixed(0) + '</b> 分钟</div>');
 

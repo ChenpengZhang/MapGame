@@ -43,10 +43,17 @@ function renderInfo() {
   setText('daily-info', `${dailyInfo.date} · ${city} · 距本题截止还有 ${formatRemaining(dailyInfo.closesAt)}`);
 }
 
+/** 完成时刻（第二排名键：同用时更早完成者靠前），显示为本地时间 时:分:秒 */
+function formatAchieved(value) {
+  const d = value ? new Date(value) : null;
+  if (!d || Number.isNaN(d.getTime())) return '—';
+  return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+}
+
 function boardRow(list, row, own) {
   const tr = document.createElement('tr');
   tr.className = 'leaderboard-row' + (own ? ' leaderboard-own' : '');
-  for (const value of [`#${row.rank}`, row.name, formatMinutes(row.duration_ms)]) {
+  for (const value of [`#${row.rank}`, row.name, formatMinutes(row.duration_ms), formatAchieved(row.achieved_at)]) {
     const td = document.createElement('td');
     td.textContent = value;
     tr.appendChild(td);
@@ -60,7 +67,7 @@ function boardMessage(text) {
   list.replaceChildren();
   const tr = document.createElement('tr');
   const td = document.createElement('td');
-  td.colSpan = 3;
+  td.colSpan = 4;
   td.className = 'leaderboard-empty';
   td.textContent = text;
   tr.appendChild(td);
@@ -81,7 +88,7 @@ async function loadBoard(version) {
     if (board?.player) {
       const tr = document.createElement('tr');
       const td = document.createElement('td');
-      td.colSpan = 3;
+      td.colSpan = 4;
       td.className = 'leaderboard-divider';
       td.textContent = '···';
       tr.appendChild(td);

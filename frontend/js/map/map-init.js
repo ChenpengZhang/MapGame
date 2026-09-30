@@ -195,13 +195,70 @@ function focusWalkRange(center, onFocused) {
     ? Math.max(0, Math.min(mapRect.bottom, barRect.bottom) - mapRect.top) : 0;
   const padding = [topInset, 0, 0, 0];
   if (state.map.focusBounds) state.map.focusBounds(target, padding, onFocused);
-  else {
+  else if (!focusBoundsNative(target, padding, onFocused)) {
     if (onFocused) {
       const done = () => { state.map.off('moveend', done); onFocused(); };
       state.map.on('moveend', done);
     }
     state.map.setBounds(target, false, padding);
   }
+}
+
+// ============ 原生高德：平滑聚焦 ============
+// Leaflet 兼容层自带 focusBounds（flyToBounds）；原生高德用 setBounds 会直接跳到目标。
+// 这里先用 getFitZoomAndCenterByBounds 求出目标缩放与中心，再逐帧插值（缓入缓出，约 0.8 秒）。
+// 手动拖动、滚轮或触摸立即中止动画，且不报告聚焦完成（与兼容层一致）。
+
+const FOCUS_MS = 800;
+let focusAnim = null; // { frame, onDone }
+let focusInterruptBound = null;
+
+function cancelNativeFocus() {
+  if (!focusAnim) return;
+  cancelAnimationFrame(focusAnim.frame);
+  focusAnim = null;
+}
+
+/** 成功发起动画返回 true；地图不支持所需接口时返回 false，由调用方退回 setBounds */
+function focusBoundsNative(target, padding, onFocused) {
+  const map = state.map;
+  if (!map.getFitZoomAndCenterByBounds || !map.setZoomAndCenter || !map.getCenter) return false;
+  const fit = map.getFitZoomAndCenterByBounds(target, padding);
+  if (!fit || fit.length < 2) return false;
+  const [z1, c1] = fit;
+  const to = [c1.getLng ? c1.getLng() : c1.lng, c1.getLat ? c1.getLat() : c1.lat];
+  const c0 = map.getCenter();
+  const from = [c0.getLng ? c0.getLng() : c0.lng, c0.getLat ? c0.getLat() : c0.lat];
+  const z0 = map.getZoom();
+
+  const container = map.getContainer?.();
+  if (container && focusInterruptBound !== container) {
+    focusInterruptBound = container;
+    for (const ev of ['pointerdown', 'wheel', 'touchstart']) {
+      container.addEventListener(ev, cancelNativeFocus, { capture: true, passive: true });
+    }
+  }
+  cancelNativeFocus();
+
+  const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+  if (reduced) {
+    map.setZoomAndCenter(z1, to, true);
+    onFocused?.();
+    return true;
+  }
+  const ease = (t) => (t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2);
+  const start = performance.now();
+  const step = (now) => {
+    if (!focusAnim) return;
+    const t = Math.min(1, (now - start) / FOCUS_MS);
+    const k = ease(t);
+    map.setZoomAndCenter(z0 + (z1 - z0) * k, [from[0] + (to[0] - from[0]) * k, from[1] + (to[1] - from[1]) * k], true);
+    if (t < 1) { focusAnim.frame = requestAnimationFrame(step); return; }
+    focusAnim = null;
+    onFocused?.();
+  };
+  focusAnim = { frame: requestAnimationFrame(step) };
+  return true;
 }
 
 /** 确认首站后隐藏起点范围；取消整条规划时重新显示。终点范围不受影响。 */
