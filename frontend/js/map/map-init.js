@@ -18,7 +18,7 @@ import { $ } from '../core/dom.js';
 import { cityById } from '../data/cities.js';
 import { loadWalkCache } from './walk.js';
 import { createWalkRangeCircle, walkRangeBounds } from './walk-range.js';
-import { installNativePicker } from './native-picker.js';
+import { installNativePicker, isNativeAmap } from './native-picker.js';
 
 // 地图 SDK 需异步加载；用户可能在底图完成前就点击了故事关卡。
 // 用一次性就绪信号让数据/站点层等待地图，而不是对空的 state.map 注册事件。
@@ -38,7 +38,10 @@ export function failMapSetup(error) {
 /** 创建地图并做首屏准备（交通数据懒加载，由 game/data-ready.js 在进入游戏时触发） */
 export function initMap() {
   const city = cityById(state.currentCityId) || cityById('beijing');
-  state.map = new AMap.Map('map', { center: city.center, zoom: 11, viewMode: '2D', scrollWheel: false });
+  // 原生高德用它自带的滚轮缩放：逐帧设置小数缩放级别时，高德会先拉伸上一级瓦片（看起来先放大、发虚），
+  // 停下后再加载正确级别的瓦片缩回去。兼容层（Leaflet）的 scrollWheel:false 表示启用 Leaflet 自身的滚轮缩放。
+  // 关闭双击缩放：选站和确认是连点同一个站两下，会被地图当成双击先放大一级，随后“聚焦可达站”又缩回去。
+  state.map = new AMap.Map('map', { center: city.center, zoom: 11, viewMode: '2D', scrollWheel: isNativeAmap(), doubleClickZoom: false });
   installNativePicker(state.map); // 原生高德：按像素距离拾取站点/线路（必须先于其它地图点击监听注册）
   setupZoomInertia();
   loadWalkCache();
@@ -64,7 +67,8 @@ export function setMapLocked(locked) {
   state.mapLocked = locked;
   state.storyActive = locked;
   if (state.map) {
-    try { state.map.setStatus({ dragEnable: !locked, zoomEnable: !locked, doubleClickZoom: !locked }); } catch (e) { /* 忽略 */ }
+    // 双击缩放始终关闭（见 initMap）
+    try { state.map.setStatus({ dragEnable: !locked, zoomEnable: !locked, doubleClickZoom: false }); } catch (e) { /* 忽略 */ }
   }
 }
 
@@ -81,6 +85,7 @@ function setupZoomInertia() {
     state.map.enableNativeWheelZoom(zoomSpeed);
     return;
   }
+  if (isNativeAmap()) return; // 原生高德：滚轮交给高德自己处理（见 initMap）
   let velocity = 0;        // 缩放速度（zoom/步）
   let running = false;
   let lastStep = 0;
@@ -173,14 +178,36 @@ export function drawEndpoints(handlers) {
     if (onDestClick) onDestClick();
   });
 
-  // 有范围圈时纳入完整圆圈；隐藏范围圈的教学关只适配两个图钉。
-  const bounds = showWalkRanges
+  endpointsShowWalkRanges = showWalkRanges;
+  fitEndpoints({ animate: false });
+}
+
+let endpointsShowWalkRanges = true;
+
+/**
+ * 视野同时容纳起点和终点（开局时直接跳转；点行程牌时平滑飞过去）。
+ * 有范围圈时纳入完整圆圈；隐藏范围圈的教学关只适配两个图钉。
+ */
+export function fitEndpoints({ animate = true } = {}) {
+  if (!state.map || !state.ORIGIN || !state.DEST) return;
+  const bounds = endpointsShowWalkRanges
     ? walkRangeBounds([state.ORIGIN, state.DEST])
     : {
         sw: [Math.min(state.ORIGIN[0], state.DEST[0]), Math.min(state.ORIGIN[1], state.DEST[1])],
         ne: [Math.max(state.ORIGIN[0], state.DEST[0]), Math.max(state.ORIGIN[1], state.DEST[1])],
       };
-  if (bounds) state.map.setBounds(new AMap.Bounds(bounds.sw, bounds.ne), false, [40, 40, 40, 40]);
+  if (!bounds) return;
+  const target = new AMap.Bounds(bounds.sw, bounds.ne);
+  if (!animate) { state.map.setBounds(target, false, [40, 40, 40, 40]); return; }
+  if (state.storyActive || state.mapLocked) return; // 剧情/教学锁定视野时不响应
+  const padding = overlayPadding(40);
+  if (state.map.focusBounds) state.map.focusBounds(target, padding);
+  else if (!focusBoundsNative(target, padding)) fitMapBounds(target, padding);
+}
+
+/** 聚焦终点的步行范围（终点方向指示被点击时） */
+export function focusDestination() {
+  if (state.DEST) focusWalkRange(state.DEST);
 }
 
 /** 聚焦单个步行圈，短边方向在圈外留出约 150 米。 */
@@ -200,36 +227,111 @@ function focusWalkRange(center, onFocused) {
       const done = () => { state.map.off('moveend', done); onFocused(); };
       state.map.on('moveend', done);
     }
-    state.map.setBounds(target, false, padding);
+    fitMapBounds(target, padding);
   }
 }
 
+// ============ 确认站点后：聚焦到所有可达站 ============
+
+/**
+ * 地图上被界面遮住的边距 [上, 右, 下, 左]：按当前实际显示的面板计算，桌面/手机、不同屏幕尺寸自动适配。
+ */
+/**
+ * 当前显示在地图上的界面面板，按地图容器坐标给出矩形 { left, top, right, bottom }。
+ * 横跨大半个地图宽度的（顶栏、手机底部抽屉）标记为 band。
+ */
+export function overlayRects() {
+  const map = $('map')?.getBoundingClientRect?.();
+  if (!map || !map.width) return { map: null, rects: [] };
+  const rects = [];
+  for (const id of ['topbar', 'left-col', 'tutorial-guide', 'btn-group', 'mode-hud', 'tower-restart-btn', 'legend']) {
+    const el = $(id);
+    if (!el || el.classList?.contains('hidden')) continue;
+    const r = el.getBoundingClientRect?.();
+    if (!r || !r.width || !r.height) continue;
+    if (r.bottom <= map.top || r.top >= map.bottom || r.right <= map.left || r.left >= map.right) continue;
+    rects.push({
+      id, band: r.width >= map.width * 0.6,
+      left: r.left - map.left, top: r.top - map.top, right: r.right - map.left, bottom: r.bottom - map.top,
+    });
+  }
+  return { map, rects };
+}
+
+export function overlayPadding(margin = 28) {
+  const pad = [margin, margin, margin, margin];
+  const { map, rects } = overlayRects();
+  if (!map) return pad;
+  for (const r of rects) {
+    if (r.id === 'legend' || r.id === 'tower-restart-btn') continue; // 小角标，不值得为它缩小视野
+    // 每块面板只需要在一条边上让位：取让出空间最少的那条边
+    //（顶栏、居中的 HUD → 上；手机底部抽屉、右下按钮 → 下；桌面左侧高面板 → 左或上，取较省的一边）
+    const need = [r.bottom, map.width - r.left, map.height - r.top, r.right];
+    const side = need.indexOf(Math.min(...need));
+    pad[side] = Math.max(pad[side], need[side] + margin);
+  }
+  // 小屏上遮挡太多时收缩留白，保证至少留出 40% 的可见区域
+  for (const [a, b, size] of [[0, 2, map.height], [1, 3, map.width]]) {
+    const total = pad[a] + pad[b], max = size * 0.6;
+    if (total > max) { pad[a] = Math.round(pad[a] * max / total); pad[b] = Math.round(pad[b] * max / total); }
+  }
+  return pad;
+}
+
+/** 平滑聚焦到一组点（避开界面遮挡）；点很近时最多放大到 maxZoom，避免贴得太近 */
+export function focusOnPoints(points, { maxZoom = 16 } = {}) {
+  const valid = (points || []).filter((p) => p && Number.isFinite(p[0]) && Number.isFinite(p[1]));
+  if (!state.map || !valid.length) return;
+  let minLng = Math.min(...valid.map((p) => p[0])), maxLng = Math.max(...valid.map((p) => p[0]));
+  let minLat = Math.min(...valid.map((p) => p[1])), maxLat = Math.max(...valid.map((p) => p[1]));
+  const eps = 0.002; // 只有一个点时给出一个最小范围
+  if (maxLng - minLng < eps) { minLng -= eps; maxLng += eps; }
+  if (maxLat - minLat < eps) { minLat -= eps; maxLat += eps; }
+  const target = new AMap.Bounds([minLng, minLat], [maxLng, maxLat]);
+  const padding = overlayPadding();
+  if (state.map.focusBounds) state.map.focusBounds(target, padding, null, { maxZoom });
+  else if (!focusBoundsNative(target, padding, null, maxZoom)) fitMapBounds(target, padding);
+}
+
 // ============ 原生高德：平滑聚焦 ============
-// Leaflet 兼容层自带 focusBounds（flyToBounds）；原生高德用 setBounds 会直接跳到目标。
-// 这里先用 getFitZoomAndCenterByBounds 求出目标缩放与中心，再逐帧插值（缓入缓出，约 0.8 秒）。
-// 手动拖动、滚轮或触摸立即中止动画，且不报告聚焦完成（与兼容层一致）。
+// Leaflet 兼容层自带 focusBounds（flyToBounds）。原生高德先用 getFitZoomAndCenterByBounds 求出目标缩放与中心，
+// 再交给高德自带的过渡动画（setZoomAndCenter 的 duration 参数）一次完成。
+// 不要逐帧调用 setZoomAndCenter 自己插值：高德每次都会重排瓦片、重绘海量点并触发缩放事件，
+// 表现为“先放大、卡一下、再缩回正确大小”。
+// 手动拖动/滚轮/触摸会打断高德自己的动画；被打断时不报告聚焦完成（与兼容层一致）。
 
 const FOCUS_MS = 800;
-let focusAnim = null; // { frame, onDone }
+let focusToken = 0;       // 每次聚焦递增；过期的完成回调直接丢弃
 let focusInterruptBound = null;
 
 function cancelNativeFocus() {
-  if (!focusAnim) return;
-  cancelAnimationFrame(focusAnim.frame);
-  focusAnim = null;
+  focusToken++;
+}
+
+/**
+ * 本项目统一用 [上, 右, 下, 左] 表示视野留白（与 Leaflet 兼容层一致）；
+ * 原生高德的 avoid 参数顺序是 [上, 下, 左, 右]，调用高德接口前在这里换序。
+ */
+function nativeAvoid(padding = [0, 0, 0, 0]) {
+  return [padding[0] || 0, padding[2] || 0, padding[3] || 0, padding[1] || 0];
+}
+
+/** 立即适配视野（padding 为 [上, 右, 下, 左]），两种底图通用 */
+export function fitMapBounds(bounds, padding = [0, 0, 0, 0]) {
+  if (!state.map) return;
+  state.map.setBounds(bounds, false, state.map.focusBounds ? padding : nativeAvoid(padding));
 }
 
 /** 成功发起动画返回 true；地图不支持所需接口时返回 false，由调用方退回 setBounds */
-function focusBoundsNative(target, padding, onFocused) {
+function focusBoundsNative(target, padding, onFocused, maxZoom = null) {
   const map = state.map;
-  if (!map.getFitZoomAndCenterByBounds || !map.setZoomAndCenter || !map.getCenter) return false;
-  const fit = map.getFitZoomAndCenterByBounds(target, padding);
+  if (!map.getFitZoomAndCenterByBounds || !map.setZoomAndCenter) return false;
+  const fit = map.getFitZoomAndCenterByBounds(target, nativeAvoid(padding), maxZoom ?? undefined);
   if (!fit || fit.length < 2) return false;
-  const [z1, c1] = fit;
-  const to = [c1.getLng ? c1.getLng() : c1.lng, c1.getLat ? c1.getLat() : c1.lat];
-  const c0 = map.getCenter();
-  const from = [c0.getLng ? c0.getLng() : c0.lng, c0.getLat ? c0.getLat() : c0.lat];
-  const z0 = map.getZoom();
+  // 取整数级别：高德的缩放动画会先走到整数级再落到小数级（表现为先放大再缩回），
+  // 小数级别下文字标注也会发虚。向下取整保证目标范围仍然完整可见。
+  const zoom = Math.floor(maxZoom ? Math.min(fit[0], maxZoom) : fit[0]);
+  const center = fit[1];
 
   const container = map.getContainer?.();
   if (container && focusInterruptBound !== container) {
@@ -238,26 +340,13 @@ function focusBoundsNative(target, padding, onFocused) {
       container.addEventListener(ev, cancelNativeFocus, { capture: true, passive: true });
     }
   }
-  cancelNativeFocus();
-
+  const token = ++focusToken;
   const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-  if (reduced) {
-    map.setZoomAndCenter(z1, to, true);
-    onFocused?.();
-    return true;
+  map.setZoomAndCenter(zoom, center, !!reduced, reduced ? undefined : FOCUS_MS);
+  if (onFocused) {
+    // 动画结束（或立即跳转）后回调；期间玩家手动操作则作废
+    setTimeout(() => { if (token === focusToken) onFocused(); }, reduced ? 0 : FOCUS_MS + 60);
   }
-  const ease = (t) => (t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2);
-  const start = performance.now();
-  const step = (now) => {
-    if (!focusAnim) return;
-    const t = Math.min(1, (now - start) / FOCUS_MS);
-    const k = ease(t);
-    map.setZoomAndCenter(z0 + (z1 - z0) * k, [from[0] + (to[0] - from[0]) * k, from[1] + (to[1] - from[1]) * k], true);
-    if (t < 1) { focusAnim.frame = requestAnimationFrame(step); return; }
-    focusAnim = null;
-    onFocused?.();
-  };
-  focusAnim = { frame: requestAnimationFrame(step) };
   return true;
 }
 

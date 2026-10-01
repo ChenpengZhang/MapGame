@@ -30,7 +30,9 @@ export function isNativeAmap() {
 }
 
 function hitRadius() {
-  return state.isTouch ? 22 : 14; // 比兼容层（16/9）略宽：原生高德的点更小更密，放宽命中
+  // 原生高德的点更小更密，命中放宽到 14/22；Leaflet 兼容层保持原来的 9/16
+  if (isNativeAmap()) return state.isTouch ? 22 : 14;
+  return state.isTouch ? 16 : 9;
 }
 
 /**
@@ -59,7 +61,8 @@ export function registerPickableLine(overlay, path, width, onClick) {
 }
 
 function toPixel(map, lnglat) {
-  const ll = Array.isArray(lnglat) && AMap.LngLat ? new AMap.LngLat(lnglat[0], lnglat[1]) : lnglat;
+  // 原生高德需要 LngLat 对象；兼容层直接收数组（并按数组缓存坐标换算）
+  const ll = Array.isArray(lnglat) && isNativeAmap() && AMap.LngLat ? new AMap.LngLat(lnglat[0], lnglat[1]) : lnglat;
   const p = map.lngLatToContainer(ll);
   return p ? [p.getX ? p.getX() : p.x, p.getY ? p.getY() : p.y] : null;
 }
@@ -117,13 +120,17 @@ function fire(entry, type, data) {
   for (const cb of entry.handlers[type] || []) cb({ data });
 }
 
-/** 在新建的原生高德地图上安装拾取（map-init 创建地图后立即调用） */
+/**
+ * 在新建的地图上安装拾取（map-init 创建地图后立即调用）。两种底图都用它拾取站点：
+ * 原生高德的海量点命中范围太小；Leaflet 兼容层的站点画在 canvas 上，多块 canvas 叠放时只有最上面一块能收到鼠标。
+ */
 export function installNativePicker(map) {
-  if (!isNativeAmap() || !map?.on) return;
-  // 所有折线/圆的事件冒泡到地图：它们不再拦截落在站点上的点击
+  if (!map?.on || !map.lngLatToContainer) return;
+  const native = isNativeAmap();
+  // 原生高德：所有折线/圆的事件冒泡到地图，它们不再拦截落在站点上的点击
   // 不能用 class extends 继承高德的内部构造器（可能导致所有折线创建失败）；
   // 用普通包装函数调用原构造器，并共享原型，instanceof AMap.Polyline 仍然成立。
-  for (const name of ['Polyline', 'Circle']) {
+  for (const name of native ? ['Polyline', 'Circle'] : []) {
     const Base = AMap[name];
     if (!Base || Base.__bubblePatched) continue;
     const Wrapped = function (opts) { return new Base({ bubble: true, ...opts }); };
@@ -155,6 +162,13 @@ export function installNativePicker(map) {
       console.error('[native-picker] 站点/线路拾取失败', err);
     }
   }, true);
+  // Leaflet 兼容层：站点点击已由上面处理，吞掉随后的 click，
+  // 以免同一次点击再落到下面的线路热区或被地图当成“点空白取消”
+  if (!native) {
+    container.addEventListener('click', (ev) => {
+      if (lastPickAt >= 0 && performance.now() - lastPickAt < 400) { ev.stopPropagation(); ev.preventDefault(); }
+    }, true);
+  }
   let frame = 0, lastPx = null;
   container.addEventListener('mousemove', (ev) => {
     if (state.isTouch) return;

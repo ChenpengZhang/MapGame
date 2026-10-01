@@ -1,0 +1,15 @@
+* { box-sizing: border-box; margin: 0; padding: 0; }
+/* 表单元素默认不继承字体，这里强制继承，让按钮/输入框也用上圆体 */
+button, input, select, textarea { font-family: inherit; }
+html, body {
+  width: 100%; height: 100%;
+  font-family: var(--font-sans);
+  color: var(--ink);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+::selection { background: var(--primary-soft); color: var(--primary-deep); }
+
+#app { position: relative; width: 100%; height: 100%; overflow: hidden; background: var(--bg); }
+#map { position: absolute; inset: 0; background: #10151f; }

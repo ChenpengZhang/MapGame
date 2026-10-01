@@ -1,0 +1,300 @@
+/* ==========================================================================
+   公交站牌风格：路线规划 / 图例 / 结算
+   参照天津公交站牌：米白底、顶部灰色压条、黑字、细灰分隔线、方角、
+   站牌红作唯一强调色；字体与站点信息卡（公交站名牌）一致，线路名同样画成线路牌。
+   ========================================================================== */
+:root {
+  --font-sign: "Noto Sans CJK SC", "Source Han Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --sign-bg: rgba(250, 250, 246, .97);
+  --sign-ink: #111;
+  --sign-muted: #5f6b74;
+  --sign-rule: #c5cbd0;
+  --sign-bar: #b8c0c6;
+  --sign-red: #c8102e;
+  --sign-shadow: 0 4px 14px rgba(15, 23, 42, .28);
+}
+#legend, #route-panel, .result-inner, #result-toggle-btn {
+  font-family: var(--font-sign);
+  color: var(--sign-ink); background: var(--sign-bg);
+  -webkit-backdrop-filter: none; backdrop-filter: none;
+  border: 0; border-top: 4px solid var(--sign-bar); border-radius: 0;
+  box-shadow: var(--sign-shadow);
+}
+
+/* 图例：站牌线路图的小圆点 + 名称 */
+#legend { padding: 6px 9px; gap: 4px; font-size: 12px; }
+#legend .row { font-weight: 600; gap: 6px; }
+#legend .dot { border: 1.5px solid #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.35); }
+
+/* 路线规划：像站牌上的“所有车站”列表 */
+/* 字号与下方站点信息卡一致：标题 12px 粗体、正文 11px、收起按钮 8px、内边距 6px 7px */
+#route-panel { padding: 6px 7px 7px; font-size: 11px; line-height: 1.6; }
+#route-panel::-webkit-scrollbar-thumb { background: var(--sign-rule); border-radius: 0; }
+#route-panel .rp-title {
+  font-size: 12px; font-weight: 700; color: var(--sign-ink);
+  margin: 0 0 4px; padding-bottom: 4px; border-bottom: 1px solid var(--sign-rule);
+}
+#route-panel .rp-title.rp-opt { margin-top: 8px; padding-top: 6px; border-top: 1px solid var(--sign-rule); }
+#route-panel .rp-toggle, .stop-infocard .info-toggle {
+  font-family: inherit; font-weight: 400; border: 1px solid #aeb8c2; border-radius: 2px;
+  background: #eef2f5; color: #334155; padding: 1px 5px; font-size: 8px; line-height: 1.4;
+}
+/* 触屏点按后 :hover 会“粘住”，旧的深色主题悬停色（近白）会让按钮文字在米白底上消失 */
+#route-panel .rp-toggle:hover, #route-panel .rp-toggle:focus, .stop-infocard .info-toggle:hover {
+  color: #334155; border-color: #8a96a3; background: #e2e8ee;
+}
+.stop-infocard.collapsed .line-list {
+  max-height: 0; opacity: 0; margin-top: 0; padding-top: 0; border-top-width: 0; overflow: hidden;
+}
+#route-panel .rp-row { margin: 1px 0; }
+#route-panel .rp-desc { color: var(--sign-ink); }
+#route-panel .rp-note { color: var(--sign-muted); }
+/* 线路名用站点信息卡同款线路牌（样式见 :is(.stop-infocard, #route-panel) .line-tag 等规则） */
+#route-panel .line-tag { vertical-align: middle; margin: 2px 0; }
+#route-panel .rp-row { align-items: center; }
+#route-panel .rp-pill.rp-transfer {
+  padding: 0 5px; border-radius: 0; font-size: 11px; font-weight: 600;
+  background: transparent; color: var(--sign-muted); border: 1px solid var(--sign-rule);
+}
+#route-panel .rp-stops, #route-panel .rp-km, #route-panel .rp-time { color: var(--sign-muted); font-weight: 400; }
+#route-panel .rp-time { color: var(--sign-ink); min-width: 3.5em; text-align: right; }
+#route-panel .rp-total {
+  margin-top: 4px; padding-top: 4px; border-top: 1px solid var(--sign-rule);
+  color: var(--sign-ink); font-weight: 700;
+}
+#route-panel .rp-total b { color: var(--sign-red); font-weight: 700; font-size: 13px; }
+#route-panel .rp-score { color: var(--sign-ink); }
+
+/* 结算：天津公交站牌——灰色顶梁、米白板面、细灰分隔线；标题像站名，右上角的结果牌像线路号，
+   明细像站牌上的站点列表（竖线串圆点，第一项红色“本站”）；按钮是方角的站牌式按钮 */
+#result-overlay { background: rgba(4, 8, 18, .45); -webkit-backdrop-filter: none; backdrop-filter: none; }
+.result-inner {
+  width: min(380px, calc(100vw - 32px)); box-sizing: border-box; padding: 10px 14px 14px; text-align: left; overflow: hidden;
+  background: var(--sign-bg); color: var(--sign-ink); font-family: var(--font-sign);
+  border: 0; border-top: 6px solid var(--sign-bar); border-radius: 0;
+  box-shadow: var(--sign-shadow), inset 0 0 0 1px var(--sign-rule);
+  animation: result-pop .28s ease-out both;
+}
+.result-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.result-kicker { font-size: 11px; color: var(--sign-muted); letter-spacing: .12em; }
+.result-badge { padding: 2px 10px; font-size: 13px; font-weight: 800; color: #fff; letter-spacing: .08em; line-height: 1.5; }
+.result-badge.pass { background: #009a44; }
+.result-badge.fail { background: var(--sign-red); }
+.result-badge.done { background: #4b5b68; }
+.result-badge.hidden { display: none; }
+#result-title {
+  margin: 6px 0 0; padding: 0 0 8px; font-size: 26px; font-weight: 800; color: var(--sign-ink); line-height: 1.25;
+  border-bottom: 1px solid var(--sign-rule);
+}
+#result-message { margin: 8px 0 0; font-size: 13px; line-height: 1.7; color: #222; }
+#result-times {
+  position: relative; list-style: none; margin: 10px 0 12px; padding: 2px 0 2px 16px; border: 0; background: transparent;
+  font-size: 12px; color: var(--sign-ink);
+}
+/* 站点列表的竖线 */
+#result-times::before { content: ''; position: absolute; left: 4px; top: 10px; bottom: 10px; width: 2px; background: var(--sign-bar); }
+#result-times li { position: relative; display: flex; justify-content: space-between; gap: 12px; padding: 3px 0; }
+#result-times li + li { border-top: 1px dashed var(--sign-rule); }
+#result-times li::before {
+  content: ''; position: absolute; left: -16px; top: 50%; width: 8px; height: 8px; margin-top: -5px;
+  border: 1px solid var(--sign-muted); border-radius: 50%; background: #fff;
+}
+#result-times li:first-child::before { background: var(--sign-red); border-color: var(--sign-red); }
+#result-times li:first-child .row-value { color: var(--sign-red); font-weight: 800; }
+#result-times .row-label { color: var(--sign-muted); }
+#result-times .row-value { font-weight: 700; white-space: nowrap; font-variant-numeric: tabular-nums; }
+#result-times .row-note { color: var(--sign-muted); }
+#result-sync { margin: 0 0 10px; color: var(--sign-muted); }
+.result-btns { display: flex; justify-content: stretch; gap: 6px; padding: 10px 0 0; border-top: 1px solid var(--sign-rule); }
+.result-btns button, #result-retry {
+  flex: 1; font-family: inherit; font-weight: 700; font-size: 14px; padding: 8px 6px;
+  border-radius: 2px; box-shadow: none; color: var(--sign-ink);
+  background: #eef2f5; border: 1px solid #aeb8c2;
+}
+.result-btns button.hidden { display: none; }
+.result-btns button:hover { transform: none; box-shadow: none; filter: none; background: #e2e8ee; }
+#result-next, #result-restart, #result-viewmap, #result-exit, #result-home { background: #eef2f5; }
+/* 主按钮用线路色（id 选择器才能压过上面按 id 设置的底色） */
+.result-btns :is(#result-next, #result-restart).primary { color: #fff; border-color: transparent; }
+.result-inner.outcome-pass :is(#result-next, #result-restart).primary { background: #009a44; }
+.result-inner.outcome-pass :is(#result-next, #result-restart).primary:hover { background: #008a3c; }
+.result-inner.outcome-fail :is(#result-next, #result-restart).primary { background: var(--sign-red); }
+.result-inner.outcome-fail :is(#result-next, #result-restart).primary:hover { background: #a80d26; }
+.result-inner.outcome-done :is(#result-next, #result-restart).primary,
+.result-inner.outcome-none :is(#result-next, #result-restart).primary { background: #4b5b68; }
+#result-retry { width: 100%; margin-bottom: 8px; }
+#result-toggle-btn { padding: 4px 12px; font-size: 13px; font-weight: 700; }
+@media (max-width: 760px) {
+  #route-panel { border-radius: 0; }
+}
+/* 手机底部抽屉：背景不透明，并在抽屉展开时隐藏左下角图例（否则会从抽屉后面透出来） */
+@media (max-width: 600px) {
+  #route-panel, .stop-infocard.bus-board, .stop-infocard.metro-board { background: #fafaf6; }
+  #app:has(#left-col > :not(.hidden)) #legend { display: none; }
+  /* 地图右下角的版权署名始终停在抽屉上方（--drawer-h 由 app.js 按抽屉实际高度更新） */
+  #map .leaflet-bottom { bottom: var(--drawer-h, 0px); transition: bottom .28s cubic-bezier(.4,0,.2,1); }
+}
+
+/* 图标：统一取自 Iconoir（MIT，assets/icons/）；用作蒙版，颜色跟随 currentColor */
+.icon {
+  display: inline-block; width: 1em; height: 1em; flex: none; vertical-align: -0.14em;
+  background-color: currentColor;
+  -webkit-mask: var(--icon) center / contain no-repeat; mask: var(--icon) center / contain no-repeat;
+}
+.icon-home { --icon: url("../assets/icons/home.svg"); }
+.icon-open-book { --icon: url("../assets/icons/open-book.svg"); }
+.icon-tower { --icon: url("../assets/icons/tower.svg"); }
+.icon-dice-five { --icon: url("../assets/icons/dice-five.svg"); }
+.icon-trophy { --icon: url("../assets/icons/trophy.svg"); }
+.icon-settings { --icon: url("../assets/icons/settings.svg"); }
+.icon-lock { --icon: url("../assets/icons/lock.svg"); }
+.icon-star { --icon: url("../assets/icons/star.svg"); }
+.icon-nav-arrow-down { --icon: url("../assets/icons/nav-arrow-down.svg"); }
+.icon-nav-arrow-left { --icon: url("../assets/icons/nav-arrow-left.svg"); }
+.icon-nav-arrow-right { --icon: url("../assets/icons/nav-arrow-right.svg"); }
+.icon-map-pin { --icon: url("../assets/icons/map-pin.svg"); }
+.icon-edit-pencil { --icon: url("../assets/icons/edit-pencil.svg"); }
+.icon-plus { --icon: url("../assets/icons/plus.svg"); }
+.icon-trash { --icon: url("../assets/icons/trash.svg"); }
+.icon-share-android { --icon: url("../assets/icons/share-android.svg"); }
+.icon-search { --icon: url("../assets/icons/search.svg"); }
+.icon-arrow-up { --icon: url("../assets/icons/arrow-up.svg"); }
+.icon-arrow-down { --icon: url("../assets/icons/arrow-down.svg"); }
+.icon-play { --icon: url("../assets/icons/play.svg"); }
+.icon-xmark { --icon: url("../assets/icons/xmark.svg"); }
+.icon-refresh { --icon: url("../assets/icons/refresh.svg"); }
+.icon-calendar { --icon: url("../assets/icons/calendar.svg"); }
+.icon-walking { --icon: url("../assets/icons/walking.svg"); }
+.icon-bus { --icon: url("../assets/icons/bus.svg"); }
+.icon-bus-side { --icon: url("../assets/icons/bus-side.svg"); } /* Tabler Icons（MIT）：侧面巴士，用于加载动画 */
+.icon-metro { --icon: url("../assets/icons/metro.svg"); }
+/* 每步确认后沿路线移动的行人 / 公交 / 地铁小牌 */
+.traveler {
+  display: flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px; border-radius: 50%;
+  background: #fff; color: #111; box-shadow: 0 1px 4px rgba(0,0,0,.35);
+  pointer-events: none;
+}
+.traveler .icon { width: 17px; height: 17px; }
+.traveler.walk { color: #1f9d55; }
+.btn-emoji .icon { width: 22px; height: 22px; color: currentColor; }
+
+/* 换乘教学：指向预览名称板的说明气泡（挂在预览卡右侧，箭头指向卡片） */
+#infocard, #current-infocard { position: relative; }
+.tutorial-card-tip {
+  position: absolute; left: calc(100% + 12px); top: 8px; z-index: 2;
+  width: max-content; max-width: 300px; padding: 6px 12px; white-space: nowrap;
+  border: 3px solid #eef3f5; border-radius: 999px; background: #f8faf8; color: #111;
+  font-size: 13px; font-weight: 800; line-height: 1.35;
+  box-shadow: inset 0 0 0 2px #91c9e8, 0 2px 6px rgba(0,0,0,.24);
+  pointer-events: none; animation: tutorial-tip-in .25s ease-out;
+}
+@keyframes tutorial-tip-in { from { opacity: 0; } to { opacity: 1; } }
+.tutorial-card-tip::before {
+  content: ""; position: absolute; left: -9px; top: 50%; margin-top: -6px;
+  border: 6px solid transparent; border-right-color: #91c9e8; border-left: 0;
+}
+@media (max-width: 760px) {
+  .tutorial-card-tip { left: auto; right: 8px; top: auto; bottom: calc(100% + 10px); white-space: normal; }
+  .tutorial-card-tip::before { left: 50%; top: 100%; margin: 0 0 0 -6px; border: 6px solid transparent; border-top-color: #91c9e8; border-bottom: 0; }
+}
+
+/* 换乘教学：换乘站常驻高亮（Marker 锚点在中心，内容自行居中） */
+.transfer-highlight { position: relative; width: 0; height: 0; pointer-events: none; }
+.transfer-highlight-dot {
+  position: absolute; left: -9px; top: -9px; width: 18px; height: 18px; box-sizing: border-box;
+  border-radius: 50%; background: #fff; border: 4px solid #e4572e;
+  box-shadow: 0 0 0 2px #fff, 0 2px 6px rgba(0,0,0,.35);
+}
+.transfer-highlight-ring {
+  position: absolute; left: -22px; top: -22px; width: 44px; height: 44px; box-sizing: border-box;
+  border-radius: 50%; border: 3px solid #e4572e;
+  animation: transfer-pulse 1.6s ease-out infinite;
+}
+@keyframes transfer-pulse {
+  from { transform: scale(.45); opacity: .95; }
+  to { transform: scale(1.35); opacity: 0; }
+}
+.transfer-highlight-name {
+  position: absolute; left: 0; top: 16px; transform: translateX(-50%);
+  width: max-content; padding: 2px 8px; white-space: nowrap;
+  background: #e4572e; color: #fff; font-size: 12px; font-weight: 800;
+  box-shadow: 0 2px 6px rgba(0,0,0,.3);
+}
+.transfer-highlight.caption-left .transfer-highlight-name { left: auto; right: 16px; top: -10px; transform: none; }
+.transfer-highlight.caption-right .transfer-highlight-name { left: 16px; top: -10px; transform: none; }
+
+/* 地图常驻注释：钉在步行范围红圈顶端，红色细描边的小牌，比操作提示更轻 */
+.map-tutorial-note {
+  position: relative; transform: translate(-50%, -50%);
+  width: max-content; padding: 2px 8px; white-space: nowrap;
+  border: 1.5px solid #e74c3c; border-radius: 999px; background: rgba(255,255,255,.92);
+  color: #b3261e; font-size: 12px; font-weight: 700; pointer-events: none;
+}
+/* 限时关卡：出发前时间 HUD 高亮闪烁，提醒玩家本关有时间限制 */
+#mode-hud.hud-flash { animation: hud-flash 1.1s ease-in-out infinite; }
+@keyframes hud-flash {
+  0%, 100% { box-shadow: var(--shadow-lg), 0 0 0 0 rgba(251,146,60,0); border-color: var(--ring); }
+  50% { box-shadow: var(--shadow-lg), 0 0 0 5px rgba(251,146,60,.55); border-color: #fb923c; }
+}
+
+/* 教学关错误操作：只留一条指向“上一步”的提示（按钮组本身已绝对定位），按钮发光 */
+.tutorial-undo-tip {
+  position: absolute; right: 0; bottom: calc(100% + 12px);
+  width: max-content; max-width: min(320px, 80vw); padding: 6px 14px; white-space: normal;
+  border: 3px solid #eef3f5; border-radius: 999px; background: #f8faf8; color: #111;
+  font-size: 13px; font-weight: 800; line-height: 1.35;
+  box-shadow: inset 0 0 0 2px #fb923c, 0 2px 6px rgba(0,0,0,.24);
+  pointer-events: none; animation: tutorial-tip-in .25s ease-out;
+}
+.tutorial-undo-tip::after {
+  content: ""; position: absolute; right: var(--arrow-right, 40px); top: 100%;
+  border: 7px solid transparent; border-top-color: #fb923c; border-bottom: 0;
+}
+#undo-btn.tutorial-undo-glow { animation: undo-glow 1.1s ease-in-out infinite; }
+@keyframes undo-glow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(251,146,60,0); }
+  50% { box-shadow: 0 0 0 5px rgba(251,146,60,.6); }
+}
+
+/* 每日挑战面板：沿用无尽模式菜单的布局，加一张当日排行 */
+#daily-menu { position: fixed; inset: 0; z-index: 910; display: flex; align-items: center; justify-content: center; }
+.daily-inner { max-width: 520px; }
+.daily-mine { min-height: 20px; margin: -10px 0 14px; color: var(--accent); font-size: 14px; font-weight: 700; }
+.daily-board-wrap { max-height: 300px; overflow-y: auto; margin-bottom: 18px; border: 1px solid rgba(255,255,255,.12); border-radius: 10px; }
+.daily-board { width: 100%; border-collapse: collapse; font-size: 13px; color: #dbe4ee; }
+.daily-board th { position: sticky; top: 0; background: #16233a; color: #9fb0c3; font-weight: 600; padding: 7px 10px; text-align: left; }
+.daily-board td { padding: 6px 10px; border-top: 1px solid rgba(255,255,255,.06); text-align: left; }
+.daily-board tr.leaderboard-own td { color: var(--accent); font-weight: 700; }
+.daily-board .leaderboard-empty, .daily-board .leaderboard-divider { text-align: center; color: #9fb0c3; }
+.daily-start {
+  display: block; width: 100%; margin-bottom: 16px; padding: 13px 0; border: 0; border-radius: 12px;
+  background: var(--accent); color: #fff; font: inherit; font-size: 16px; font-weight: 700; cursor: pointer;
+}
+.daily-start:hover { filter: brightness(1.08); }
+.daily-start:disabled { opacity: .5; cursor: default; }
+/* 昨日排行：贴右缘的侧栏，收起时整体滑出屏幕，只留竖排的“昨日排行”把手 */
+.daily-yesterday {
+  position: absolute; top: 50%; right: 0; z-index: 2; display: flex; align-items: stretch;
+  transform: translateY(-50%); transition: transform .28s ease;
+}
+.daily-yesterday.collapsed { transform: translate(calc(100% - 34px), -50%); }
+.daily-yesterday-toggle {
+  flex: 0 0 34px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
+  margin: 0; padding: 12px 0; border: 1px solid rgba(255,255,255,.12); border-right: 0; border-radius: 12px 0 0 12px;
+  background: #16233a; color: #dbe4ee; font: inherit; font-size: 13px; cursor: pointer;
+}
+.daily-yesterday-toggle:hover { background: #1c2d4a; }
+.daily-yesterday-toggle .icon { transition: transform .28s ease; }
+.daily-yesterday.collapsed .daily-yesterday-toggle .icon { transform: rotate(180deg); }
+.daily-yesterday-tab { writing-mode: vertical-rl; letter-spacing: .2em; }
+.daily-yesterday-body {
+  width: min(400px, calc(100vw - 50px)); box-sizing: border-box; padding: 16px 16px 4px;
+  border: 1px solid rgba(255,255,255,.12); border-right: 0; background: #111c30f2;
+}
+.daily-yesterday-body h3 { margin: 0 0 4px; font-size: 16px; color: var(--ink); }
+.daily-yesterday-date { margin: 0 0 10px; font-size: 12px; color: #9fb0c3; }
+.daily-yesterday .daily-board-wrap { max-height: min(360px, 60vh); }
+/* 共用排行表是固定列宽（为宽弹窗设计），窄侧栏改为按内容自动分配 */
+.daily-yesterday .leaderboard-table { table-layout: auto; }
+.daily-yesterday .daily-board th, .daily-yesterday .daily-board td { width: auto; height: auto; padding: 7px 8px; white-space: nowrap; font-size: 12px; }

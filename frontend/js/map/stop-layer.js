@@ -29,9 +29,10 @@ import { fadeInOverlay, captureMassMarksCanvas, removeOverlay } from './anim.js'
 import { mapContainer } from './map-init.js';
 import { isWithinWalkRange } from './walk-range.js';
 
-/** 公交站显示阈值：新手教程（地图练习关）放宽，其它模式用全局设置 */
+/** 公交站显示阈值：新手教程（地图练习关）固定放宽，其它模式用玩家设置 */
 export function busMinZoom() {
-  return state.currentLevel?.mapTutorial?.mapPractice ? TUTORIAL_BUS_MIN_ZOOM : BUS_MIN_ZOOM;
+  if (state.currentLevel?.mapTutorial?.mapPractice) return TUTORIAL_BUS_MIN_ZOOM;
+  return state.settings?.busMinZoom ?? BUS_MIN_ZOOM; // 设置里可调（13~16）
 }
 
 // ---------- 模块内部状态（只被本文件使用，因此不放进 core/state.js） ----------
@@ -285,7 +286,7 @@ export function toggleShowAllStops() {
 
 /** 画灰色的地铁线作为背景（禁用地铁情景下不画） */
 export function renderMetroContext() {
-  if (state.scenario.noMetro) return;
+  if (state.scenario.noMetro || state.settings?.metroBase === false) return; // 设置里可关闭灰色地铁底图
   for (const line of state.linesMap.values()) {
     if (line.mode !== 'metro') continue;
     if (!line.path || line.path.length < 2) continue;

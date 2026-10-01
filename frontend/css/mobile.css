@@ -1,0 +1,50 @@
+/* ==========================================================================
+   手机适配（≤600px）
+   思路：底部让给"路线面板抽屉"，图例/操作条挪到顶部，避免与图例重叠；
+   路线面板改为从底部上来的抽屉，主菜单按钮自适应。
+   ========================================================================== */
+@media (max-width: 600px) {
+  #topbar { padding: 8px 10px; }
+  #topbar .title { font-size: 14px; }
+  #topbar .title .sub { font-size: 11px; }
+
+  /* 手机端隐藏"缩放速度"设置（滚轮惯性缩放只在桌面生效） */
+  #zoom-speed-row { display: none; }
+
+  /* 手机端仍保留精简后的站点图例。 */
+  #legend { left: 10px; bottom: 10px; padding: 7px 9px; gap: 4px; font-size: 10px; }
+
+  /* 顶部 HUD 与底部操作条：保持一致的上下间距（HUD 不再贴着顶栏） */
+  /* HUD 始终单行：计时变长时压缩字号与间距，不换行，避免压到下面的操作按钮 */
+  #mode-hud { top: 62px; font-size: 11px; padding: 5px 10px; gap: 6px; max-width: calc(100vw - 64px); white-space: nowrap; }
+  #mode-hud > * { flex: none; }
+  #mode-hud #tower-layer-label, #mode-hud #mode-hud-secondary { overflow: hidden; text-overflow: ellipsis; flex: 0 1 auto; min-width: 0; }
+  #tower-restart-btn { top:62px;right:10px;width:32px;height:32px;font-size:19px; }
+  .btn-group { right: 10px; top: 104px; bottom: auto; flex-wrap: wrap; justify-content: flex-end; max-width: 74vw; }
+  .btn-group button { padding: 7px 12px; font-size: 12px; }
+  #result-toggle-btn { right: 10px; top: 104px; bottom: auto; padding: 7px 12px; font-size: 12px; }
+
+  /* 路线面板 / 信息卡：改成底部抽屉 */
+  /* 底部抽屉：路线面板与站点卡片等宽、紧贴堆叠（不留缝，避免露出下面的地图和图例） */
+  #left-col {
+    left: 0; right: 0; top: auto; bottom: 0; max-width: none; gap: 0;
+    max-height: calc(100dvh - 64px); overflow-y: auto; overscroll-behavior: contain; scrollbar-width: none;
+  }
+  #left-col::-webkit-scrollbar { display: none; }
+  #route-panel, .stop-infocard { border-radius: var(--r-lg) var(--r-lg) 0 0; }
+  .stop-infocard.metro-board { border-radius: 0; }
+  .stop-infocard.bus-board { border-radius: 0; }
+  #route-panel { max-height: 42vh; }
+  .stop-infocard.bus-board, .stop-infocard.metro-board { width: auto; }
+  .stop-infocard .line-list {
+    max-height: min(24vh, 150px); overflow-y: auto; overscroll-behavior: contain;
+    scrollbar-width: thin; -webkit-overflow-scrolling: touch;
+  }
+  .stop-infocard .line-list::-webkit-scrollbar { width: 5px; }
+  .stop-infocard .line-list::-webkit-scrollbar-thumb { background: rgba(255,255,255,.24); border-radius: 999px; }
+
+  /* 主菜单按钮更贴边，避免太挤 */
+  .main-inner { padding: 16px; }
+  .main-inner h1 { font-size: 34px; }
+  .main-btns button { width: min(88vw, 320px); }
+}

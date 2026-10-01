@@ -26,7 +26,7 @@ import { state } from './core/state.js';
 import { $, hide, show, setStatus, showError, showLoading, hideLoading, showCenterToast, loadScript, isTouchDevice, preventPagePinch } from './core/dom.js';
 import { loadAmapKey, loadAmapSecurity, saveAmapKey, saveAmapSecurity, loadWalkTransfer, saveWalkTransfer, loadCityId, saveCityId } from './core/storage.js';
 import { cityById } from './data/cities.js';
-import { initMap, failMapSetup, setZoomSpeed } from './map/map-init.js';
+import { initMap, failMapSetup, fitEndpoints, focusDestination } from './map/map-init.js';
 import { toggleShowAllStops } from './map/stop-layer.js';
 import { onStopClick, onCandidateStopClick, finishRoute, resetRoute, undoRoute, setForceWalk, setWalkTransferEnabled } from './game/route.js';
 import { showMenu,returnHome, openStoryMenu, openTowerMenu, openCityMenu, startLevel, selectCity } from './game/session.js';
@@ -41,6 +41,8 @@ import { hideResultOverlay } from './ui/result.js';
 import { storyNext } from './ui/story.js';
 import { openDailyMenu, startDaily } from './game/daily.js';
 import { bindCustomMenu, openSharedMapFromUrl } from './game/custom-menu.js';
+import { loadSettings } from './core/settings.js';
+import { bindSettings, showSettingsPreview, applySavedSettings } from './ui/settings.js';
 
 // ============ 1. 引导 ============
 
@@ -98,6 +100,8 @@ function bindUiEvents() {
   on('reset-btn', () => state.onlineRound?.submission ? restartLevel() : resetRoute());                // 取消（重置路线）
   on('error-close', () => hide('error'));
   on('show-all-btn', toggleShowAllStops);     // 显示/关闭全图站点
+  on('trip-card', () => fitEndpoints());      // 行程牌：同时看到起点和终点
+  on('dest-indicator', focusDestination);     // 终点方向指示：飞到终点
   on('tower-restart-btn', openTowerResetConfirm);
   on('tower-reset-close',closeTowerResetConfirm);
   on('tower-reset-confirm',confirmTowerReset);
@@ -125,9 +129,9 @@ function bindUiEvents() {
   on('tower-real-ride', () => startTower('realRide'));
 
   // ---- 设置面板 ----
-  on('settings-btn', openSettingsPanel);
+  on('settings-btn', () => { openSettingsPanel(); showSettingsPreview(); });
+  bindSettings(); // 设置页：左侧选项 + 右侧效果预览
   on('settings-close', closeSettingsPanel);
-  on('zoom-speed-slider', (e) => setZoomSpeed(parseFloat(e.target.value) || 0.5), 'input');
   on('walk-transfer-toggle', (event) => {
     const input = event.currentTarget || $('walk-transfer-toggle');
     if (state.onlineRound && state.onlineRound.command?.mode !== 'tower') {
@@ -178,6 +182,7 @@ function bindUiEvents() {
 
 state.isTouch = isTouchDevice(); // 判定触摸设备：手机端启用两阶段选站 + 更大的站点热区
 state.walkTransfer = loadWalkTransfer(); // 步行换乘开关（持久化在 localStorage）
+state.settings = loadSettings();         // 缩放速度、公交站显示级别、地铁底图、字号
 state.currentCityId = loadCityId('beijing'); // 恢复上次选的城市（默认北京）
 if (!cityById(state.currentCityId) || cityById(state.currentCityId).storyOnly) state.currentCityId = 'beijing'; // 校验无效值；故事专用小城市不能作为当前城市
 preventPagePinch();             // 禁用页面级双指缩放（地图自身的双指缩放保留）
@@ -193,6 +198,7 @@ if (typeof window !== 'undefined') {
   };
 }
 bindUiEvents();
+applySavedSettings();  // 缩放速度与字号（地图相关设置在加载城市数据时读取）
 loadStoryProgress();   // 故事模式解锁进度（localStorage）
 loadTowerState();      // 爬塔纪录（localStorage）
 buildStoryLevels(startLevel); // 预生成关卡卡片（打开故事菜单时也会重建）

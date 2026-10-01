@@ -15,6 +15,7 @@
 import { state } from '../core/state.js';
 import { LINE_PALETTE } from '../core/config.js';
 import { buildGraph, haversineKm } from '../core/router-api.js';
+import { repairBarePaths } from './line-geometry.js';
 
 // ============ 构建索引 ============
 
@@ -26,6 +27,8 @@ import { buildGraph, haversineKm } from '../core/router-api.js';
  */
 export function buildIndex(data, graph = buildGraph(data.lines || [])) {
   state.routerGraph = graph;
+  // 寻路图已经建好（只用站点与站间距离），这里再修补纯展示用的线路走向
+  repairBarePaths(data.lines || []);
   state.linesMap = new Map();
   for (const line of data.lines || []) {
     const id = String(line.id);

@@ -35,3 +35,6 @@ backend/.pgdata/
 
 # Generated public site
 dist/
+
+# ---- UI 方案效果图（设计稿，不进仓库）----
+design/ui-proposals/

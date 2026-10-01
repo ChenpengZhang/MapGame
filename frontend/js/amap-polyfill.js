@@ -66,6 +66,7 @@
   }
 
   const AMap = { __polyfill: true, __backend: 'leaflet' };
+  const lngLatCache = new WeakMap(); // 坐标数组 → WGS-84，站点拾取时避免每次鼠标移动都重算坐标偏移
 
   AMap.Pixel = class { constructor(x, y) { this.x = x; this.y = y; } };
   AMap.Size = class { constructor(w, h) { this.w = w; this.h = h; } };
@@ -94,6 +95,7 @@
         center: c,
         zoom: opts.zoom || 11,
         zoomSnap: 0, // 按实际视野精确缩放，避免整数级别让范围圈显得过小
+        doubleClickZoom: false, // 连点同一站两下（预览 + 确认）不能被当成双击放大
         scrollWheelZoom: !opts.scrollWheel,
         zoomControl: false, // 游戏自带滚轮惯性缩放，去掉 Leaflet 默认的 +/- 按钮
         attributionControl: true,
@@ -132,7 +134,8 @@
       this._map.scrollWheelZoom.enable();
     }
     setWheelZoomSpeed(speed) {
-      this._map.options.wheelPxPerZoomLevel = 180 - Math.max(0, Math.min(1, speed)) * 120;
+      // 滚动多少像素缩放一级：默认 0.5 → 65px（接近 Leaflet 默认 60），最快 20px，最慢 110px
+      this._map.options.wheelPxPerZoomLevel = 110 - Math.max(0, Math.min(1, speed)) * 90;
     }
     /** 显示/隐藏底图瓦片（无尽模式“盲棋”用）；覆盖物不受影响 */
     setBaseLayerVisible(visible) {
@@ -173,7 +176,7 @@
         }
       );
     }
-    focusBounds(bounds, padding = [0, 0, 0, 0], onComplete) {
+    focusBounds(bounds, padding = [0, 0, 0, 0], onComplete, { maxZoom } = {}) {
       const target = [
         gcj2leaflet([bounds.getSouthWest().getLng(), bounds.getSouthWest().getLat()]),
         gcj2leaflet([bounds.getNorthEast().getLng(), bounds.getNorthEast().getLat()]),
@@ -184,6 +187,7 @@
       const framing = {
         paddingTopLeft: L.point(padding[3], padding[0]),
         paddingBottomRight: L.point(padding[1], padding[2]),
+        ...(maxZoom ? { maxZoom } : {}),
       };
       const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
       if (reducedMotion) {
@@ -199,10 +203,25 @@
     setStatus(s) {
       const m = this._map;
       if (s.dragEnable === false) m.dragging.disable(); else if (s.dragEnable === true) m.dragging.enable();
-      if (s.zoomEnable === false) { m.scrollWheelZoom.disable(); m.doubleClickZoom.disable(); m.touchZoom.disable(); }
-      else if (s.zoomEnable === true) { m.scrollWheelZoom.enable(); m.doubleClickZoom.enable(); m.touchZoom.enable(); }
+      if (s.zoomEnable === false) { m.scrollWheelZoom.disable(); m.touchZoom.disable(); }
+      else if (s.zoomEnable === true) { m.scrollWheelZoom.enable(); m.touchZoom.enable(); }
     }
     getContainer() { return this._map.getContainer(); }
+    /** 经纬度（GCJ-02）→ 地图容器内像素（供站点拾取按距离判断）；换算结果按坐标数组缓存 */
+    lngLatToContainer(ll) {
+      let wgs = Array.isArray(ll) ? lngLatCache.get(ll) : null;
+      if (!wgs) {
+        const lng = Array.isArray(ll) ? ll[0] : (ll.getLng ? ll.getLng() : ll.lng);
+        const lat = Array.isArray(ll) ? ll[1] : (ll.getLat ? ll.getLat() : ll.lat);
+        wgs = gcj2leaflet([lng, lat]);
+        if (Array.isArray(ll)) lngLatCache.set(ll, wgs);
+      }
+      return this._map.latLngToContainerPoint(wgs);
+    }
+    /** 鼠标指针样式（悬停到站点时显示手型） */
+    setDefaultCursor(cursor) {
+      this._map.getContainer().style.cursor = !cursor || cursor === 'default' ? '' : cursor;
+    }
     on(e, cb) { this._map.on(e === 'zoomchange' ? 'zoom' : e, cb); }
     off(e, cb) { this._map.off(e === 'zoomchange' ? 'zoom' : e, cb); }
     addLayer(l) { this._map.addLayer(l); }
@@ -380,10 +399,11 @@
       this._paneName = null;
       this._interactive = !(opts && opts.interactive === false);
       this._group = L.layerGroup();
-      this._rebuild();
+      this._renderer = null; // 每个海量点图层一块独立 canvas（见 setMap）
     }
     _rebuild() {
       this._group.clearLayers();
+      if (!this._map || !this._renderer) return; // 挂到地图时再建（需要知道所在 pane 与 canvas）
       for (const d of this._data) {
         const metro = d.style === 0;
         const walk = d.style === 2; // 步行可达站（红色，区别于蓝色公交站和橙色地铁站）
@@ -397,6 +417,7 @@
           fillOpacity: this._base,
           opacity: this._base,
           pane: this._paneName || 'overlayPane',
+          renderer: this._renderer,
           interactive: false,
         });
         this._group.addLayer(dot);
@@ -405,6 +426,7 @@
           radius: HIT_R,
           stroke: false, fill: true, fillOpacity: 0,
           pane: this._paneName || 'overlayPane',
+          renderer: this._renderer,
           interactive: true,
         });
         const dd = d;
@@ -422,10 +444,19 @@
     setMap(m) {
       this._map = m;
       if (m) {
-        this._paneName = paneFor(m, this._z);
+        const pane = paneFor(m, this._z);
+        // 用 canvas 而不是默认的 SVG 画站点：大城市一次上万个圆点，SVG 在缩放动画中逐个重排会严重卡顿。
+        // 每个图层独立一块 canvas，淡入淡出直接改这块 canvas 的透明度（见 map/anim.js）。
+        if (!this._renderer || this._paneName !== pane) this._renderer = L.canvas({ pane, padding: 0.3 });
+        this._paneName = pane;
         this._rebuild();
         m.addLayer(this._group);
-      } else this._group.remove();
+      } else {
+        this._group.remove();
+        // Leaflet 不会自动移除空了的 canvas 渲染器：不在这里移除，每次悬停预览、每一步候选站都会留下
+        // 一块全屏 canvas，平移缩放时全部重绘，几步之后就越来越卡。
+        if (this._renderer) { this._renderer.remove(); this._renderer = null; }
+      }
     }
     show() { if (this._map) this._map.addLayer(this._group); }
     hide() { if (this._map) this._map.removeLayer(this._group); }

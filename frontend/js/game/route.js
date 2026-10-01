@@ -22,12 +22,13 @@ import { MAX_WALK_M, MERGE_DISTANCE_M, WALK_TRANSFER_MAX_M } from '../core/confi
 import { showCenterToast, setStatus, setText, hide, show, $ } from '../core/dom.js';
 import { resolveStop, getLine, getPhys, findStopInLine, stopIndexInLine, distM } from '../data/index-builder.js';
 import { makeMassMarks, stopToData } from '../map/stop-marks.js';
-import { fadeInOverlay, setMassMarksMap, removeOverlay } from '../map/anim.js';
+import { fadeInOverlay, setMassMarksMap, removeOverlay, ANIM_FADE_IN_MS } from '../map/anim.js';
 import { hideBaseStops, updateStopsByZoom } from '../map/stop-layer.js';
-import { setOriginWalkRangeVisible, setBlindMap } from '../map/map-init.js';
+import { setOriginWalkRangeVisible, setBlindMap, focusOnPoints } from '../map/map-init.js';
 import { clearMapTutorial, resetMapTutorialPrompt, setMapTutorialStage, isTutorialTransferStop, getTutorialTransfer, setTutorialTransferPoint, setTutorialAlightHint, getTutorialAlightHint, showTutorialMistake, clearTutorialMistake, isMapPracticePending } from '../map/tutorial-layer.js';
 import { addStopMarker, stopTraveler, drawRideSegment, drawTransferWalk, drawWalkTransfer, rideEndpoint, drawWalkLeg, clearGroupOverlays } from '../map/route-layer.js';
 import { makeTransitLineLayers } from '../map/transit-line-style.js';
+import { walkRangeBounds } from '../map/walk-range.js';
 import { isNativeAmap, registerPickableLine } from '../map/native-picker.js';
 import { onStopMouseOver, onStopMouseOut, clearHighlight, renderHighlight, cancelPreview, showCurrentStopInfo, clearCurrentStopInfo } from '../map/hover.js';
 import { clearOptimal } from '../map/optimal-layer.js';
@@ -69,6 +70,28 @@ function selectOnlyLine(stop) {
   }).map((line) => line.name));
   state.selectedLineName = names.size === 1 ? [...names][0] : null;
   state.selectedLineId = null;
+}
+
+/**
+ * 确认一个站点后，把视野平滑移到能容纳“当前站 + 所有可达站”的范围（避开面板遮挡，手机/桌面自动适配）。
+ * 稍后再算：路线面板、站牌刚刚重绘，要按它们的新尺寸计算留白。
+ */
+function focusReachable(point) {
+  // 已经到了终点步行范围内：聚焦终点范围（下一步就是点“终”步行过去）
+  const nearDest = state.DEST && haversineKm(point, state.DEST) * 1000 <= MAX_WALK_M;
+  let points = [point, ...(state.candidatePoints || [])];
+  let opts = {};
+  if (nearDest) {
+    const b = walkRangeBounds([state.DEST], MAX_WALK_M + 150);
+    points = b ? [b.sw, b.ne] : [state.DEST];
+    opts = { maxZoom: 18 };
+  }
+  const run = () => focusOnPoints(points, opts);
+  // 原生高德：等新的候选线路/站点淡入完再缩放。淡入是逐帧改透明度，每一帧高德都要重绘这些图层，
+  // 与缩放动画同时进行会互相抢渲染，表现为缩放中途卡顿。兼容层（Leaflet）没有这个问题，下一帧就开始。
+  if (isNativeAmap()) setTimeout(run, ANIM_FADE_IN_MS + 40);
+  else if (typeof requestAnimationFrame === 'function') requestAnimationFrame(run);
+  else run();
 }
 
 /** 同一物理点允许 id 相同，或同名线路拆点后坐标完全重合。 */
@@ -274,6 +297,7 @@ function startRoute(d) {
   renderRoutePanel();
   show('btn-group');
   updateButtons();
+  focusReachable(d.point);
   setStatus('已选择 ' + d.logical.name + '，' + ridingHint());
 }
 
@@ -528,6 +552,7 @@ function commitRide(logical, prev, line) {
   renderRoutePanel();
   setStatus(ridingHint());
   checkTutorialProgress();
+  focusReachable(cur.point);
 }
 
 /**
@@ -571,6 +596,7 @@ function commitWalkTransfer(logical, prev, force,selectedPhys) {
   renderRoutePanel();
   setStatus(ridingHint());
   checkTutorialProgress();
+  focusReachable(cur.point);
   return true;
 }
 
@@ -943,6 +969,7 @@ function showCandidateNetwork(stop, centerPoint = null, currentPhysicalStopId = 
     if (points.length >= MAX_CANDIDATE_POINTS) break;
   }
 
+  state.candidatePoints = points.map(({ p }) => [p.lng, p.lat]); // 确认站点后据此聚焦视野
   state.candidateMarks = makeMassMarks(
     points.map(({ p, walkable, lineColor }) => stopToData(p, walkable, lineColor)),
     // 保证站点命中圆位于线路透明热区之上；地图站优先响应，空白线段仍可选线路。
@@ -960,6 +987,7 @@ function showCandidateNetwork(stop, centerPoint = null, currentPhysicalStopId = 
 
 /** 隐藏并清空候选网络（硬移除，避免淡出回调不触发导致残留） */
 export function clearCandidate() {
+  state.candidatePoints = [];
   const polylines = state.candidateOverlays;
   state.candidateOverlays = [];
   for (const o of polylines) removeOverlay(o);

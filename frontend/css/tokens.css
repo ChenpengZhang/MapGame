@@ -1,0 +1,66 @@
+@font-face {
+  font-family: "Roboto Condensed Local";
+  src: url("../fonts/RobotoCondensed/RobotoCondensed-Variable.ttf") format("truetype");
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+}
+/* ==========================================================================
+   TransitGuesser 公交导航模拟器 —— 深色主题
+   设计范式：简约深色（slate 底 + 青/橙强调色）+ 圆角玻璃卡片 + 点阵纹理
+   · 深蓝黑底、中性灰文字层级，青(cyan)/橙(orange) 点缀
+   · 圆角玻璃卡：半透明深色 + 背景模糊 + 1px 浅色细描边(ring) + 柔阴影
+   · 大圆角(10~24px)、胶囊按钮、克制的字号层级与字距
+   所有选择器/class/id 与原有保持一致，仅改变视觉，不改动任何 DOM 结构。
+   ========================================================================== */
+
+:root {
+  /* 字体：与公交线路名称牌一致——拉丁字母与数字用本地打包的 Roboto Condensed，
+     中文用思源黑体 / 苹方 / 微软雅黑。（原 ChillRoundF 寒蝉全圆体仍在 fonts/ 下，换回只需改这里并恢复 <head> 里的样式表链接） */
+  --font-sans: "Roboto Condensed Local", "Noto Sans CJK SC", "Source Han Sans SC", "PingFang SC",
+    "Hiragino Sans GB", "Microsoft YaHei", system-ui, -apple-system, sans-serif;
+
+  /* 中性色（文字层级） */
+  --ink-strong: #f1f5f9;
+  --ink: #cbd5e1;
+  --ink-muted: #94a3b8;
+  --ink-faint: #64748b;
+
+  /* 主色（中性灰，替代原来的青色）与强调色（橙） */
+  --primary: #f1f5f9;          /* 近白：悬停/链接等强调文字 */
+  --primary-strong: #475569;   /* 中性灰：填充按钮底 */
+  --primary-deep: #e2e8f0;     /* 亮灰：渐变标题端 / 胶囊文字 */
+  --primary-soft: rgba(148, 163, 184, 0.16); /* 中性灰软底 */
+  --accent: #fb923c;
+  --accent-strong: #ea580c;
+  --accent-soft: rgba(251, 146, 60, 0.14);
+
+  /* 语义色 */
+  --success: #34d399;
+  --danger: #fb7185;
+  --warn: #fbbf24;
+
+  /* 表面与描边 */
+  --bg: #0b1120;
+  --bg-soft: #111c30;
+  --surface: #131f33;
+  --surface-2: #1c2a42;
+  --surface-glass: rgba(15, 23, 42, 0.72);
+  --surface-glass-strong: rgba(15, 23, 42, 0.90);
+  --ring: rgba(255, 255, 255, 0.10);
+  --ring-strong: rgba(255, 255, 255, 0.18);
+
+  /* 阴影（深色下更重、更柔） */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 12px 24px -6px rgba(0, 0, 0, 0.5);
+  --shadow-xl: 0 24px 48px -12px rgba(0, 0, 0, 0.6);
+
+  /* 圆角 */
+  --r-sm: 10px;
+  --r-md: 14px;
+  --r-lg: 18px;
+  --r-xl: 24px;
+
+  /* 玻璃模糊 */
+  --glass-blur: saturate(140%) blur(16px);
+}

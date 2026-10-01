@@ -17,6 +17,7 @@ import { CUSTOM_LIMITS } from '../data/custom-maps.js';
 import { hideAllPanels } from '../ui/menu.js';
 import { createWalkRangeCircle } from '../map/walk-range.js';
 import { ensureGameDataReady } from './data-ready.js';
+import { fitMapBounds } from '../map/map-init.js';
 
 let draft = null;        // { code, title, description, visibility, levels }
 let selected = 0;
@@ -254,7 +255,7 @@ function drawLevel({ fit }) {
   if (points.length) {
     const pad = 0.02;
     const lngs = points.map((p) => p[0]), lats = points.map((p) => p[1]);
-    state.map.setBounds(new AMap.Bounds([Math.min(...lngs) - pad, Math.min(...lats) - pad], [Math.max(...lngs) + pad, Math.max(...lats) + pad]), false, editorPadding());
+    fitMapBounds(new AMap.Bounds([Math.min(...lngs) - pad, Math.min(...lats) - pad], [Math.max(...lngs) + pad, Math.max(...lats) + pad]), editorPadding());
   } else {
     const center = cityById(level.city)?.center;
     if (center) state.map.setZoomAndCenter(12, new AMap.LngLat(center[0], center[1]), true);

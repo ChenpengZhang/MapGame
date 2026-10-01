@@ -1,6 +1,26 @@
 {
   "version": "0.0.1",
   "configurations": [
-    { "name": "mapgame", "runtimeExecutable": "npm", "runtimeArgs": ["run", "dev"], "port": 8080 }
+    {
+      "name": "mapgame",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "dev"
+      ],
+      "port": 8080
+    },
+    {
+      "name": "mapgame-static",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "server.js"
+      ],
+      "env": {
+        "NO_OPEN": "1",
+        "PORT": "8091"
+      },
+      "port": 8091
+    }
   ]
 }

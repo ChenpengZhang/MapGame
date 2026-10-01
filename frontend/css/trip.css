@@ -1,0 +1,71 @@
+/* ==========================================================================
+   行程牌（顶栏正中）与终点方向指示（视野外时贴在地图边缘）
+   ========================================================================== */
+.trip-card {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  display: flex; align-items: center; gap: 8px;
+  width: max-content; max-width: calc(100% - 520px);
+  padding: 5px 14px 5px 6px;
+  border: 1px solid var(--ring); border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06); color: var(--ink-strong);
+  font-size: 14px; font-weight: 600; white-space: nowrap; cursor: pointer;
+  transition: background .15s;
+}
+.trip-card:hover { background: rgba(255, 255, 255, 0.12); }
+.trip-pin {
+  flex: none; display: inline-flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px; border-radius: 50%;
+  font-size: 12px; font-weight: 700; color: #fff;
+}
+.trip-pin.origin { background: var(--success); color: #06281c; }
+.trip-pin.dest { background: var(--danger); color: #3a0710; }
+.trip-name { flex: none; max-width: 12em; overflow: hidden; text-overflow: ellipsis; }
+.trip-line {
+  flex: none; width: 44px; height: 2px;
+  background: repeating-linear-gradient(90deg, var(--ink-muted) 0 6px, transparent 6px 10px);
+}
+.trip-dist {
+  flex: none; margin-left: 4px; padding-left: 10px; border-left: 1px solid var(--ring);
+  color: var(--ink-muted); font-weight: 500; font-variant-numeric: tabular-nums;
+}
+
+.dest-indicator {
+  position: absolute; left: 0; top: 0; z-index: 540;
+  display: flex; align-items: center; gap: 6px;
+  padding: 6px 12px 6px 8px;
+  border: 1px solid rgba(0, 0, 0, 0.25); border-radius: 999px;
+  background: var(--danger); color: #3a0710;
+  font-size: 13px; font-weight: 600; white-space: nowrap; cursor: pointer;
+  box-shadow: var(--shadow-lg);
+  transform: translate(-50%, -50%);
+}
+.dest-indicator b { font-weight: 700; font-variant-numeric: tabular-nums; }
+/* Iconoir arrow-up，按终点方向旋转（0° = 向上，屏幕角度 0° = 向右，所以 +90°） */
+.dest-indicator-arrow {
+  flex: none; display: inline-flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px; border-radius: 50%;
+  background: rgba(255, 255, 255, 0.9); color: #7a1020;
+}
+.dest-indicator-arrow .icon {
+  width: 16px; height: 16px;
+  transform: rotate(calc(var(--dest-angle, 0deg) + 90deg));
+}
+
+#app.menu-open #trip-card,
+#app.menu-open #dest-indicator,
+#app.custom-editing #trip-card,
+#app.custom-editing #dest-indicator { display: none; }
+
+/* 窄屏：顶栏放不下标题和行程牌，游戏中让位给行程牌 */
+@media (max-width: 900px) {
+  #app.trip-on #topbar .title { display: none; }
+  .trip-card { position: static; transform: none; max-width: calc(100% - 96px); font-size: 13px; }
+  .trip-name { flex: 0 1 auto; min-width: 0; }
+  .trip-line { width: 24px; }
+}
+@media (max-width: 600px) {
+  .trip-dist { display: none; }
+  /* 手机：顶栏只放游戏名和当前模式，不显示行程牌 */
+  #app.trip-on #topbar .title { display: block; }
+  #trip-card { display: none !important; }
+}

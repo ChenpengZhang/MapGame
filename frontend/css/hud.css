@@ -1,0 +1,387 @@
+/* ==========================================================================
+   顶栏：毛玻璃深色横条
+   ========================================================================== */
+#topbar {
+  position: absolute; top: 0; left: 0; right: 0; z-index: 500;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 16px;
+  background: var(--surface-glass-strong);
+  -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
+  border-bottom: 1px solid var(--ring);
+  box-shadow: var(--shadow-sm);
+  color: var(--ink);
+}
+#topbar .title { font-size: 16px; font-weight: 700; letter-spacing: .5px; color: var(--ink-strong); }
+#topbar .title .sub { font-weight: 500; font-size: 12px; color: var(--ink-muted); margin-left: 8px; }
+.topbar-right { display: flex; align-items: center; gap: 10px; }
+
+/* 左上角城市下拉选择器：默认（游戏进行中）隐藏，只在菜单态显示——
+   游戏过程中不允许切换城市（切换会整页重载，清空当前局）。 */
+.city-select { position: relative; display: none; }
+#app.menu-open .city-select { display: block; }
+.city-select-btn {
+  display: flex; align-items: center; gap: 6px;
+  border: 1px solid var(--ring); background: rgba(255, 255, 255, 0.06);
+  color: var(--ink-strong); font-size: 16.5px; font-weight: 700;
+  padding: 9px 16px; border-radius: 999px; cursor: pointer;
+  box-shadow: var(--shadow-sm);
+  transition: transform .15s cubic-bezier(.4,0,.2,1), background .15s, box-shadow .15s;
+}
+.city-select-btn:hover { background: rgba(255, 255, 255, 0.12); transform: translateY(-1px); box-shadow: var(--shadow-lg); }
+.city-select-btn:active { transform: translateY(0) scale(.96); }
+.city-select-caret { font-size: 12px; color: var(--ink-muted); transition: transform .2s; }
+.city-select.open .city-select-caret { transform: rotate(180deg); }
+.city-select-menu {
+  position: absolute; top: calc(100% + 6px); left: 0; min-width: 165px;
+  background: var(--surface-glass-strong);
+  -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--ring); border-radius: var(--r-md);
+  box-shadow: var(--shadow-lg); padding: 6px; z-index: 1200;
+  display: flex; flex-direction: column; gap: 6px;
+  width: 240px;
+}
+/* 搜索框固定在顶部，下面的城市列表可滚动；按拼音首字母分组 */
+.city-select-menu .city-search {
+  width: 100%; box-sizing: border-box; padding: 8px 12px;
+  border: 1px solid var(--ring); border-radius: 8px; outline: none;
+  background: rgba(255,255,255,0.06); color: var(--ink-strong); font: inherit; font-size: 14px;
+}
+.city-select-menu .city-search:focus { border-color: var(--accent); }
+.city-select-menu .city-list {
+  display: flex; flex-direction: column; gap: 2px;
+  max-height: min(360px, 60vh); overflow-y: auto; overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+.city-select-menu .city-letter {
+  position: sticky; top: 0; z-index: 1; padding: 4px 10px 2px;
+  font-size: 11px; font-weight: 700; letter-spacing: .08em; color: var(--ink-muted);
+  background: var(--surface-glass-strong);
+}
+.city-select-menu .city-empty { padding: 12px 10px; font-size: 13px; color: var(--ink-muted); text-align: center; }
+.city-select-menu .city-item {
+  display: flex; align-items: center; justify-content: space-between; gap: 6px;
+  padding: 9px 14px; border-radius: 8px; cursor: pointer;
+  font-size: 15px; font-weight: 600; color: var(--ink); white-space: nowrap;
+  transition: background .12s;
+}
+.city-select-menu .city-item:hover { background: rgba(255,255,255,0.10); }
+.city-select-menu .city-item.current { color: var(--accent); background: rgba(251,146,60,0.12); }
+#menu-btn {
+  border: 1px solid var(--ring); background: rgba(255, 255, 255, 0.06);
+  color: var(--ink-strong); font-size: 15px; width: 34px; height: 34px;
+  border-radius: 10px; cursor: pointer; box-shadow: var(--shadow-sm);
+  transition: transform .15s cubic-bezier(.4,0,.2,1), background .15s, box-shadow .15s;
+}
+#menu-btn:hover { background: rgba(255, 255, 255, 0.12); transform: translateY(-1px); box-shadow: var(--shadow-lg); }
+#menu-btn:active { transform: translateY(0) scale(.96); }
+
+/* ==========================================================================
+   地图上的浮动卡片（图例 / 路线面板 / 信息卡）
+   ========================================================================== */
+#legend {
+  position: absolute; left: 14px; bottom: 22px; z-index: 500;
+  display: flex; flex-direction: column; gap: 7px;
+  padding: 12px 14px;
+  background: var(--surface-glass-strong);
+  -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--ring); border-radius: var(--r-md);
+  box-shadow: var(--shadow-lg); font-size: 12px; color: var(--ink);
+}
+#legend .row { display: flex; align-items: center; gap: 7px; font-weight: 500; }
+#legend .dot { display: inline-block; border-radius: 50%; border: 1px solid rgba(0,0,0,.5); box-shadow: 0 0 0 1px var(--ring); }
+#legend .dot.metro { width: 12px; height: 12px; background: #f39c12; }
+#legend .dot.bus { width: 7px; height: 7px; background: #3498db; }
+#legend .dot.walk { width: 6px; height: 6px; background: #e74c3c; }
+
+#left-col {
+  position: absolute; left: 14px; top: 70px; z-index: 600;
+  display: flex; flex-direction: column; gap: 10px; max-width: 344px;
+}
+
+#mode-hud {
+  position: absolute; top: 58px; left: 50%; transform: translateX(-50%);
+  z-index: 550; display: flex; align-items: center; gap: 10px;
+  padding: 7px 16px;
+  background: var(--surface-glass-strong);
+  -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--ring); border-radius: 999px;
+  font-size: 13px; box-shadow: var(--shadow-lg); color: var(--ink);
+}
+#mode-hud #tower-layer-label { font-weight: 700; color: var(--accent); }
+#mode-hud #tower-threshold-label { color: var(--ink-muted); }
+#mode-hud #tower-timer { font-variant-numeric: tabular-nums; font-weight: 700; color: var(--ink-strong); }
+#tower-restart-btn {
+  position:absolute;top:58px;right:14px;z-index:550;width:36px;height:36px;padding:0;
+  border:1px solid var(--ring);border-radius:50%;background:var(--surface-glass-strong);
+  color:var(--ink-strong);font-size:22px;line-height:1;cursor:pointer;box-shadow:var(--shadow-lg);
+}
+#tower-restart-btn:hover{background:var(--surface-2);transform:rotate(-24deg)}
+
+#route-panel, .stop-infocard {
+  padding: 13px 14px;
+  background: var(--surface-glass-strong);
+  -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--ring); border-radius: var(--r-md);
+  box-shadow: var(--shadow-lg);
+  font-size: 12px; color: var(--ink); line-height: 1.7;
+}
+#route-panel {
+  max-height: calc(100vh - 150px);
+  overflow-y: auto; scrollbar-width: thin; overscroll-behavior: contain;
+}
+#route-panel::-webkit-scrollbar { width: 6px; }
+#route-panel::-webkit-scrollbar-thumb { background: rgba(255,255,255,.18); border-radius: 3px; }
+#route-panel::-webkit-scrollbar-track { background: transparent; }
+#route-panel .rp-title {
+  font-weight: 700; font-size: 13px; margin-bottom: 4px; color: var(--ink-strong);
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+}
+#route-panel .rp-toggle {
+  border: 1px solid var(--ring); background: var(--bg-soft); color: var(--ink-muted);
+  font-size: 11px; font-weight: 600; padding: 2px 10px; border-radius: 999px; cursor: pointer;
+}
+#route-panel .rp-toggle:hover { color: var(--ink-strong); border-color: var(--ring-strong); }
+/* 折叠态：只保留标题行，隐藏其余内容 */
+/* 折叠态：只露出标题行。折叠/展开由 ui/route-panel.js 按实际内容高度过渡 max-height，形成自然的缩放动画 */
+#route-panel { transition: max-height .28s cubic-bezier(.4,0,.2,1); }
+#route-panel.collapsed { overflow: hidden; }
+#route-panel .rp-total { color: var(--accent); font-weight: 700; }
+#route-panel .rp-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin: 2px 0; }
+#route-panel .rp-desc { flex: 1; min-width: 0; }
+#route-panel .rp-metrics { display: flex; gap: 8px; align-items: center; white-space: nowrap; }
+#route-panel .rp-pill {
+  display: inline-block; padding: 2px 9px; border-radius: 7px;
+  background: var(--primary-soft); color: var(--primary-deep);
+  font-size: 12px; font-weight: 700;
+}
+#route-panel .rp-stops { color: var(--primary); font-weight: 600; }
+#route-panel .rp-km { color: var(--success); font-weight: 600; }
+#route-panel .rp-time { color: var(--ink); font-weight: 600; }
+.stop-infocard { min-width: 0; }
+.stop-infocard .stop-name { font-weight: 700; font-size: 14px; color: var(--ink-strong); }
+.stop-infocard .stop-heading {
+  display: grid; min-width: 0; grid-template-columns: max-content max-content;
+  align-items: baseline; column-gap: 6px; line-height: 1.2;
+}
+.stop-infocard .stop-name-latin { display: none; }
+.stop-infocard .info-kicker { color: var(--ink-muted); font-size: 10px; font-weight: 700; letter-spacing: .08em; }
+.stop-infocard .infocard-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.stop-infocard .line-list { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
+:is(.stop-infocard, #route-panel) .line-tag {
+  display: inline-flex; height: 30px; box-sizing: border-box; align-items: center; justify-content: center;
+  padding: 3px 8px; border: 0; border-radius: 2px;
+  font: inherit; color: #fff; font-weight: 600; box-shadow: var(--shadow-sm);
+}
+:is(.stop-infocard, #route-panel) .line-main { line-height: 1; }
+:is(.stop-infocard, #route-panel) .line-tag.selectable { cursor: pointer; transition: transform .12s, box-shadow .12s, opacity .12s; }
+:is(.stop-infocard, #route-panel) .line-tag.selectable:hover { transform: translateY(-1px); box-shadow: 0 0 0 2px rgba(255,255,255,.75), var(--shadow-sm); }
+:is(.stop-infocard, #route-panel) .line-tag.selected { box-shadow: 0 0 0 3px #fff, 0 0 0 5px var(--accent); }
+.stop-infocard .line-list { max-height: 60vh; overflow-y: auto; transition: max-height .25s cubic-bezier(.4,0,.2,1), opacity .2s, margin .25s, padding .25s; }
+
+/* 地铁线路牌：大数字在左，“号线 / Line N”位于右侧上下角。 */
+:is(.stop-infocard, #route-panel) .metro-line {
+  min-width: 54px; display: inline-grid; grid-template-columns: auto auto; align-items: stretch;
+  column-gap: 3px; padding: 3px 5px;
+  font-family: "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+}
+:is(.stop-infocard, #route-panel) .metro-line-main {
+  align-self: center; font: 700 21px/1 "Roboto Condensed Local", Arial, sans-serif;
+}
+:is(.stop-infocard, #route-panel) .metro-line-side {
+  display: flex; min-width: 22px; height: 100%; flex-direction: column;
+  align-items: flex-start; justify-content: center; gap: 1px;
+}
+:is(.stop-infocard, #route-panel) .metro-line-suffix { font-size: 7px; font-weight: 700; line-height: 1; white-space: nowrap; }
+:is(.stop-infocard, #route-panel) .metro-line-en {
+  font: 600 7px/1 "Roboto Condensed Local", Arial, sans-serif; white-space: nowrap;
+}
+:is(.stop-infocard, #route-panel) .metro-line.text-line { min-width: 48px; grid-template-columns: auto auto; }
+:is(.stop-infocard, #route-panel) .metro-line.text-line .metro-line-main {
+  font-family: "Noto Sans CJK SC", "Source Han Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+  font-size: 11px; line-height: 1.05;
+}
+:is(.stop-infocard, #route-panel) .metro-line.text-line .metro-line-suffix { font-size: 6px; }
+:is(.stop-infocard, #route-panel) .metro-line.text-line .metro-line-en { font-size: 6px; }
+
+/* 公交和地铁站点预览共用天津站牌式外框；区别只在线路牌内部。 */
+.stop-infocard.bus-board,
+.stop-infocard.metro-board {
+  box-sizing: border-box; width: min(344px, calc(100vw - 20px)); padding: 6px 7px;
+  border: 0; border-top: 4px solid #b8c0c6; border-radius: 0;
+  background: rgba(250,250,246,.97); color: #111;
+  -webkit-backdrop-filter: none; backdrop-filter: none;
+  box-shadow: 0 4px 14px rgba(15,23,42,.28);
+}
+.stop-infocard.bus-board .stop-name,
+.stop-infocard.metro-board .stop-name {
+  color: #111; font-family: "Noto Sans CJK SC", "Source Han Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+  font-size: 12px; font-weight: 700;
+}
+.stop-infocard.bus-board .info-kicker,
+.stop-infocard.metro-board .info-kicker { color: #66717a; font-size: 7px; letter-spacing: .04em; }
+.stop-infocard.bus-board .infocard-head,
+.stop-infocard.metro-board .infocard-head { gap: 4px; }
+.stop-infocard.bus-board .line-list,
+.stop-infocard.metro-board .line-list { align-items: flex-start; gap: 3px; margin-top: 4px; padding-top: 4px; border-top: 1px solid #c5cbd0; }
+:is(.stop-infocard, #route-panel) .bus-line {
+  min-width: 43px; height: 25px; border-radius: 0; padding: 0 4px;
+  align-items: center; justify-content: center;
+}
+:is(.stop-infocard, #route-panel) .bus-line-content {
+  display: inline-flex; align-items: baseline; line-height: 1;
+}
+:is(.stop-infocard, #route-panel) .bus-line .line-main {
+  font: 600 18px/1 "Roboto Condensed Local", Arial, Helvetica, sans-serif;
+}
+/* 汉字字面比拉丁基线低约 0.1em；只做视觉上移（不影响布局），让“密/路”底边与数字底边齐平。 */
+:is(.stop-infocard, #route-panel) .bus-line .line-prefix,
+:is(.stop-infocard, #route-panel) .bus-line .line-suffix {
+  margin: 0 1px; font-family: "Noto Sans CJK SC", "Source Han Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+  font-size: 7px; font-weight: 600; line-height: 1;
+  transform: translateY(-0.09em);
+}
+/* 支持 text-box 的浏览器把行框裁到“大写字母高度 ~ 基线”，内容块即数字字面本身，
+   站牌的 align-items/justify-content:center 因而按可见字形上下左右居中，而不受字体行高影响。 */
+@supports (text-box: trim-both cap alphabetic) {
+  :is(.stop-infocard, #route-panel) .bus-line:not(.text-line) .line-main,
+  :is(.stop-infocard, #route-panel) .bus-line:not(.text-line) .line-prefix,
+  :is(.stop-infocard, #route-panel) .bus-line:not(.text-line) .line-suffix { text-box: trim-both cap alphabetic; }
+}
+:is(.stop-infocard, #route-panel) .bus-line.text-line { min-width: 0; max-width: 100%; align-items: center; justify-content: center; }
+:is(.stop-infocard, #route-panel) .bus-line.text-line .bus-line-content { align-items: center; }
+:is(.stop-infocard, #route-panel) .bus-line.text-line .line-main {
+  font-family: "Noto Sans CJK SC", "Source Han Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+  font-size: 10px; line-height: 1.1; white-space: normal; text-align: center;
+}
+.stop-infocard.bus-board .info-toggle,
+.stop-infocard.metro-board .info-toggle { padding: 1px 5px; font-size: 8px; }
+.stop-infocard.bus-board .info-walk,
+.stop-infocard.metro-board .info-walk { margin-top: 3px; font-size: 8px; }
+.stop-infocard.metro-board .info-toggle,
+.stop-infocard.bus-board .info-toggle { border-radius: 2px; background: #eef2f5; color: #334155; border-color: #aeb8c2; }
+.stop-infocard.metro-board .info-walk,
+.stop-infocard.bus-board .info-walk { color: #52606d; }
+.info-toggle {
+  border: 1px solid var(--ring); background: var(--bg-soft); color: var(--ink-muted);
+  font-size: 11px; font-weight: 600; padding: 2px 10px; border-radius: 999px; cursor: pointer;
+  white-space: nowrap;
+}
+.info-toggle:hover { color: var(--ink-strong); border-color: var(--ring-strong); }
+.info-walk { margin-top: 6px; color: var(--ink-muted); font-size: 12px; }
+/* ==========================================================================
+   地图图钉（保持动画与 class，配色向主题靠拢）
+   ========================================================================== */
+.pin {
+  width: 24px; height: 24px; border-radius: 50%;
+  color: #fff; font-size: 12px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 2px 6px rgba(0,0,0,.5); border: 2px solid #fff;
+  animation: pin-pop .32s cubic-bezier(.34,1.56,.64,1);
+}
+.amap-pin-marker { background: transparent; border: none; }
+.pin.origin { background: var(--success); }
+.pin.dest { background: var(--danger); cursor: pointer; }
+.pin.route { background: var(--primary-strong); }
+.pin.transfer { background: var(--accent); font-size: 11px; }
+@keyframes pin-pop {
+  from { transform: scale(.4); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+.pin.flash { animation: pin-flash 3s ease-out; }
+@keyframes pin-flash {
+  0% { transform: scale(.6); opacity: 0; }
+  18% { transform: scale(1.4); opacity: 1; box-shadow: 0 0 0 8px rgba(255,255,255,.9), 0 0 24px 8px rgba(255,255,255,.75); }
+  40% { transform: scale(1); box-shadow: 0 2px 6px rgba(0,0,0,.5); }
+  58% { transform: scale(1.22); box-shadow: 0 0 0 6px rgba(255,255,255,.65), 0 0 16px 5px rgba(255,255,255,.55); }
+  78% { transform: scale(1); box-shadow: 0 2px 6px rgba(0,0,0,.5); }
+  100% { transform: scale(1); box-shadow: 0 2px 6px rgba(0,0,0,.5); }
+}
+
+/* 地图教学牌：参考道路指示牌，蓝线内缩于浅色长圆牌边缘，文字保持纯黑。 */
+.map-tutorial-label {
+  position: relative;
+  transform: translate(-50%, calc(-100% - 14px));
+  width: max-content; max-width: min(280px, 78vw);
+  padding: 7px 14px; border: 3px solid #eef3f5; border-radius: 999px;
+  background: #f8faf8; color: #111;
+  font-size: 13px; font-weight: 800; line-height: 1.35; text-align: center;
+  box-shadow: inset 0 0 0 2px #91c9e8, 0 2px 6px rgba(0,0,0,.24);
+  pointer-events: none; white-space: nowrap;
+  animation: tutorial-label-in .25s ease-out;
+}
+@keyframes tutorial-label-in {
+  from { opacity: 0; transform: translate(-50%, calc(-100% - 8px)); }
+  to { opacity: 1; transform: translate(-50%, calc(-100% - 14px)); }
+}
+@media (max-width: 600px) {
+  .map-tutorial-label { max-width: 74vw; padding: 6px 12px; white-space: normal; font-size: 12px; }
+}
+
+/* ==========================================================================
+   底部操作条
+   ========================================================================== */
+.btn-group { position: absolute; right: 14px; bottom: 22px; z-index: 500; display: flex; gap: 8px; }
+.btn-group button {
+  padding: 9px 16px; border: 1px solid var(--ring); border-radius: 999px;
+  font-size: 13px; font-weight: 600; cursor: pointer; color: #fff;
+  box-shadow: var(--shadow-sm);
+  transition: transform .15s cubic-bezier(.4,0,.2,1), box-shadow .15s, filter .15s;
+}
+.btn-group button:hover { transform: translateY(-1px); box-shadow: var(--shadow-lg); filter: brightness(1.08); }
+.btn-group button:active { transform: translateY(0) scale(.97); }
+#undo-btn { background: var(--primary-strong); }
+#reset-btn { background: #334155; }
+#show-all-btn { background: #059669; }
+
+/* 规划中的"强制步行"开关（与步行标线同色） */
+#force-walk-row {
+  display: flex; align-items: center; gap: 6px;
+  padding: 9px 16px; border: 1px solid var(--ring); border-radius: 999px;
+  font-size: 13px; font-weight: 600; color: #fff; cursor: pointer; user-select: none;
+  background: #2ecc71; box-shadow: var(--shadow-sm);
+  transition: transform .15s cubic-bezier(.4,0,.2,1), box-shadow .15s, filter .15s;
+}
+#force-walk-row:hover { transform: translateY(-1px); box-shadow: var(--shadow-lg); filter: brightness(1.08); }
+#force-walk-row input { width: 15px; height: 15px; accent-color: #fff; cursor: pointer; }
+
+.hidden { display: none !important; }
+
+/* ==========================================================================
+   加载遮罩
+   ========================================================================== */
+#loading-overlay {
+  position: fixed; inset: 0; z-index: 1000;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  background: var(--bg);
+  cursor: wait;
+}
+.loading-card { display: flex; flex-direction: column; align-items: center; }
+/* 全屏加载：一辆巴士沿圆形车道绕圈行驶 */
+.bus-loader { position: relative; width: 96px; height: 96px; }
+.bus-loader-road {
+  position: absolute; inset: 10px; border-radius: 50%;
+  border: 3px dashed rgba(255, 255, 255, .22);
+}
+.bus-loader-orbit { position: absolute; inset: 0; animation: spin 1.6s linear infinite; }
+.bus-loader-orbit .icon {
+  position: absolute; left: 50%; top: 0; width: 26px; height: 26px;
+  margin-left: -13px; margin-top: -2px; color: var(--accent);
+  /* 侧面巴士车头朝右，位于圆顶时正好沿顺时针方向行驶，随轨道一起转动 */
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.loading-text { color: var(--ink-muted); margin-top: 18px; font-size: 14px; letter-spacing: 1px; }
+/* 下载进度条（加载遮罩内，仅在有下载进度时显示） */
+.progress-track {
+  width: 220px; height: 6px; margin-top: 16px;
+  border-radius: 999px; overflow: hidden;
+  background: var(--primary-soft);
+}
+.progress-bar {
+  width: 0%; height: 100%; border-radius: 999px;
+  background: var(--accent);
+  transition: width .12s ease-out;
+}
+
+/* 站点画在 canvas 上，只负责显示：鼠标穿透到地图，由 native-picker 统一拾取站点
+   （多块 canvas 叠放时只有最上面一块能收到鼠标，下面的站点和线路热区会点不到） */
+#map .leaflet-pane canvas { pointer-events: none; }

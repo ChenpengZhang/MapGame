@@ -66,11 +66,12 @@ export function makeMassMarks(data, options = {}) {
     zIndex: options.zIndex ?? 110,
     style: styles,
     // 纯展示层（如悬浮预览线路上的站点）不生成命中区，避免抢走下层站点的悬浮/点击。
-    interactive: options.interactive !== false,
+    // Leaflet 兼容层不生成自己的命中圆（点击统一由 native-picker 拾取），原生高德保持原样
+    interactive: isNativeAmap() && options.interactive !== false,
   });
   mm.__baseOpacity = 0.9;
-  // 原生高德的海量点命中范围只有图标大小：改由 native-picker 按与兼容层一致的半径拾取
-  if (isNativeAmap() && options.interactive !== false) makeMassMarksPickable(mm, data, options.zIndex ?? 110);
+  // 站点点选统一由 native-picker 按屏幕像素距离拾取（两种底图都用）
+  if (options.interactive !== false) makeMassMarksPickable(mm, data, options.zIndex ?? 110);
   return mm;
 }
 

@@ -147,3 +147,8 @@ export function preventPagePinch() {
     }
   }, { passive: false });
 }
+
+/** 距离显示：10 km 以内保留一位小数 */
+export function formatKm(km) {
+  return km < 10 ? `${km.toFixed(1)} km` : `${Math.round(km)} km`;
+}

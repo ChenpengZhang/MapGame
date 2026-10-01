@@ -39,6 +39,7 @@
     busMetroTransferMin: 5,
     allowMetro: true, // 禁用地铁模式 = false
     mergeDistanceM: 300, // 同名物理站在此距离内合并为逻辑站
+    fuzzyMergeDistanceM: 150, // 站名写法不同（见 fuzzyNamesMatch）时的合并距离，更严格
     maxWalkKm: 1.5,      // 起终点可选择的最远步行距离
   };
 
@@ -110,6 +111,31 @@
     if (shorter.length < 2) return false;
     const longer = a.length <= b.length ? b : a;
     return longer.includes(shorter);
+  }
+
+  // 站名写法差异（数据源里同一站在上下行常被写成不同名字）：先去掉括号注释、间隔号/连字符/空格、
+  // 结尾的“站”或编号，再比较——相同、一者包含另一者，或短名（≥3 字）按顺序出现在长名里且只多 1~2 个字
+  // （如“蔡榨街客运站 / 蔡家榨街客运站”“大同总工会 / 大同市总工会”“江东北路·龙园北路 / 江东北路龙园北路”）。
+  // 这类合并更宽松，只在 fuzzyMergeDistanceM（150m）内使用，避免把附近真正不同的站并在一起。
+  function normalizeStopName(name) {
+    return String(name || '').trim()
+      .replace(/[（(][^）)]*[)）]/g, '')
+      .replace(/[·•\-－—\s]/g, '')
+      .replace(/站$/, '')
+      .replace(/\d+$/, '');
+  }
+  function isSubsequence(short, long) {
+    let i = 0;
+    for (const ch of long) if (ch === short[i]) i++;
+    return i === short.length;
+  }
+  function fuzzyNamesMatch(a, b) {
+    const x = normalizeStopName(a), y = normalizeStopName(b);
+    const shorter = x.length <= y.length ? x : y;
+    const longer = x.length <= y.length ? y : x;
+    if (shorter.length < 3) return false;
+    if (longer.includes(shorter)) return true;
+    return longer.length - shorter.length <= 2 && isSubsequence(shorter, longer);
   }
 
   // 机场航站楼特殊匹配：同一航站楼在不同线路上叫法各异（T2 / (T2) / 2号航站楼 / 2航楼 / 国际机场T2…），
@@ -264,7 +290,10 @@
           if (!cell) continue;
           for (const q of cell) {
             if (q.id === p.id) continue;
-            if (haversineM(p, q) < DEFAULT_PARAMS.mergeDistanceM && (namesMatch(p.name, q.name) || airportTerminalMatch(p.name, q.name)) && !sharesLine(p, q)) union(p.id, q.id);
+            if (sharesLine(p, q)) continue;
+            const d = haversineM(p, q);
+            if (d < DEFAULT_PARAMS.mergeDistanceM && (namesMatch(p.name, q.name) || airportTerminalMatch(p.name, q.name))) union(p.id, q.id);
+            else if (d < DEFAULT_PARAMS.fuzzyMergeDistanceM && fuzzyNamesMatch(p.name, q.name)) union(p.id, q.id);
           }
         }
       }
