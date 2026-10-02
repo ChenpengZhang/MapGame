@@ -8,7 +8,7 @@
 
 import { state } from '../core/state.js';
 import { MAX_WALK_M } from '../core/config.js';
-import { busMinZoom } from './stop-layer.js';
+import { busMinZoom, setTutorialBusStopsHidden } from './stop-layer.js';
 import { haversineKm } from '../core/router-api.js';
 
 let promptConfig = null;
@@ -199,6 +199,7 @@ function renderCardTip(tipId, cardId, text) {
 
 function renderPrompt() {
   removeMarker();
+  setTutorialBusStopsHidden(isMapPracticePending());
   renderGuidePanel();
   // 此教程仅使用文字框，保留普通游戏的站点、线路与起终点图层。
   if (promptConfig?.panelOnly) return;
@@ -288,28 +289,27 @@ function renderGuidePanel() {
     action = '选择一个上车站\n提示：点空白处或「取消」可取消选择。';
   } else if (state.pendingStart && !stops.length) {
     title = '确认上车站';
-    text = `已锁定「${pendingName}」。再次${tap}「${pendingName}」即可确认步行到这里上车。确认前也可以${tap}站点名称板中的线路名称或地图上的线路标线选择线路，只有一条线路时会自动选中。`;
+    text = `已锁定「${pendingName}」。再次${tap}「${pendingName}」即可确认步行到这里上车。在左上角可以查看经过该站的线路。`;
     action = `再次${tap}「${pendingName}」确认\n提示：仍可取消选择或点击其他站点更换。`;
   } else if (promptStage === 'confirm') {
     title = '确认这一段行程';
     text = `再次${tap}「${pendingName}」即可确认到达这里，将这一段行程加入路线。也可以${tap}其他可达站点，继续比较下车位置。`;
-    action = '提示：「上一步」可撤回已确认的选择。';
+    action = '确认所选站点，或选择其他站点\n提示：「上一步」可撤回已确认的选择。';
   } else if (promptStage === 'finish') {
     title = '步行到达终点';
     text = `从「${currentName}」已能步行到达终点。${tap}地图上的「终」即可完成最后一段步行并结束路线，查看本次旅程的用时。`;
     action = '步行到达终点\n提示：最后一段步行也会计入用时。';
   } else if (promptStage === 'rideStop') {
     title = '预览下车站';
-    text = `沿「${state.selectedLineName || '当前线路'}」选择想下车的站点，${tap}一次即可预览。可以一次乘过多个站；到不了终点附近时，可以在途中下车换乘。`;
-    action = '预览一个下车站\n提示：点一次查看，再点一次确认。';
-    if (alightHintPoint) action += `在「${promptConfig.alightHint.stopName}」下车换乘。`;
+    text = `左上角显示了已规划的路线和用时。沿「${state.selectedLineName || '当前线路'}」选择想下车的站点，${tap}一次即可预览。可以一次乘过多个站；到不了终点附近时，可以在途中下车换乘。`;
+    action = '预览一个下车站\n提示：选择靠近终点、可换乘其他线路的站点，尝试规划更短的路线。点一次查看并锁定，再点一次确认。';
   } else {
     title = hasRidden ? '换乘或继续乘车' : '查看并选择线路';
     text = hasRidden
-      ? `在「${currentName}」的站点名称板中${tap}线路名称，或${tap}地图标线，即可选择接下来乘坐的线路。选择另一条线路就是换乘，也可以沿原线路继续乘车。`
+      ? `左上角显示了已规划的路线和用时。在「${currentName}」的站点名称板中${tap}线路名称，或${tap}地图上的线路，即可高亮显示并查看沿途站点。选择另一条线路就是换乘，也可以沿原线路继续乘车。`
       : `在站点名称板中${tap}线路名称，或${tap}地图标线，即可选择线路并查看沿途站点。可以自由比较多条线路；只有一条时会自动选中。`;
     action = hasRidden
-      ? '选择接下来的线路\n提示：选好后可预览沿途的下车站。'
+      ? '预览接下来的线路并选择下车点\n提示：选择尽可能靠近终点，或位于终点步行范围（终点红圈）内的站点。同样，点一次查看并锁定站点，再点一次确认。'
       : '选择一条线路\n提示：选好后可预览沿途的下车站。';
   }
   document.getElementById('tutorial-guide-title').textContent = title;
@@ -525,5 +525,6 @@ export function clearMapTutorial() {
   promptPosition = null;
   busStopsRevealed = false;
   boardingPreviewStarted = false;
+  setTutorialBusStopsHidden(false);
   renderGuidePanel();
 }
