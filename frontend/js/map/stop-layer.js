@@ -45,6 +45,15 @@ let originWalkMarksShown = false;
 let refreshTimer = null;      // 平移/缩放刷新防抖
 let stopHandlers = {};        // { onClick, onMouseOver, onMouseOut, onMapClick }
 let mapListeners = null;
+let tutorialBusStopsHidden = false;
+
+/** 地图操作练习时隐藏公交站，进入选站步骤后恢复正常缩放规则。 */
+export function setTutorialBusStopsHidden(hidden) {
+  if (tutorialBusStopsHidden === hidden) return;
+  tutorialBusStopsHidden = hidden;
+  updateStopsByZoom();
+  refreshVisibleStops();
+}
 
 /** 切城前卸下旧站点与地图监听，避免两套城市同时接收点击。 */
 export function disposeStops() {
@@ -173,7 +182,7 @@ function refreshStopData(mm) {
     const walkable = viewportStops().filter((stop) =>
       isWithinWalkRange(stop, state.ORIGIN)
       && ((stop.mode === 'metro' && !state.scenario.noMetro && z >= METRO_MIN_ZOOM)
-        || (stop.mode === 'bus' && z >= busMinZoom()))
+        || (stop.mode === 'bus' && !tutorialBusStopsHidden && z >= busMinZoom()))
     );
     setStopData(mm, walkable.map((stop) => stopToData(stop, true)));
     return;
@@ -209,13 +218,13 @@ export function updateStopsByZoom() {
   const showBase = !state.scenario?.realRide && (state.routeStops.length === 0 || state.showAllStops);
   const z = state.map.getZoom();
   setStopsVisible(metroMarks, showBase && !state.scenario.noMetro && z >= METRO_MIN_ZOOM, () => metroMarksShown, (v) => { metroMarksShown = v; });
-  setStopsVisible(busMarks, showBase && z >= busMinZoom(), () => busMarksShown, (v) => { busMarksShown = v; }); // 公交站按缩放等级显隐
+  setStopsVisible(busMarks, showBase && !tutorialBusStopsHidden && z >= busMinZoom(), () => busMarksShown, (v) => { busMarksShown = v; }); // 公交站按缩放等级和教学阶段显隐
   const showOriginWalk = (showBase || !!state.scenario?.realRide) && state.routeStops.length === 0 && !!state.ORIGIN
-    && ((!state.scenario.noMetro && z >= METRO_MIN_ZOOM) || z >= busMinZoom());
+    && ((!state.scenario.noMetro && z >= METRO_MIN_ZOOM) || (!tutorialBusStopsHidden && z >= busMinZoom()));
   setStopsVisible(originWalkMarks, showOriginWalk, () => originWalkMarksShown, (v) => { originWalkMarksShown = v; });
   // 红色层在地铁级别（13）就已显示，只含地铁站；缩放跨过公交级别时它不会重新 show，
   // 必须立刻补上公交步行站，否则蓝色公交层先出现、要等缩放停止才刷新成红色。
-  const walkIncludesBus = showOriginWalk && z >= busMinZoom();
+  const walkIncludesBus = showOriginWalk && !tutorialBusStopsHidden && z >= busMinZoom();
   if (originWalkMarksShown && walkIncludesBus !== originWalkHasBus) refreshStopData(originWalkMarks);
   originWalkHasBus = walkIncludesBus;
 }

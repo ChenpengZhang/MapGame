@@ -545,11 +545,15 @@ await step('自由选线换乘教程：欢迎、提示、换乘、撤回与通�
   const { isMapPracticePending } = await import('../frontend/js/map/tutorial-layer.js');
   const { ensureGameDataReady } = await import('../frontend/js/game/data-ready.js');
   assert.equal(await ensureGameDataReady(lv.cityId), true);
+  const tutorialStopLayers = created.massMarks.slice(-3);
+  const visibleBusStops = () => tutorialStopLayers.filter(m => m.map && m.shown)
+    .flatMap(m => m.data).filter(p => p.mode === 'bus');
   startLevel(lv);
   assert.equal(state.storyActive, true, '开场先显示欢迎说明');
   assert.ok(el('story-text').textContent.includes('尽可能快地抵达'));
   assert.equal(el('story-welcome-title').textContent, '欢迎来到 TransitGuesser');
   assert.ok(el('tutorial-guide').classList.contains('hidden'), '欢迎说明与操作框不重叠');
+  assert.equal(visibleBusStops().length, 0, '欢迎阶段隐藏公交站');
   storyNext();
   assert.equal(state.storyActive, false, '开始后可自由操作地图');
   assert.ok(!el('tutorial-guide').classList.contains('hidden'));
@@ -574,6 +578,7 @@ await step('自由选线换乘教程：欢迎、提示、换乘、撤回与通�
   for (const handler of state.map.__ev.zoomchange || []) handler({});
   assert.ok(el('tutorial-guide-title').textContent.includes('熟悉地图'), '手动缩放不会跳过第一步');
   assert.equal(el('tutorial-guide-title').textContent, '熟悉地图操作', '标题只使用步骤名称');
+  assert.equal(visibleBusStops().length, 0, '第一步即使放大地图也不显示公交站');
   const practiceStop = state.physStops.find(p => p.name === '迎宾桥');
   const previousToast = el('center-toast').textContent;
   onStopMouseOver({ data: stopToData(practiceStop) });
@@ -588,13 +593,16 @@ await step('自由选线换乘教程：欢迎、提示、换乘、撤回与通�
   assert.ok(el('tutorial-guide-title').textContent.includes('熟悉地图'), '聚焦终点不能完成起点目标');
   adjustView(new BoundsStub(focusedBounds.sw, focusedBounds.ne));
   assert.equal(el('tutorial-guide-title').textContent, '选择上车站', '手动移到起点并放大也能进入下一步');
+  assert.ok(visibleBusStops().length > 0, '手动完成第一步后显示公交站');
   assert.ok(el('tutorial-guide-text').textContent.includes('起点红圈的步行范围'), '说明从哪里选择上车站');
   assert.ok(el('tutorial-guide-text').textContent.includes('将鼠标移到站点上'), '说明悬停预览的操作方式');
   assert.ok(el('tutorial-guide-text').textContent.includes('单击一下即可锁定'), '说明单击锁定站点');
   adjustView(wideBounds);
   assert.ok(el('tutorial-guide-title').textContent.includes('熟悉地图'), '视野太宽时退回地图操作');
+  assert.equal(visibleBusStops().length, 0, '返回第一步时再次隐藏公交站');
   originPin.__ev.click[0]();
   assert.equal(el('tutorial-guide-title').textContent, '选择上车站');
+  assert.ok(visibleBusStops().length > 0, '点击起点完成第一步后显示公交站');
   const alternate = state.physStops.find(p => p.name === '州文体艺术中心');
   onStopMouseOver({ data: stopToData(alternate) });
   await wait(60);
@@ -640,7 +648,8 @@ await step('自由选线换乘教程：欢迎、提示、换乘、撤回与通�
   pickLine('3路');
   assert.ok(el('tutorial-guide-text').textContent.includes('3路'));
   assert.ok(el('tutorial-guide-text').textContent.includes('途中下车换乘'), '无需一条线直接到终点');
-  assert.equal(el('tutorial-guide-action').textContent, '预览一个下车站\n提示：点一次查看，再点一次确认。在「博州妇幼保健院」下车换乘。', '乘上 3路 后在提示里建议换乘站');
+  assert.ok(el('tutorial-guide-action').textContent.includes('可换乘其他线路的站点'), '底部提示引导考虑换乘');
+  assert.ok(!el('tutorial-guide-action').textContent.includes('博州妇幼保健院'), '自由选择下车站，不指定换乘站');
   const intermediate = physical(line3, '天山南路');
   onCandidateStopClick(stopToData(intermediate));
   onCandidateStopClick(stopToData(intermediate));
@@ -654,6 +663,8 @@ await step('自由选线换乘教程：欢迎、提示、换乘、撤回与通�
   assert.equal(state.routeStops.length, 2);
   assert.equal(state.selectedLineName, null, '换乘站有多条线路时保持手动选择');
   assert.ok(el('tutorial-guide-title').textContent.includes('换乘'), '到达中途站后介绍换乘');
+  assert.ok(el('tutorial-guide-text').textContent.includes('高亮显示并查看沿途站点'), '换乘步骤介绍线路高亮');
+  assert.ok(el('tutorial-guide-action').textContent.includes('预览接下来的线路并选择下车点'), '换乘步骤引导选择后续线路和下车点');
   assert.ok(el('tutorial-guide-text').textContent.includes(transfer.name));
   assert.ok(!el('tutorial-guide-action').textContent.includes('下车换乘'), '到达换乘站后不再建议下车');
   pickLine('2路');
