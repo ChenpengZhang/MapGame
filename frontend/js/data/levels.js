@@ -37,8 +37,6 @@ export const LEVELS = [{
   success: '教程完成！你已经学会了如何规划一条路线。',
   mapTutorial: {
     panel: true, panelOnly: true, mapPractice: true, waitForBusStops: true,
-    // 乘上能到换乘站的线路后，在文字框里建议在此下车换乘
-    alightHint: { stopName: '博州妇幼保健院' },
   },
 }];
 

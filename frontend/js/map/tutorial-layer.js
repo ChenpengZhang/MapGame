@@ -365,7 +365,6 @@ function noteMarker(center, text) {
 }
 
 function clearAnnotations() {
-  alightHintPoint = null;
   for (const m of highlightMarkers.concat(noteMarkers)) m.setMap(null);
   highlightMarkers = [];
   noteMarkers = [];
@@ -407,22 +406,6 @@ function syncAnnotations() {
     if (center && note.text) noteMarkers.push(noteMarker(center, note.text));
   }
   setHudFlash(!!promptConfig.flashHud && !started);
-}
-
-// ============ 下车换乘提示（自由教程 mapTutorial.alightHint） ============
-// 玩家所乘线路会经过建议的换乘站时，只在右侧文字框里建议在此下车（地图上不加高亮）；
-// 到站、撤回或改选线路后由玩法层重新设置。
-let alightHintPoint = null;
-
-/** 玩法层告知所乘线路在建议换乘站的站台坐标；传 null 取消提示 */
-export function setTutorialAlightHint(point) {
-  alightHintPoint = promptConfig?.alightHint && Array.isArray(point) ? point : null;
-  renderGuidePanel();
-}
-
-/** 自由教程的建议下车站配置（无则为 null） */
-export function getTutorialAlightHint() {
-  return promptConfig?.alightHint || null;
 }
 
 /** 为当前关卡启用地图教学；传空值时关闭。 */
@@ -507,7 +490,6 @@ function cancelSlide() {
 
 /** 重新开始本关时恢复第一步提示。 */
 export function resetMapTutorialPrompt() {
-  if (alightHintPoint) setTutorialAlightHint(null);
   if (promptConfig) setMapTutorialStage('initial');
 }
 

@@ -25,7 +25,7 @@ import { makeMassMarks, stopToData } from '../map/stop-marks.js';
 import { fadeInOverlay, setMassMarksMap, removeOverlay, ANIM_FADE_IN_MS } from '../map/anim.js';
 import { hideBaseStops, updateStopsByZoom } from '../map/stop-layer.js';
 import { setOriginWalkRangeVisible, setBlindMap, focusOnPoints } from '../map/map-init.js';
-import { clearMapTutorial, resetMapTutorialPrompt, setMapTutorialStage, isTutorialTransferStop, getTutorialTransfer, setTutorialTransferPoint, setTutorialAlightHint, getTutorialAlightHint, showTutorialMistake, clearTutorialMistake, isMapPracticePending } from '../map/tutorial-layer.js';
+import { clearMapTutorial, resetMapTutorialPrompt, setMapTutorialStage, isTutorialTransferStop, getTutorialTransfer, setTutorialTransferPoint, showTutorialMistake, clearTutorialMistake, isMapPracticePending } from '../map/tutorial-layer.js';
 import { addStopMarker, stopTraveler, drawRideSegment, drawTransferWalk, drawWalkTransfer, rideEndpoint, drawWalkLeg, clearGroupOverlays } from '../map/route-layer.js';
 import { makeTransitLineLayers } from '../map/transit-line-style.js';
 import { walkRangeBounds } from '../map/walk-range.js';
@@ -144,9 +144,6 @@ function toggleCurrentLine(lineName, lineId = null) {
  */
 function promptRideStage(current) {
   if (state.currentLevel?.mapTutorial?.panelOnly) {
-    const hint = getTutorialAlightHint();
-    const reached = hint && state.routeStops.some((s) => s.logical?.name === hint.stopName);
-    setTutorialAlightHint(hint && !reached && state.selectedLineName ? linePlatform(current, hint.stopName) : null);
     const nearDest = haversineKm(current.point, state.DEST) * 1000 <= MAX_WALK_M;
     setMapTutorialStage(nearDest ? 'finish' : state.selectedLineName ? 'rideStop' : 'selectLine');
     return;
