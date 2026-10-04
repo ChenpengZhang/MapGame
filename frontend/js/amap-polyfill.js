@@ -337,6 +337,21 @@
     getOptions() { return { strokeOpacity: this._o.options.opacity }; }
   };
 
+  // 多边形：目前只用于“按江截断的步行范围”（形状与样式接口同 Circle）
+  AMap.Polygon = class extends AMap.Circle {
+    constructor(opts) {
+      super({ ...opts, center: opts.path[0] });
+      this._o = L.polygon(opts.path.map((p) => gcj2leaflet([p[0], p[1]])), {
+        color: opts.strokeColor || '#fff',
+        weight: opts.strokeWeight || 2,
+        opacity: opts.strokeOpacity != null ? opts.strokeOpacity : 1,
+        fillColor: opts.fillColor || '#e74c3c',
+        fillOpacity: opts.fillOpacity != null ? opts.fillOpacity : 0.25,
+        interactive: opts.interactive !== false,
+      });
+    }
+  };
+
   AMap.Marker = class {
     constructor(opts) {
       // 高德 offset = 内容左上角相对坐标点的偏移；Leaflet 的 iconAnchor 正好是它的相反数。

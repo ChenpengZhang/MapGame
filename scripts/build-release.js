@@ -45,6 +45,7 @@ const INCLUDE = [
   'frontend/assets',
   'frontend/js',
   'shared/router.js',
+  'shared/rivers.js',            // 禁止步行过江（江河中心线判断）
   'frontend/fonts',                      // ChillRoundF 字体（SIL OFL，本地打包）
   'data/beijing-transit.json',  // 北京全量数据（GCJ-02）
   'data/guangzhou-transit.json',// 广州全量数据
@@ -61,6 +62,7 @@ const INCLUDE = [
   'data/nanjing-transit.json',
   'data/tianjin-transit.json',
   'data/boundaries',            // 城市行政边界：无尽模式“盲棋”画城市轮廓
+  'data/rivers',                // 江河中心线：武汉、重庆禁止步行过江
   'data/sample.json',           // 演示兜底
   'README.md',
 ];

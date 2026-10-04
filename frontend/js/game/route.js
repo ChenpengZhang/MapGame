@@ -29,6 +29,7 @@ import { clearMapTutorial, resetMapTutorialPrompt, setMapTutorialStage, isTutori
 import { addStopMarker, stopTraveler, drawRideSegment, drawTransferWalk, drawWalkTransfer, rideEndpoint, drawWalkLeg, clearGroupOverlays } from '../map/route-layer.js';
 import { makeTransitLineLayers } from '../map/transit-line-style.js';
 import { walkRangeBounds } from '../map/walk-range.js';
+import { crossesRiver } from '../core/rivers.js';
 import { isNativeAmap, registerPickableLine } from '../map/native-picker.js';
 import { onStopMouseOver, onStopMouseOut, clearHighlight, renderHighlight, cancelPreview, showCurrentStopInfo, clearCurrentStopInfo } from '../map/hover.js';
 import { clearOptimal } from '../map/optimal-layer.js';
@@ -77,8 +78,9 @@ function selectOnlyLine(stop) {
  * 稍后再算：路线面板、站牌刚刚重绘，要按它们的新尺寸计算留白。
  */
 function focusReachable(point) {
+  if (state.settings?.focusOnConfirm === false) return; // 设置里可关闭
   // 已经到了终点步行范围内：聚焦终点范围（下一步就是点“终”步行过去）
-  const nearDest = state.DEST && haversineKm(point, state.DEST) * 1000 <= MAX_WALK_M;
+  const nearDest = state.DEST && haversineKm(point, state.DEST) * 1000 <= MAX_WALK_M && !crossesRiver(point, state.DEST);
   let points = [point, ...(state.candidatePoints || [])];
   let opts = {};
   if (nearDest) {
@@ -144,7 +146,7 @@ function toggleCurrentLine(lineName, lineId = null) {
  */
 function promptRideStage(current) {
   if (state.currentLevel?.mapTutorial?.panelOnly) {
-    const nearDest = haversineKm(current.point, state.DEST) * 1000 <= MAX_WALK_M;
+    const nearDest = haversineKm(current.point, state.DEST) * 1000 <= MAX_WALK_M && !crossesRiver(current.point, state.DEST);
     setMapTutorialStage(nearDest ? 'finish' : state.selectedLineName ? 'rideStop' : 'selectLine');
     return;
   }
@@ -227,6 +229,10 @@ export function onStopClick(e) {
   // 起点步行上限：不允许超过 1.5km
   if (haversineKm(state.ORIGIN, phys.lnglat) * 1000 > MAX_WALK_M) {
     showCenterToast('距离起点步行超过 1.5km，请选择更近的站点');
+    return;
+  }
+  if (crossesRiver(state.ORIGIN, phys.lnglat)) {
+    showCenterToast('这个站在江对岸，不能步行过江');
     return;
   }
   ignoreMapCancelUntil = Date.now() + 120;
@@ -568,6 +574,10 @@ function commitWalkTransfer(logical, prev, force,selectedPhys) {
     { lng: prev.point[0], lat: prev.point[1] },
     { lng: targetPhys.lng, lat: targetPhys.lat },
   );
+  if (crossesRiver(prev.point, [targetPhys.lng, targetPhys.lat])) {
+    showCenterToast('两站隔着江，不能步行换乘');
+    return false;
+  }
   if (dM > WALK_TRANSFER_MAX_M) {
     showCenterToast('步行距离 ' + Math.round(dM) + ' 米，超过上限 ' + WALK_TRANSFER_MAX_M + ' 米，无法步行换乘');
     return false;
@@ -610,6 +620,10 @@ export function finishRoute({ silentOutOfRange = false } = {}) {
       if (!silentOutOfRange) showCenterToast('起点到终点超过 1.5km，无法直接步行到达，请先选站点');
       return;
     }
+    if (crossesRiver(state.ORIGIN, state.DEST)) {
+      if (!silentOutOfRange) showCenterToast('终点在江对岸，不能步行过江，请先乘车');
+      return;
+    }
     clearMapTutorial();
     state.routeOverlayGroups.push([]);
     const g = state.routeOverlayGroups[state.routeOverlayGroups.length - 1];
@@ -633,6 +647,10 @@ export function finishRoute({ silentOutOfRange = false } = {}) {
   const last = state.routeStops[state.routeStops.length - 1];
   if (haversineKm(last.point, state.DEST) * 1000 > MAX_WALK_M) {
     if (!silentOutOfRange) showCenterToast('距离终点步行超过 1.5km，请先换乘到更近的站点');
+    return;
+  }
+  if (crossesRiver(last.point, state.DEST)) {
+    if (!silentOutOfRange) showCenterToast('终点在江对岸，不能步行过江，请先乘车过江');
     return;
   }
   clearMapTutorial();
@@ -939,6 +957,7 @@ function showCandidateNetwork(stop, centerPoint = null, currentPhysicalStopId = 
       if (ls.id === stop.id || addedLogical.has(ls.id)) continue;
       const dM = distM(curPt, { lng: ls.lng, lat: ls.lat });
       if (dM <= MERGE_DISTANCE_M || dM > WALK_TRANSFER_MAX_M) continue;
+      if (crossesRiver(center, [ls.lng, ls.lat])) continue; // 江对岸的站不能步行换乘过去
       const ids = [];
       for (const lid of ls.line_ids) {
         const pid = ls.stopByLine[lid];

@@ -26,6 +26,7 @@ import { removeOverlay } from '../map/anim.js';
 import { waitForMap } from '../map/map-init.js';
 import { onStopMouseOver, onStopMouseOut } from '../map/hover.js';
 import { onStopClick, cancelRoutePreview, resetRoute } from './route.js';
+import { loadRivers, attachRiversToGraph } from '../core/rivers.js';
 
 /** 数据加载 Promise（null = 尚未开始；加载完成后保留，失败时重置以允许重试） */
 let readyPromise = null;
@@ -75,6 +76,8 @@ async function loadAll(cityId) {
       cityId,
     );
     const graph = buildGraph(data.lines);                  // 唯一一次建图：索引和最优路线共用
+    await loadRivers(cityId);                              // 江河（武汉、重庆）：禁止步行过江
+    attachRiversToGraph(graph);
     if (state.loadedCityId && state.loadedCityId !== cityId) resetRoute();
     disposeStops();
     for (const overlay of state.metroBase) removeOverlay(overlay);

@@ -62,7 +62,8 @@ function renderRows(detail) {
   const parts = detail.split(/\s*·\s*/).map((part) => part.trim()).filter(Boolean);
   const rows = parts.map((part) => {
     const row = document.createElement('li');
-    const match = /^(.+?)\s+([\d.]+\s*\S*)$/.exec(part);
+    // 带括号的条目整行显示，不拆成“标签 + 数值”（否则括号会被拆到两边）
+    const match = /[（()）]/.test(part) ? null : /^(.+?)\s+([\d.]+\s*\S*)$/.exec(part);
     if (match) {
       const label = document.createElement('span');
       label.className = 'row-label';

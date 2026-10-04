@@ -195,7 +195,10 @@
 :is(.stop-infocard, #route-panel) .metro-line-en {
   font: 600 7px/1 "Roboto Condensed Local", Arial, sans-serif; white-space: nowrap;
 }
-:is(.stop-infocard, #route-panel) .metro-line.text-line { min-width: 48px; grid-template-columns: auto auto; }
+/* 纯文字地铁线路牌（首都机场线、北京大兴国际机场线、西郊线…）：只有一行字，上下左右居中 */
+:is(.stop-infocard, #route-panel) .metro-line.text-line {
+  min-width: 48px; display: inline-flex; align-items: center; justify-content: center; text-align: center;
+}
 :is(.stop-infocard, #route-panel) .metro-line.text-line .metro-line-main {
   font-family: "Noto Sans CJK SC", "Source Han Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
   font-size: 11px; line-height: 1.05;

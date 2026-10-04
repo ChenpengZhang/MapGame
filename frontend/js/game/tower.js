@@ -108,7 +108,7 @@ export function showTowerResult() {
 
   let detail = '你的用时 ' + playerTotal.toFixed(0) + ' 分钟';
   if (optTotal > 0) detail += '　·　最快 ' + optTotal.toFixed(0) + ' 分钟';
-  detail += '　·　比最优慢 ' + Math.round(gapRatio * 100) + '%（要求 ≤ ' + Math.round(thr * 100) + '%）';
+  detail += '　·　比最优慢 ' + Math.round(gapRatio * 100) + '%　·　要求 ≤ ' + Math.round(thr * 100) + '%';
 
   let title, message, restartLabel;
   if (pass) {

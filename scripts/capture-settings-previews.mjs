@@ -1,4 +1,5 @@
-// 设置页预览图：用真实浏览器截取“字号”和“公交站显示级别”的效果图，存到 frontend/assets/settings/。
+// 设置页预览图：用真实浏览器截取“公交站显示级别”与 OSM 底图示例，存到 frontend/assets/settings/。
+// 字号、地铁底图、步行换乘、高德示例是手动截取的，不由本脚本生成。
 // 用法：先启动开发服务器（PORT=8090 NO_OPEN=1 node server.js），再运行
 //   node scripts/capture-settings-previews.mjs [http://localhost:8090]
 // 使用本机 Chrome（Playwright 的 channel: 'chrome'），底图为免 Key 的 OSM，需要联网加载瓦片。
@@ -44,28 +45,6 @@ async function settle(page, ms = 2500) {
   await page.waitForTimeout(ms);
 }
 
-async function captureFont(browser, scale) {
-  const page = await openGame(browser, { fontScale: scale });
-  // 确认离起点最近的站，让左上角出现路线规划与站牌
-  await page.evaluate(async () => {
-    const v = [...document.scripts].map((s) => s.src).find((s) => s.includes('app.js')).split('?')[1];
-    const R = await import('/js/game/route.js?' + v);
-    const { stopToData } = await import('/js/map/stop-marks.js?' + v);
-    const { haversineKm } = await import('/js/core/router-api.js?' + v);
-    const S = window.__MG.state;
-    const stop = S.physStops.slice().sort((a, b) => haversineKm(S.ORIGIN, [a.lng, a.lat]) - haversineKm(S.ORIGIN, [b.lng, b.lat]))[0];
-    R.onStopClick({ data: stopToData(stop) });
-    R.onStopClick({ data: stopToData(stop) });
-  });
-  await settle(page);
-  const box = await page.locator('#left-col').boundingBox();
-  await page.screenshot({
-    path: new URL(`font-${scale}.jpg`, OUT).pathname, type: 'jpeg', quality: 82,
-    clip: { x: Math.max(0, box.x - 6), y: Math.max(0, box.y - 6), ...CLIP },
-  });
-  await page.close();
-}
-
 async function captureBusZoom(browser, zoom) {
   const page = await openGame(browser, { busMinZoom: zoom }, FAR_LEVEL);
   // 正好缩放到该级别：这一级刚开始显示公交站
@@ -96,7 +75,7 @@ async function captureOsmSample(browser) {
 
 const browser = await chromium.launch({ channel: 'chrome', headless: true });
 try {
-  for (const scale of ['normal', 'lg', 'xl']) await captureFont(browser, scale);
+  // 字号预览（font-*.jpg）改为手动截取的整局画面，这里不再生成，避免覆盖
   for (const zoom of [13, 14, 15, 16]) await captureBusZoom(browser, zoom);
   await captureOsmSample(browser);
   console.log('已生成设置页预览图：', OUT.pathname);

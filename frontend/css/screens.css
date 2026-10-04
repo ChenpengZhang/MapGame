@@ -287,6 +287,10 @@
 /* 真实截图预览（scripts/capture-settings-previews.mjs 生成） */
 .pv-compare { display: grid; grid-template-columns: 1fr 1fr; gap: 2px; width: 100%; height: 100%; background: #0b1424; }
 .pv-shot { position: relative; width: 100%; height: 100%; margin: 0; }
+/* 单张截图：预览框按图片自身比例变高或变矮，整张图完整显示，不裁切也不留边 */
+.settings-preview-stage:has(> .pv-shot) { aspect-ratio: auto; display: block; }
+.settings-preview-stage > .pv-shot { height: auto; }
+.settings-preview-stage > .pv-shot img { height: auto; }
 .pv-shot img { display: block; width: 100%; height: 100%; object-fit: cover; }
 .pv-shot figcaption {
   position: absolute; left: 8px; bottom: 8px; padding: 3px 8px; border-radius: 6px;

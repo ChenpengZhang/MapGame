@@ -33,6 +33,7 @@ import { resetRoute, finishRoute } from './route.js';
 import { saveTowerState } from './progress.js';
 import { stopTowerTimer } from './tower-timer.js';
 import { closeCustomEditor } from './custom-editor.js';
+import { crossesRiver } from '../core/rivers.js';
 
 // ============ 地图交互锁（剧情/教学期间禁止拖拽缩放） ============
 // 锁定实现放在 map/map-init.js（它同时管滚轮缩放），这里只负责在合适的时机调用。
@@ -209,12 +210,17 @@ function randomPointWithComp() {
   if (!state.physStops.length) return { point: city.center.slice(), comp: null };
   const stop = state.physStops[Math.floor(Math.random() * state.physStops.length)];
   const comp = state.componentOf.get(stop.logicalId) ?? null;
-  const angle = Math.random() * 2 * Math.PI;
-  const dist = RANDOM_OFFSET_MIN_M + Math.random() * (RANDOM_OFFSET_MAX_M - RANDOM_OFFSET_MIN_M);
-  const dLat = (dist * Math.cos(angle)) / 111000; // 1° 纬度 ≈ 111km
   const mPerDegLng = 111320 * Math.cos(stop.lat * Math.PI / 180); // 经度每度米数，随纬度变化
-  const dLng = (dist * Math.sin(angle)) / mPerDegLng;
-  return { point: [stop.lng + dLng, stop.lat + dLat], comp };
+  // 偏移后的点不能落在江对岸（否则采样它的那个站反而走不到）；多试几次，都不行就用站点本身
+  for (let attempt = 0; attempt < 8; attempt++) {
+    const angle = Math.random() * 2 * Math.PI;
+    const dist = RANDOM_OFFSET_MIN_M + Math.random() * (RANDOM_OFFSET_MAX_M - RANDOM_OFFSET_MIN_M);
+    const dLat = (dist * Math.cos(angle)) / 111000; // 1° 纬度 ≈ 111km
+    const dLng = (dist * Math.sin(angle)) / mPerDegLng;
+    const point = [stop.lng + dLng, stop.lat + dLat];
+    if (!crossesRiver([stop.lng, stop.lat], point)) return { point, comp };
+  }
+  return { point: [stop.lng, stop.lat], comp };
 }
 
 /**

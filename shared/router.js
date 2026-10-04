@@ -616,14 +616,23 @@
     const alightPhysIds = new Set();
     for (const s of alightStates.values()) alightPhysIds.add(s.physId);
 
+    // 禁止步行过江：graph.rivers 由调用方挂上（{ crosses(a, b) }，见 shared/rivers.js）；
+    // 过江的上/下车站步行时间记为 null，下面会被跳过
+    const blocked = (a, b) => !!(graph.rivers && graph.rivers.crosses(a, b));
     const tasks = [];
     for (const pid of boardPhysIds) {
       const p = graph.physById.get(pid);
-      tasks.push(walkFn(origin, [p.lng, p.lat]).then((r) => ({ kind: 'to', physId: pid, min: r.min })));
+      const to = [p.lng, p.lat];
+      tasks.push(blocked(origin, to)
+        ? Promise.resolve({ kind: 'to', physId: pid, min: null })
+        : walkFn(origin, to).then((r) => ({ kind: 'to', physId: pid, min: r.min })));
     }
     for (const pid of alightPhysIds) {
       const p = graph.physById.get(pid);
-      tasks.push(walkFn([p.lng, p.lat], dest).then((r) => ({ kind: 'from', physId: pid, min: r.min })));
+      const from = [p.lng, p.lat];
+      tasks.push(blocked(from, dest)
+        ? Promise.resolve({ kind: 'from', physId: pid, min: null })
+        : walkFn(from, dest).then((r) => ({ kind: 'from', physId: pid, min: r.min })));
     }
 
     return Promise.all(tasks).then((results) => {

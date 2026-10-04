@@ -54,7 +54,7 @@ export const state = {
   editorActive: false,          // 关卡编辑器打开中：站点点击/悬浮不触发规划
   customPlay: null,
   candidatePoints: [],          // 当前候选网络上所有可达站的坐标（确认站点后聚焦视野用）
-  settings: { zoomSpeed: 0.5, busMinZoom: 15, metroBase: true, fontScale: 'normal' }, // 玩家设置（启动时由 core/settings.js 读取覆盖）             // 自定义关卡组游玩中：{ map, index, total, scores, online }
+  settings: { zoomSpeed: 0.5, busMinZoom: 15, metroBase: true, fontScale: 'normal', focusOnConfirm: true }, // 玩家设置（启动时由 core/settings.js 读取覆盖）             // 自定义关卡组游玩中：{ map, index, total, scores, online }
   mapLocked: false,             // 剧情期间锁定地图拖拽/缩放
   showAllStops: false,          // 规划中"全图显示站点"开关（开启时不能继续规划）
   isTouch: false,               // 是否触摸设备（由 app.js 启动时用 isTouchDevice 判定）

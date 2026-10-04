@@ -6,6 +6,7 @@
  *   busMinZoom  公交站开始显示的缩放级别 13~16（默认 15；数字越小，缩得越远也能看到公交站）
  *   metroBase   是否显示灰色地铁底图
  *   fontScale   界面字号 'normal' | 'lg' | 'xl'
+ *   focusOnConfirm  确认站点后自动缩放到可达站 / 终点范围（默认开）
  */
 
 import { readJSON, writeJSON } from './storage.js';
@@ -17,6 +18,7 @@ export const DEFAULT_SETTINGS = Object.freeze({
   busMinZoom: 15,
   metroBase: true,
   fontScale: 'normal',
+  focusOnConfirm: true,
 });
 
 export const BUS_ZOOM_CHOICES = [13, 14, 15, 16];
@@ -29,6 +31,7 @@ export function loadSettings() {
   if (Number.isFinite(saved.zoomSpeed) && saved.zoomSpeed >= 0 && saved.zoomSpeed <= 1) out.zoomSpeed = saved.zoomSpeed;
   if (BUS_ZOOM_CHOICES.includes(saved.busMinZoom)) out.busMinZoom = saved.busMinZoom;
   if (typeof saved.metroBase === 'boolean') out.metroBase = saved.metroBase;
+  if (typeof saved.focusOnConfirm === 'boolean') out.focusOnConfirm = saved.focusOnConfirm;
   if (saved.fontScale in FONT_SCALES) out.fontScale = saved.fontScale;
   return out;
 }

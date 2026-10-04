@@ -1,10 +1,14 @@
 import { readFile } from 'node:fs/promises';
 import { createHash, randomInt } from 'node:crypto';
 import router from '../../../shared/router.js';
+import rivers from '../../../shared/rivers.js';
 // Pure level definitions; no browser state or DOM dependencies.
 import { LEVELS } from '../../../frontend/js/data/levels.js';
 import { CUSTOM_LIMITS, customLimitMs } from '../../../frontend/js/data/custom-maps.js';
 import { CITIES, DATA_VERSION, RULES_VERSION, SCENARIOS, ensure } from '../domain/rules.js';
+
+/** 这段步行是否要过江（城市没有江河数据时恒为 false） */
+const crosses = (graph, a, b) => !!(graph.rivers && graph.rivers.crosses(a, b));
 
 // Anti-corruption adapter: the existing router remains independent of HTTP/database code.
 export class Transit {
@@ -17,10 +21,16 @@ export class Transit {
     ensure(CITIES.includes(city), 'UNKNOWN_CITY');
     if (!this.cache.has(city)) {
       // 哈希把题目绑定到具体数据版本：数据一变，旧哈希的对局拒绝继续验证。
-      const pending = readFile(new URL(`${city}-transit.json`, this.directory)).then((raw) => ({
-        graph: router.buildGraph(JSON.parse(raw).lines),
-        hash: createHash('sha256').update(raw).digest('hex'),
-      }));
+      const pending = Promise.all([
+        readFile(new URL(`${city}-transit.json`, this.directory)),
+        // 江河中心线（可选）：有的城市禁止步行过江，见 shared/rivers.js
+        readFile(new URL(`rivers/${city}.json`, this.directory)).then((raw) => JSON.parse(raw)).catch(() => null),
+      ]).then(([raw, riverData]) => {
+        const graph = router.buildGraph(JSON.parse(raw).lines);
+        const index = rivers.buildRiverIndex(riverData);
+        if (index) graph.rivers = { crosses: (a, b) => rivers.crossesRiver(index, a, b) };
+        return { graph, hash: createHash('sha256').update(raw).digest('hex') };
+      });
       this.cache.set(city, pending);
       pending.catch(() => this.cache.delete(city));
     }
@@ -168,11 +178,13 @@ export class Transit {
         } else {
           const startDistance = router.haversineKm(puzzle.origin, [a.lng, a.lat]) * 1000;
           ensure(startDistance <= p.maxWalkKm * 1000, 'START_TOO_FAR');
+          ensure(!crosses(graph, puzzle.origin, [a.lng, a.lat]), 'RIVER_CROSSING');
           minutes += startDistance / (75 * p.walkSpeedFactor);
         }
 
         const distance = router.haversineKm([a.lng, a.lat], [b.lng, b.lat]) * 1000;
         ensure(distance <= p.maxWalkKm * 1000, 'WALK_TRANSFER_TOO_FAR');
+        ensure(!crosses(graph, [a.lng, a.lat], [b.lng, b.lat]), 'RIVER_CROSSING');
         minutes += distance / (75 * p.walkSpeedFactor);
         previousStop = b;
         previousRideLine = null;
@@ -204,6 +216,7 @@ export class Transit {
       } else {
         const distance = router.haversineKm(puzzle.origin, [a.lng, a.lat]) * 1000;
         ensure(distance <= 1500, 'START_TOO_FAR');
+        ensure(!crosses(graph, puzzle.origin, [a.lng, a.lat]), 'RIVER_CROSSING');
         minutes += distance / (75 * p.walkSpeedFactor);
       }
 
@@ -238,6 +251,7 @@ export class Transit {
     ensure(previousStop, 'EMPTY_ROUTE');
     const lastDistance = router.haversineKm([previousStop.lng, previousStop.lat], puzzle.destination) * 1000;
     ensure(lastDistance <= 1500, 'END_TOO_FAR');
+    ensure(!crosses(graph, [previousStop.lng, previousStop.lat], puzzle.destination), 'RIVER_CROSSING');
     minutes += lastDistance / (75 * p.walkSpeedFactor);
     return Math.round(minutes * 60000);
   }

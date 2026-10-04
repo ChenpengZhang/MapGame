@@ -20,6 +20,7 @@ const messages = {
   MAP_CHANGED:'作者更新了这个关卡组，请重新开始。',
   LEVEL_TOO_CLOSE:'起点和终点太近（需相距 1.6 公里以上）。',LEVEL_UNREACHABLE:'起点到终点没有可行的公交/地铁路线。',
   UNKNOWN_CITY:'关卡使用了不支持的城市。',
+  RIVER_CROSSING:'路线中有一段步行要过江，尚未入库。',
 };
 /** 带关卡序号的错误码（如 LEVEL_TOO_CLOSE:2）→ “第 2 关：…” */
 function messageFor(code) {
