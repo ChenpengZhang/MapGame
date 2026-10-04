@@ -19,6 +19,7 @@ import { cityById } from '../data/cities.js';
 import { loadWalkCache } from './walk.js';
 import { createWalkRangeCircle, walkRangeBounds } from './walk-range.js';
 import { installNativePicker, isNativeAmap } from './native-picker.js';
+import { installWindowsAmapWheel } from './amap-wheel.js';
 
 // 地图 SDK 需异步加载；用户可能在底图完成前就点击了故事关卡。
 // 用一次性就绪信号让数据/站点层等待地图，而不是对空的 state.map 注册事件。
@@ -51,6 +52,7 @@ export function initMap() {
 // ============ 缩放惯性 ============
 
 let zoomSpeed = 0.5; // 设置里的"缩放速度"滑块（0-1，默认 0.5）
+let disposeWheel = () => {};
 
 /** 设置面板的"缩放速度"滑块调用它（0~1） */
 export function setZoomSpeed(v) {
@@ -78,6 +80,8 @@ export function setMapLocked(locked) {
  * 海量站点下少一半重绘，缩放明显更顺。
  */
 function setupZoomInertia() {
+  disposeWheel();
+  disposeWheel = () => {};
   const el = document.getElementById('map');
   if (!el || !state.map) return;
   if (state.map.enableNativeWheelZoom) {
@@ -85,7 +89,14 @@ function setupZoomInertia() {
     state.map.enableNativeWheelZoom(zoomSpeed);
     return;
   }
-  if (isNativeAmap()) return; // 原生高德：滚轮交给高德自己处理（见 initMap）
+  if (isNativeAmap()) {
+    disposeWheel = installWindowsAmapWheel(state.map, el, {
+      platform: typeof navigator === 'undefined' ? '' : (navigator.userAgentData?.platform || navigator.platform || ''),
+      getSpeed: () => zoomSpeed,
+      isLocked: () => state.storyActive || state.mapLocked || state.map.getStatus?.().zoomEnable === false,
+    });
+    return;
+  }
   let velocity = 0;        // 缩放速度（zoom/步）
   let running = false;
   let lastStep = 0;
