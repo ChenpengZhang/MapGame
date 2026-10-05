@@ -94,6 +94,11 @@ export function getLine(id) {
   return state.linesMap.get(id) || null;
 }
 
+/** 当前情景下这条线路能否乘坐（“地铁瘫痪”情景禁用全部地铁）；显示与选线都应以此为准 */
+export function isLineAvailable(line) {
+  return !!line && !(state.scenario?.noMetro && line.mode === 'metro');
+}
+
 /** 按逻辑站 id 取逻辑站 */
 export function getLogical(id) {
   return state.logicalById.get(id) || null;

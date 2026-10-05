@@ -17,6 +17,7 @@ import { state } from '../core/state.js';
 
 const massLayers = new Set(); // { mm, z }
 const pickLines = new Set();  // { overlay, path, width, onClick }
+const pickPoints = new Set(); // { lnglat, label, onClick } 起终点图钉
 let hovered = null;           // { entry, data } 当前悬停的站点
 let lastPickAt = -1;          // 最近一次拾取命中的时间，供“点空白取消”判断同一次点击
 
@@ -60,6 +61,17 @@ export function registerPickableLine(overlay, path, width, onClick) {
   overlay.setMap = (m) => { if (!m) pickLines.delete(entry); else pickLines.add(entry); setMap(m); };
 }
 
+/**
+ * 注册一个可点的图钉（起点 / 终点）。图钉点击统一由拾取器判断，不再交给图钉自身的 click：
+ * 图钉与站点重叠时，原先是站点拾取先触发、图钉永远点不到。
+ * 现在两者同时命中时弹出选择框，由玩家第二次点击决定点的是哪一个。
+ */
+export function registerPickablePoint(overlay, lnglat, label, onClick) {
+  const entry = { lnglat, label, onClick };
+  const setMap = overlay.setMap.bind(overlay);
+  overlay.setMap = (m) => { if (!m) pickPoints.delete(entry); else pickPoints.add(entry); setMap(m); };
+}
+
 function toPixel(map, lnglat) {
   // 原生高德需要 LngLat 对象；兼容层直接收数组（并按数组缓存坐标换算）
   const ll = Array.isArray(lnglat) && isNativeAmap() && AMap.LngLat ? new AMap.LngLat(lnglat[0], lnglat[1]) : lnglat;
@@ -84,6 +96,73 @@ function pickStop(map, px) {
     if (best) return { entry: layer, data: best };
   }
   return null;
+}
+
+/** 图钉 24px，命中半径与站点相当（触屏放宽） */
+function pickPoint(map, px) {
+  const r = state.isTouch ? 20 : 14;
+  let best = null, bestD = r * r;
+  for (const pt of pickPoints) {
+    const p = toPixel(map, pt.lnglat);
+    if (!p) continue;
+    const dd = (p[0] - px[0]) ** 2 + (p[1] - px[1]) ** 2;
+    if (dd <= bestD) { bestD = dd; best = pt; }
+  }
+  return best;
+}
+
+// ============ 图钉与站点重叠时的选择框 ============
+
+let choiceEl = null;
+let stopChoiceFilter = null;
+
+/** 玩法层告诉拾取器：哪些站值得出现在选择框里（当前站、已走过的站点了也没反应，图钉直接响应） */
+export function setStopChoiceFilter(fn) {
+  stopChoiceFilter = fn;
+}
+
+export function closePickChoice() {
+  if (!choiceEl) return;
+  choiceEl.remove();
+  choiceEl = null;
+  document.removeEventListener('pointerdown', onOutsideDown, true);
+}
+
+function onOutsideDown(ev) {
+  if (choiceEl && !choiceEl.contains(ev.target)) closePickChoice();
+}
+
+/** 在点击处弹出一个黑色小框：图钉 / 站点二选一。选站点时直接确定（跳过预选）。 */
+function showPickChoice(container, px, point, stop) {
+  closePickChoice();
+  const r = container.getBoundingClientRect();
+  const box = document.createElement('div');
+  box.className = 'pick-choice';
+  const modeLabel = stop.data.mode === 'metro' ? '地铁站' : '公交站';
+  const options = [
+    { text: point.label, run: () => point.onClick() },
+    { text: `${stop.data.name || '站点'}（${modeLabel}）`, run: () => fire(stop.entry, 'click', stop.data, { direct: true }) },
+  ];
+  for (const opt of options) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.textContent = opt.text;
+    btn.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      closePickChoice();
+      try { opt.run(); } catch (err) { console.error('[native-picker] 选择框回调失败', err); }
+    });
+    box.appendChild(btn);
+  }
+  // 放在 body 上（不在地图容器内），点选择框不会再被地图拾取；位置限制在视口内
+  document.body.appendChild(box);
+  const w = box.offsetWidth, h = box.offsetHeight;
+  const x = Math.min(Math.max(8, r.left + px[0] + 12), window.innerWidth - w - 8);
+  const y = Math.min(Math.max(8, r.top + px[1] - h / 2), window.innerHeight - h - 8);
+  box.style.left = x + 'px';
+  box.style.top = y + 'px';
+  choiceEl = box;
+  document.addEventListener('pointerdown', onOutsideDown, true);
 }
 
 function segmentDistance2(p, a, b) {
@@ -116,8 +195,8 @@ function markPicked(e) {
   try { if (e) e.__picked = true; } catch { /* 事件对象不可写时靠时间戳判断 */ }
 }
 
-function fire(entry, type, data) {
-  for (const cb of entry.handlers[type] || []) cb({ data });
+function fire(entry, type, data, extra) {
+  for (const cb of entry.handlers[type] || []) cb({ data, ...extra });
 }
 
 /**
@@ -143,6 +222,7 @@ export function installNativePicker(map) {
   const container = map.getContainer?.() || document.getElementById('map');
   const localPx = (ev) => { const r = container.getBoundingClientRect(); return [ev.clientX - r.left, ev.clientY - r.top]; };
   let down = null;
+  container.addEventListener('wheel', closePickChoice, { passive: true });
   container.addEventListener('pointerdown', (ev) => {
     down = ev.isPrimary ? { px: localPx(ev), t: performance.now() } : null;
   }, true);
@@ -154,7 +234,10 @@ export function installNativePicker(map) {
     down = null;
     if (moved > 6 || !quick) return;
     try {
+      const point = pickPoint(map, px);
       const stop = pickStop(map, px);
+      if (point && stop && (!stopChoiceFilter || stopChoiceFilter(stop.data))) { markPicked(null); showPickChoice(container, px, point, stop); return; }
+      if (point) { markPicked(null); point.onClick(); return; }
       if (stop) { markPicked(null); fire(stop.entry, 'click', stop.data); return; }
       const line = pickLine(map, px);
       if (line) { markPicked(null); line.onClick({ pixel: { x: px[0], y: px[1] } }); }

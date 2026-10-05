@@ -20,6 +20,9 @@ let zoomListener = null;
 let mapPracticeCompleted = false;
 let boardingPreviewStarted = false;
 let viewportListener = null;
+// 玩家点过“起”图钉并聚焦完成：此后只要起点在视野内、缩放够看到公交站就算完成。
+// 原生高德聚焦会把缩放向下取整，视野可能比 1.5km 圈大近一倍，按严格的范围判断会卡住。
+let originFocused = false;
 
 /** 判断实际可见地图，不要求采用某一种聚焦操作。少量容差避免边缘反复跳步。 */
 function originViewportReady() {
@@ -36,7 +39,9 @@ function originViewportReady() {
   const width = haversineKm([sw.getLng(), center[1]], [ne.getLng(), center[1]]) * 1000;
   const height = haversineKm([center[0], sw.getLat()], [center[0], topLat]) * 1000;
   const [lng, lat] = state.ORIGIN;
-  return lng >= sw.getLng() && lng <= ne.getLng() && lat >= sw.getLat() && lat <= topLat
+  const inView = lng >= sw.getLng() && lng <= ne.getLng() && lat >= sw.getLat() && lat <= topLat;
+  if (originFocused) return inView;
+  return inView
     && haversineKm(center, state.ORIGIN) * 1000 <= (mapPracticeCompleted ? 850 : 650)
     && Math.min(width, height) <= (mapPracticeCompleted ? 4700 : 4200);
 }
@@ -49,6 +54,7 @@ export function isMapPracticePending() {
 
 export function completeMapPractice() {
   if (!promptConfig?.mapPractice) return;
+  originFocused = true;
   mapPracticeCompleted = originViewportReady();
   renderPrompt();
 }
@@ -416,6 +422,7 @@ export function showMapTutorial(config) {
   mistakeReason = null;
   promptConfig = config || null;
   mapPracticeCompleted = false;
+  originFocused = false;
   boardingPreviewStarted = false;
   syncAnnotations();
   promptStage = null;

@@ -18,7 +18,7 @@ import { $ } from '../core/dom.js';
 import { cityById } from '../data/cities.js';
 import { loadWalkCache } from './walk.js';
 import { createWalkRangeCircle, walkRangeBounds } from './walk-range.js';
-import { installNativePicker, isNativeAmap } from './native-picker.js';
+import { installNativePicker, isNativeAmap, registerPickablePoint, closePickChoice, clickWasPicked } from './native-picker.js';
 import { installWindowsAmapWheel } from './amap-wheel.js';
 
 // 地图 SDK 需异步加载；用户可能在底图完成前就点击了故事关卡。
@@ -150,13 +150,19 @@ function setupZoomInertia() {
  *        终点（"终"）被点击时的回调，以及是否显示 1.5km 步行范围圈：
  *        玩法层用它来触发"完成规划"，地图层不关心具体做什么。
  */
-export function drawEndpoints(handlers) {
-  const onDestClick = (handlers && handlers.onDestClick) || null;
-  const showWalkRanges = !handlers || handlers.showWalkRanges !== false;
+/** 移除起终点图钉与步行范围圈（回主菜单时调用，避免上一局的起终点残留在地图上） */
+export function clearEndpoints() {
+  closePickChoice();
   for (const overlay of state.endpointOverlays) overlay.setMap(null);
   state.endpointOverlays = [];
   state.originWalkRangeCircle = null;
   state.destinationWalkRangeCircle = null;
+}
+
+export function drawEndpoints(handlers) {
+  const onDestClick = (handlers && handlers.onDestClick) || null;
+  const showWalkRanges = !handlers || handlers.showWalkRanges !== false;
+  clearEndpoints();
   if (!state.ORIGIN || !state.DEST) return;
 
   // 范围圈先画、图钉后画，确保图钉始终位于圆圈上方。教学关可按关卡配置隐藏。
@@ -173,21 +179,27 @@ export function drawEndpoints(handlers) {
     position: state.ORIGIN, content: '<div class="pin origin flash">起</div>',
     offset: new AMap.Pixel(-12, -12), zIndex: 400,
   });
+  // 图钉点击由拾取器统一判断（与站点重叠时弹选择框），见 native-picker.js；
+  // 图钉自身的 click 只作兜底：拾取器已处理过这次点击就跳过，避免重复触发
+  const onOrigin = () => focusWalkRange(state.ORIGIN, handlers?.onOriginFocus, handlers?.originFocusM);
+  registerPickablePoint(o, state.ORIGIN, '起点', onOrigin);
+  o.on('click', (e) => { if (!clickWasPicked(e)) onOrigin(); });
   o.setMap(state.map);
   state.endpointOverlays.push(o);
-  o.on('click', () => focusWalkRange(state.ORIGIN, handlers?.onOriginFocus));
 
   const d = new AMap.Marker({
     position: state.DEST, content: '<div class="pin dest flash">终</div>',
     offset: new AMap.Pixel(-12, -12), zIndex: 400,
   });
-  d.setMap(state.map);
-  state.endpointOverlays.push(d);
-  d.on('click', () => {
+  const onDest = () => {
     if (state.storyActive) return;
     focusWalkRange(state.DEST);
     if (onDestClick) onDestClick();
-  });
+  };
+  registerPickablePoint(d, state.DEST, '终点', onDest);
+  d.on('click', (e) => { if (!clickWasPicked(e)) onDest(); });
+  d.setMap(state.map);
+  state.endpointOverlays.push(d);
 
   endpointsShowWalkRanges = showWalkRanges;
   fitEndpoints({ animate: false });
@@ -221,10 +233,10 @@ export function focusDestination() {
   if (state.DEST) focusWalkRange(state.DEST);
 }
 
-/** 聚焦单个步行圈，短边方向在圈外留出约 150 米。 */
-function focusWalkRange(center, onFocused) {
+/** 聚焦单个步行圈，短边方向在圈外留出约 150 米（radiusM 可改小，例如新手教程要聚焦得更近）。 */
+function focusWalkRange(center, onFocused, radiusM = MAX_WALK_M + 150) {
   if (!state.map || state.storyActive) return;
-  const bounds = walkRangeBounds([center], MAX_WALK_M + 150);
+  const bounds = walkRangeBounds([center], radiusM);
   if (!bounds) return;
   const target = new AMap.Bounds(bounds.sw, bounds.ne);
   const mapRect = $('map')?.getBoundingClientRect?.();

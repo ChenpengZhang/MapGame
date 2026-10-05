@@ -20,7 +20,7 @@ import { EVENTS,emit } from '../core/bus.js';
 import { state } from '../core/state.js';
 import { MAX_WALK_M, MERGE_DISTANCE_M, WALK_TRANSFER_MAX_M } from '../core/config.js';
 import { showCenterToast, setStatus, setText, hide, show, $ } from '../core/dom.js';
-import { resolveStop, getLine, getPhys, findStopInLine, stopIndexInLine, distM } from '../data/index-builder.js';
+import { resolveStop, getLine, getPhys, findStopInLine, stopIndexInLine, distM, isLineAvailable } from '../data/index-builder.js';
 import { makeMassMarks, stopToData } from '../map/stop-marks.js';
 import { fadeInOverlay, setMassMarksMap, removeOverlay, ANIM_FADE_IN_MS } from '../map/anim.js';
 import { hideBaseStops, updateStopsByZoom } from '../map/stop-layer.js';
@@ -30,7 +30,7 @@ import { addStopMarker, stopTraveler, drawRideSegment, drawTransferWalk, drawWal
 import { makeTransitLineLayers } from '../map/transit-line-style.js';
 import { walkRangeBounds } from '../map/walk-range.js';
 import { crossesRiver } from '../core/rivers.js';
-import { isNativeAmap, registerPickableLine } from '../map/native-picker.js';
+import { isNativeAmap, registerPickableLine, setStopChoiceFilter } from '../map/native-picker.js';
 import { onStopMouseOver, onStopMouseOut, clearHighlight, renderHighlight, cancelPreview, showCurrentStopInfo, clearCurrentStopInfo } from '../map/hover.js';
 import { clearOptimal } from '../map/optimal-layer.js';
 import { haversineKm, findOptimalRoute } from '../core/router-api.js';
@@ -216,6 +216,12 @@ function onCandidateLineClick(line, event) {
   toggleCurrentLine(line.name);
 }
 
+// 图钉与站点重叠时，只有点了会有反应的站才进选择框（已在路线里的站点了无效，直接按图钉处理）
+setStopChoiceFilter((data) => {
+  const logical = resolveStop(data);
+  return !!logical && !state.routeStops.some((s) => sameLogical(s.logical, logical));
+});
+
 /** 基础站点层的点击回调（由 app.js 注入到 map/stop-layer.js） */
 export function onStopClick(e) {
   if (state.storyActive || state.editorActive) return; // 剧情/教学、关卡编辑期间禁止开始规划
@@ -236,11 +242,18 @@ export function onStopClick(e) {
     return;
   }
   ignoreMapCancelUntil = Date.now() + 120;
+  const d = { logical, point: phys.lnglat, physicalStopId: String(phys.id) };
+  // 从“图钉 / 站点”选择框选中的站：不再预选，直接确定并走到该站
+  if (e.direct) {
+    if (state.showAllStops) { showCenterToast('请关闭全图显示后再确定'); return; }
+    startRoute(d);
+    return;
+  }
   if (samePhysicalSelection(state.pendingStart, phys)) {
     confirmStart();
     return;
   }
-  previewStart({ logical, point: phys.lnglat,physicalStopId:String(phys.id) });
+  previewStart(d);
 }
 
 /** 两端统一的第一步：预览线路和站点，红圈严格落在实际点击的物理站坐标。 */
@@ -307,7 +320,7 @@ function startRoute(d) {
 // ============ 中间：点沿途站接一段乘车 ============
 
 /** 候选站点层的点击回调（候选网络内的点） */
-export function onCandidateStopClick(phys) {
+export function onCandidateStopClick(phys, { direct = false } = {}) {
   // 设置关闭后拒绝旧图层中可能残留的步行站点击；普通线路站不受影响。
   if (phys && phys.style === 2 && !state.walkTransfer) return;
   const logical = resolveStop(phys);
@@ -319,7 +332,7 @@ export function onCandidateStopClick(phys) {
       confirmStart();
       return;
     }
-    onStopClick({ data: phys });
+    onStopClick({ data: phys, direct });
     return;
   }
   if (!state.routeStops.length || state.finished) return;
@@ -329,6 +342,12 @@ export function onCandidateStopClick(phys) {
   if (sameLogical(logical, prev.logical)) return;
   if (state.routeStops.some((s) => sameLogical(s.logical, logical))) return;
 
+  // 从“图钉 / 站点”选择框选中的站：跳过预览，直接乘车 / 步行到该站
+  if (direct) {
+    state.pendingCandidate = { logical, phys };
+    confirmCandidate();
+    return;
+  }
   if (samePhysicalSelection(state.pendingCandidate, phys)) {
     confirmCandidate();
     return;
@@ -960,6 +979,7 @@ function showCandidateNetwork(stop, centerPoint = null, currentPhysicalStopId = 
       if (crossesRiver(center, [ls.lng, ls.lat])) continue; // 江对岸的站不能步行换乘过去
       const ids = [];
       for (const lid of ls.line_ids) {
+        if (!isLineAvailable(getLine(lid))) continue; // 禁用地铁时，只有地铁的站不能作为步行换乘目标
         const pid = ls.stopByLine[lid];
         if (pid) ids.push(pid);
       }
@@ -995,7 +1015,7 @@ function showCandidateNetwork(stop, centerPoint = null, currentPhysicalStopId = 
   fadeInOverlay(state.candidateMarks);
   state.candidateMarks.on('click', (e) => {
     const dd = e && e.data;
-    if (dd) onCandidateStopClick(dd);
+    if (dd) onCandidateStopClick(dd, { direct: !!e.direct });
   });
   state.candidateMarks.on('mouseover', onStopMouseOver);
   state.candidateMarks.on('mouseout', onStopMouseOut);

@@ -21,11 +21,11 @@ import { haversineKm } from '../core/router-api.js';
 import { saveCityId } from '../core/storage.js';
 import { cityById } from '../data/cities.js';
 import { ensureGameDataReady, isGameDataReady } from './data-ready.js';
-import { drawEndpoints, setMapLocked, setBlindMap } from '../map/map-init.js';
+import { drawEndpoints, clearEndpoints, setMapLocked, setBlindMap } from '../map/map-init.js';
 import { setDestIndicatorActive } from '../map/dest-indicator.js';
 import { showTripCard, hideTripCard } from '../ui/trip-card.js';
 import { showMapTutorial, clearMapTutorial, completeMapPractice } from '../map/tutorial-layer.js';
-import { applyScenario, refreshVisibleStops, setTutorialBusStopsHidden } from '../map/stop-layer.js';
+import { applyScenario, refreshVisibleStops, updateStopsByZoom, setTutorialBusStopsHidden } from '../map/stop-layer.js';
 import { hideAllPanels, showPanel, setCityLabel, setModeHudVisible, updateFreeButton, updateStoryButton, buildStoryLevels, updateTowerMenuBest, buildCityMenu, setCitySelectLabel, toggleCityMenu } from '../ui/menu.js';
 import { playStory, hideStory } from '../ui/story.js';
 import { clearResult } from '../ui/result.js';
@@ -95,7 +95,8 @@ export function startLevel(level, opts) {
   resetRoute();
   applyScenario();
   // 终点图钉被点击 = 完成规划；回调由玩法层提供（地图层不 import game）
-  drawEndpoints({ onOriginFocus: completeMapPractice, onDestClick: () => finishRoute({ silentOutOfRange: true }), showWalkRanges: level.showWalkRanges !== false });
+  // 新手教程点“起”聚焦得更近（约 1km），保证缩放后能看到公交站
+  drawEndpoints({ onOriginFocus: completeMapPractice, originFocusM: level.mapTutorial?.mapPractice ? 1000 : undefined, onDestClick: () => finishRoute({ silentOutOfRange: true }), showWalkRanges: level.showWalkRanges !== false });
   void setBlindMap(!!state.scenario.blindMap, cityId); // 无尽“盲棋”：隐藏底图，只画城市轮廓
   showTripCard({ originName: state.ORIGIN_NAME, destName: state.DEST_NAME, km: haversineKm(state.ORIGIN, state.DEST) });
   setDestIndicatorActive(true);
@@ -125,6 +126,12 @@ export function showMenu() {
     ? { key: state.towerScenarioKey, layer: state.towerLayer, finished: state.finished }
     : null;
   resetRoute();
+  // 上一局的起终点：图钉、步行范围圈和坐标一起清掉。否则菜单后面（自定义模式的编辑器会露出地图）
+  // 仍能看到旧的起终点，旧起点周围的站也还会被标成红色“步行可达”。
+  clearEndpoints();
+  state.ORIGIN = null;
+  state.DEST = null;
+  updateStopsByZoom();
   hideStory();
   clearMapTutorial();
   setMapLocked(false);

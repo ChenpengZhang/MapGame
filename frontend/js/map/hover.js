@@ -13,7 +13,7 @@
  */
 
 import { state } from '../core/state.js';
-import { resolveStop, getLine } from '../data/index-builder.js';
+import { resolveStop, getLine, isLineAvailable } from '../data/index-builder.js';
 import { hide, $ } from '../core/dom.js';
 import { makeTransitLineLayers } from './transit-line-style.js';
 import { makeMassMarks, stopToData } from './stop-marks.js';
@@ -88,7 +88,7 @@ function reachableSegments(d) {
   const out = [];
   for (const id of d.line_ids || []) {
     const line = getLine(id);
-    if (!line || !line.path || line.path.length < 2) continue;
+    if (!isLineAvailable(line) || !line.path || line.path.length < 2) continue; // 禁用地铁时不画地铁线
     const stops = line.stops || [];
     const physId = d.stopByLine ? d.stopByLine[String(id)] : null;
     const i = physId == null ? -1 : stops.findIndex((st) => String(st.id) === String(physId));
@@ -199,7 +199,7 @@ function displayLines(d) {
   const shown = [], seen = new Set();
   for (const id of d.line_ids || []) {
     const line = getLine(id);
-    if (!line || !line.path || line.path.length < 2 || seen.has(line.name)) continue;
+    if (!isLineAvailable(line) || !line.path || line.path.length < 2 || seen.has(line.name)) continue; // 禁用地铁时站牌不列地铁
     seen.add(line.name);
     shown.push(line);
   }
