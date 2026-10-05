@@ -9,6 +9,16 @@ const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const newShareCode = () => Array.from({ length: 8 }, () => CODE_ALPHABET[randomInt(CODE_ALPHABET.length)]).join('');
 
 /** 关卡组对外视图：不含内部 id、所有者 id */
+// 游玩记录每页条数：每条约 230 字节，50 条压缩后只有几 KB；数据库排序成本与页大小基本无关
+export const HISTORY_PAGE = 50;
+
+function parseHistoryCursor(cursor) {
+  if (cursor == null) return null;
+  const match = /^(\d{1,20})\.([0-9a-f-]{36})$/.exec(String(cursor));
+  ensure(match, 'INVALID_INPUT', 400);
+  return { us: match[1], id: match[2] };
+}
+
 export function publicCustomMap(map, viewerId = null) {
   return {
     code: map.code,
@@ -87,6 +97,24 @@ export class GameService {
       scenario: daily.puzzle.scenario,
       opensAt: daily.opens_at,
       closesAt: daily.closes_at,
+    };
+  }
+
+  /**
+   * 已截止的每日题目答案：起终点与情景，前端据此在地图上画出理论最快路线。
+   * 只公开已截止（closes_at 已过）的题目，当天的题目不会泄露。
+   */
+  async dailyAnswer(date) {
+    const daily = await this.repository.daily(date);
+    ensure(daily, 'DAILY_NOT_FOUND', 404);
+    ensure((await this.repository.now()) >= daily.closes_at, 'DAILY_NOT_CLOSED', 403);
+    return {
+      date: beijingDate(daily.opens_at),
+      city: daily.puzzle.city,
+      scenario: daily.puzzle.scenario,
+      origin: daily.puzzle.origin,
+      destination: daily.puzzle.destination,
+      optimalDurationMs: daily.puzzle.optimalDurationMs,
     };
   }
 
@@ -252,8 +280,16 @@ export class GameService {
     });
   }
 
-  history(userId) {
-    return this.repository.history(userId);
+  /** 游玩记录一页：{ rows, next }；next 为下一页游标（没有更多时为 null） */
+  async history(userId, cursor = null) {
+    const before = parseHistoryCursor(cursor);
+    const rows = await this.repository.history(userId, { limit: HISTORY_PAGE + 1, before });
+    const page = rows.slice(0, HISTORY_PAGE);
+    const last = page[page.length - 1];
+    return {
+      rows: page.map(({ cursor_us, cursor_id, ...row }) => row),
+      next: rows.length > HISTORY_PAGE && last ? `${last.cursor_us}.${last.cursor_id}` : null,
+    };
   }
 
   async storyProgress(userId) {

@@ -199,14 +199,21 @@ export class Repository {
     return result.rows.map((row) => row.story_id);
   }
 
-  async history(userId) {
+  /**
+   * 游玩记录（新→旧）分页：游标是上一页最后一条的（提交时刻微秒, 提交 id），
+   * 用键集分页而不是 OFFSET，翻页期间有新提交也不会重复或漏掉。
+   */
+  async history(userId, { limit, before = null }) {
     return (
       await this.db.query(
         `SELECT g.id AS run_id,g.mode,g.city_id,g.scenario_key,s.round_no AS stage_no,
-      s.puzzle->>'storyId' AS story_id,r.duration_ms,r.elapsed_ms,r.passed,r.submitted_at
+      s.puzzle->>'storyId' AS story_id,r.duration_ms,r.elapsed_ms,r.passed,r.submitted_at,
+      (extract(epoch FROM r.submitted_at)*1000000)::bigint::text AS cursor_us,r.id::text AS cursor_id
       FROM game_runs g JOIN run_rounds s ON s.run_id=g.id JOIN round_submissions r ON r.round_id=s.id
-      WHERE g.user_id=$1 ORDER BY r.submitted_at DESC,r.id LIMIT 50`,
-        [userId],
+      WHERE g.user_id=$1
+        AND ($2::bigint IS NULL OR ((extract(epoch FROM r.submitted_at)*1000000)::bigint,r.id) < ($2::bigint,$3::uuid))
+      ORDER BY r.submitted_at DESC,r.id DESC LIMIT $4`,
+        [userId, before?.us ?? null, before?.id ?? null, limit],
       )
     ).rows;
   }

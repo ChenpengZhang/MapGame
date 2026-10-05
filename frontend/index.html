@@ -4,15 +4,15 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1.0, user-scalable=no" />
   <title>TransitGuesser · 公交导航模拟器</title>
-  <link rel="stylesheet" href="css/account.css?v=5" />
+  <link rel="stylesheet" href="css/account.css?v=6" />
   <link rel="icon" type="image/svg+xml" href="assets/map.svg" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="css/tokens.css?v=1" />
-  <link rel="stylesheet" href="css/base.css?v=1" />
-  <link rel="stylesheet" href="css/hud.css?v=4" />
-  <link rel="stylesheet" href="css/screens.css?v=5" />
+  <link rel="stylesheet" href="css/base.css?v=2" />
+  <link rel="stylesheet" href="css/hud.css?v=6" />
+  <link rel="stylesheet" href="css/screens.css?v=6" />
   <link rel="stylesheet" href="css/mobile.css?v=1" />
-  <link rel="stylesheet" href="css/signage.css?v=1" />
+  <link rel="stylesheet" href="css/signage.css?v=3" />
   <link rel="stylesheet" href="css/font-scale.css?v=1" />
   <link rel="stylesheet" href="css/custom.css?v=1" />
   <link rel="stylesheet" href="css/trip.css?v=3" />
@@ -214,7 +214,7 @@
         <p class="daily-mine" id="daily-mine"></p>
         <div class="daily-board-wrap">
           <table class="leaderboard-table daily-board">
-            <thead><tr><th scope="col">名次</th><th scope="col">玩家</th><th scope="col">公交用时</th><th scope="col">完成时间</th></tr></thead>
+            <thead><tr><th scope="col">名次</th><th scope="col">玩家</th><th scope="col">公交用时</th><th scope="col">完成时间（UTC+8）</th></tr></thead>
             <tbody id="daily-board"></tbody>
           </table>
         </div>
@@ -228,10 +228,10 @@
         </button>
         <div id="daily-yesterday-body" class="daily-yesterday-body">
           <h3>昨日排行</h3>
-          <p class="daily-yesterday-date" id="daily-yesterday-date"></p>
+          <p class="daily-yesterday-date"><span id="daily-yesterday-date"></span><button id="daily-yesterday-answer" class="daily-answer-link" type="button">查看昨日答案</button></p>
           <div class="daily-board-wrap">
             <table class="leaderboard-table daily-board">
-              <thead><tr><th scope="col">名次</th><th scope="col">玩家</th><th scope="col">公交用时</th><th scope="col">完成时间</th></tr></thead>
+              <thead><tr><th scope="col">名次</th><th scope="col">玩家</th><th scope="col">公交用时</th><th scope="col">完成时间（UTC+8）</th></tr></thead>
               <tbody id="daily-yesterday-board"></tbody>
             </table>
           </div>
@@ -318,7 +318,7 @@
           </label>
           <label class="custom-field custom-ed-limit-field">&nbsp;<input id="custom-ed-limit-value" class="hidden" type="number" inputmode="decimal" aria-label="时限数值"></label>
         </div>
-        <label class="custom-field">本关标题<input id="custom-ed-level-title" maxlength="30" placeholder="选填，开局时显示"></label>
+        <label class="custom-field">本关标题<input id="custom-ed-level-title" maxlength="30" placeholder="选填，显示在任务目标"></label>
         <label class="custom-field">提示文字<textarea id="custom-ed-level-text" maxlength="200" rows="2" placeholder="选填，开局时显示"></textarea></label>
         <p id="custom-ed-check" class="custom-ed-check"></p>
       </div>
@@ -426,6 +426,6 @@
   <script src="shared/router.js?v=6"></script>
   <script src="shared/rivers.js?v=1"></script>
   <script src="js/amap-polyfill.js"></script>
-  <script src="js/app.js?v=117" type="module"></script>
+  <script src="js/app.js?v=130" type="module"></script>
 </body>
 </html>

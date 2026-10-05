@@ -11,10 +11,15 @@ import { CITIES, DATA_VERSION, RULES_VERSION, SCENARIOS, ensure } from '../domai
 const crosses = (graph, a, b) => !!(graph.rivers && graph.rivers.crosses(a, b));
 
 // Anti-corruption adapter: the existing router remains independent of HTTP/database code.
+const CUSTOM_OPTIMAL_CACHE_MAX = 5000;
+
 export class Transit {
   constructor(dataDirectory = new URL('../../../data/', import.meta.url)) {
     this.directory = dataDirectory;
     this.cache = new Map();
+    // 自定义关卡最优用时缓存：键含数据哈希，数据一更新旧结果自然失效。
+    // 保存关卡组时没改过的关、以及每次开回合重算的同一关都直接命中，不再跑寻路。
+    this.customOptimal = new Map();
   }
 
   async load(city) {
@@ -113,7 +118,7 @@ export class Transit {
   }
 
   /**
-   * 自定义关卡 → 一回合题目。最优用时每次开回合时按当前数据重算（数据更新后仍然正确）。
+   * 自定义关卡 → 一回合题目。最优用时按当前数据计算并缓存（缓存键含数据哈希，数据更新后自动重算）。
    * 起终点过近、或没有可行路线时抛错（保存关卡组时用同一逻辑校验）。
    */
   async custom(level, meta = {}) {
@@ -123,16 +128,9 @@ export class Transit {
     const origin = level.origin;
     const destination = level.dest;
     ensure(router.haversineKm(origin, destination) >= CUSTOM_LIMITS.minDistanceKm, 'LEVEL_TOO_CLOSE');
-    const optimal = await router.findOptimalRoute(graph, origin, destination, options, async (a, b) => ({
-      min: (router.haversineKm(a, b) * 1000) / (75 * options.walkSpeedFactor),
-    }));
+    const optimalDurationMs = await this.customOptimalMs(graph, hash, level, options);
     // 最优方案必须真的乘车（全程步行的题目无法按乘车路线提交与验证）
-    ensure(
-      optimal && Number.isFinite(optimal.totalMin) && optimal.totalMin > 0
-        && (optimal.legs || []).some((leg) => leg.type === 'ride'),
-      'LEVEL_UNREACHABLE',
-    );
-    const optimalDurationMs = Math.round(optimal.totalMin * 60000);
+    ensure(optimalDurationMs !== null, 'LEVEL_UNREACHABLE');
     return {
       city: level.city,
       scenario: level.scenario,
@@ -146,6 +144,26 @@ export class Transit {
       limitMs: customLimitMs(level.timeLimit, optimalDurationMs),
       ...meta,
     };
+  }
+
+  /** 关卡最优用时（毫秒）；不可达（没有乘车方案）为 null。结果按 城市+情景+起终点+数据哈希 缓存 */
+  async customOptimalMs(graph, hash, level, options) {
+    const key = [level.city, level.scenario, ...level.origin, ...level.dest, hash].join('|');
+    if (this.customOptimal.has(key)) {
+      const value = this.customOptimal.get(key);
+      this.customOptimal.delete(key); // 重新插入，Map 按插入顺序淘汰最久没用的
+      this.customOptimal.set(key, value);
+      return value;
+    }
+    const optimal = await router.findOptimalRoute(graph, level.origin, level.dest, options, async (a, b) => ({
+      min: (router.haversineKm(a, b) * 1000) / (75 * options.walkSpeedFactor),
+    }));
+    const value = optimal && Number.isFinite(optimal.totalMin) && optimal.totalMin > 0
+      && (optimal.legs || []).some((leg) => leg.type === 'ride')
+      ? Math.round(optimal.totalMin * 60000) : null;
+    this.customOptimal.set(key, value);
+    if (this.customOptimal.size > CUSTOM_OPTIMAL_CACHE_MAX) this.customOptimal.delete(this.customOptimal.keys().next().value);
+    return value;
   }
 
   // 服务端权威重算：逐段校验物理站、乘车方向、线路衔接与步行距离，

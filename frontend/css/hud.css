@@ -13,7 +13,8 @@
 }
 #topbar .title { font-size: 16px; font-weight: 700; letter-spacing: .5px; color: var(--ink-strong); }
 #topbar .title .sub { font-weight: 500; font-size: 12px; color: var(--ink-muted); margin-left: 8px; }
-.topbar-right { display: flex; align-items: center; gap: 10px; }
+/* margin-left:auto：左侧标题/城市选择被隐藏时（如关卡编辑器），右侧账户与主页按钮仍贴右 */
+.topbar-right { display: flex; align-items: center; gap: 10px; margin-left: auto; }
 
 /* 左上角城市下拉选择器：默认（游戏进行中）隐藏，只在菜单态显示——
    游戏过程中不允许切换城市（切换会整页重载，清空当前局）。 */
@@ -167,44 +168,44 @@
 .stop-infocard .info-kicker { color: var(--ink-muted); font-size: 10px; font-weight: 700; letter-spacing: .08em; }
 .stop-infocard .infocard-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .stop-infocard .line-list { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
-:is(.stop-infocard, #route-panel) .line-tag {
+:is(.stop-infocard, #route-panel, .route-stop-sign) .line-tag {
   display: inline-flex; height: 30px; box-sizing: border-box; align-items: center; justify-content: center;
   padding: 3px 8px; border: 0; border-radius: 2px;
   font: inherit; color: #fff; font-weight: 600; box-shadow: var(--shadow-sm);
 }
-:is(.stop-infocard, #route-panel) .line-main { line-height: 1; }
-:is(.stop-infocard, #route-panel) .line-tag.selectable { cursor: pointer; transition: transform .12s, box-shadow .12s, opacity .12s; }
-:is(.stop-infocard, #route-panel) .line-tag.selectable:hover { transform: translateY(-1px); box-shadow: 0 0 0 2px rgba(255,255,255,.75), var(--shadow-sm); }
-:is(.stop-infocard, #route-panel) .line-tag.selected { box-shadow: 0 0 0 3px #fff, 0 0 0 5px var(--accent); }
+:is(.stop-infocard, #route-panel, .route-stop-sign) .line-main { line-height: 1; }
+:is(.stop-infocard, #route-panel, .route-stop-sign) .line-tag.selectable { cursor: pointer; transition: transform .12s, box-shadow .12s, opacity .12s; }
+:is(.stop-infocard, #route-panel, .route-stop-sign) .line-tag.selectable:hover { transform: translateY(-1px); box-shadow: 0 0 0 2px rgba(255,255,255,.75), var(--shadow-sm); }
+:is(.stop-infocard, #route-panel, .route-stop-sign) .line-tag.selected { box-shadow: 0 0 0 3px #fff, 0 0 0 5px var(--accent); }
 .stop-infocard .line-list { max-height: 60vh; overflow-y: auto; transition: max-height .25s cubic-bezier(.4,0,.2,1), opacity .2s, margin .25s, padding .25s; }
 
 /* 地铁线路牌：大数字在左，“号线 / Line N”位于右侧上下角。 */
-:is(.stop-infocard, #route-panel) .metro-line {
+:is(.stop-infocard, #route-panel, .route-stop-sign) .metro-line {
   min-width: 54px; display: inline-grid; grid-template-columns: auto auto; align-items: stretch;
   column-gap: 3px; padding: 3px 5px;
   font-family: "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
 }
-:is(.stop-infocard, #route-panel) .metro-line-main {
+:is(.stop-infocard, #route-panel, .route-stop-sign) .metro-line-main {
   align-self: center; font: 700 21px/1 "Roboto Condensed Local", Arial, sans-serif;
 }
-:is(.stop-infocard, #route-panel) .metro-line-side {
+:is(.stop-infocard, #route-panel, .route-stop-sign) .metro-line-side {
   display: flex; min-width: 22px; height: 100%; flex-direction: column;
   align-items: flex-start; justify-content: center; gap: 1px;
 }
-:is(.stop-infocard, #route-panel) .metro-line-suffix { font-size: 7px; font-weight: 700; line-height: 1; white-space: nowrap; }
-:is(.stop-infocard, #route-panel) .metro-line-en {
+:is(.stop-infocard, #route-panel, .route-stop-sign) .metro-line-suffix { font-size: 7px; font-weight: 700; line-height: 1; white-space: nowrap; }
+:is(.stop-infocard, #route-panel, .route-stop-sign) .metro-line-en {
   font: 600 7px/1 "Roboto Condensed Local", Arial, sans-serif; white-space: nowrap;
 }
 /* 纯文字地铁线路牌（首都机场线、北京大兴国际机场线、西郊线…）：只有一行字，上下左右居中 */
-:is(.stop-infocard, #route-panel) .metro-line.text-line {
+:is(.stop-infocard, #route-panel, .route-stop-sign) .metro-line.text-line {
   min-width: 48px; display: inline-flex; align-items: center; justify-content: center; text-align: center;
 }
-:is(.stop-infocard, #route-panel) .metro-line.text-line .metro-line-main {
+:is(.stop-infocard, #route-panel, .route-stop-sign) .metro-line.text-line .metro-line-main {
   font-family: "Noto Sans CJK SC", "Source Han Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
   font-size: 11px; line-height: 1.05;
 }
-:is(.stop-infocard, #route-panel) .metro-line.text-line .metro-line-suffix { font-size: 6px; }
-:is(.stop-infocard, #route-panel) .metro-line.text-line .metro-line-en { font-size: 6px; }
+:is(.stop-infocard, #route-panel, .route-stop-sign) .metro-line.text-line .metro-line-suffix { font-size: 6px; }
+:is(.stop-infocard, #route-panel, .route-stop-sign) .metro-line.text-line .metro-line-en { font-size: 6px; }
 
 /* 公交和地铁站点预览共用天津站牌式外框；区别只在线路牌内部。 */
 .stop-infocard.bus-board,
@@ -226,19 +227,19 @@
 .stop-infocard.metro-board .infocard-head { gap: 4px; }
 .stop-infocard.bus-board .line-list,
 .stop-infocard.metro-board .line-list { align-items: flex-start; gap: 3px; margin-top: 4px; padding-top: 4px; border-top: 1px solid #c5cbd0; }
-:is(.stop-infocard, #route-panel) .bus-line {
+:is(.stop-infocard, #route-panel, .route-stop-sign) .bus-line {
   min-width: 43px; height: 25px; border-radius: 0; padding: 0 4px;
   align-items: center; justify-content: center;
 }
-:is(.stop-infocard, #route-panel) .bus-line-content {
+:is(.stop-infocard, #route-panel, .route-stop-sign) .bus-line-content {
   display: inline-flex; align-items: baseline; line-height: 1;
 }
-:is(.stop-infocard, #route-panel) .bus-line .line-main {
+:is(.stop-infocard, #route-panel, .route-stop-sign) .bus-line .line-main {
   font: 600 18px/1 "Roboto Condensed Local", Arial, Helvetica, sans-serif;
 }
 /* 汉字字面比拉丁基线低约 0.1em；只做视觉上移（不影响布局），让“密/路”底边与数字底边齐平。 */
-:is(.stop-infocard, #route-panel) .bus-line .line-prefix,
-:is(.stop-infocard, #route-panel) .bus-line .line-suffix {
+:is(.stop-infocard, #route-panel, .route-stop-sign) .bus-line .line-prefix,
+:is(.stop-infocard, #route-panel, .route-stop-sign) .bus-line .line-suffix {
   margin: 0 1px; font-family: "Noto Sans CJK SC", "Source Han Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
   font-size: 7px; font-weight: 600; line-height: 1;
   transform: translateY(-0.09em);
@@ -246,13 +247,13 @@
 /* 支持 text-box 的浏览器把行框裁到“大写字母高度 ~ 基线”，内容块即数字字面本身，
    站牌的 align-items/justify-content:center 因而按可见字形上下左右居中，而不受字体行高影响。 */
 @supports (text-box: trim-both cap alphabetic) {
-  :is(.stop-infocard, #route-panel) .bus-line:not(.text-line) .line-main,
-  :is(.stop-infocard, #route-panel) .bus-line:not(.text-line) .line-prefix,
-  :is(.stop-infocard, #route-panel) .bus-line:not(.text-line) .line-suffix { text-box: trim-both cap alphabetic; }
+  :is(.stop-infocard, #route-panel, .route-stop-sign) .bus-line:not(.text-line) .line-main,
+  :is(.stop-infocard, #route-panel, .route-stop-sign) .bus-line:not(.text-line) .line-prefix,
+  :is(.stop-infocard, #route-panel, .route-stop-sign) .bus-line:not(.text-line) .line-suffix { text-box: trim-both cap alphabetic; }
 }
-:is(.stop-infocard, #route-panel) .bus-line.text-line { min-width: 0; max-width: 100%; align-items: center; justify-content: center; }
-:is(.stop-infocard, #route-panel) .bus-line.text-line .bus-line-content { align-items: center; }
-:is(.stop-infocard, #route-panel) .bus-line.text-line .line-main {
+:is(.stop-infocard, #route-panel, .route-stop-sign) .bus-line.text-line { min-width: 0; max-width: 100%; align-items: center; justify-content: center; }
+:is(.stop-infocard, #route-panel, .route-stop-sign) .bus-line.text-line .bus-line-content { align-items: center; }
+:is(.stop-infocard, #route-panel, .route-stop-sign) .bus-line.text-line .line-main {
   font-family: "Noto Sans CJK SC", "Source Han Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
   font-size: 10px; line-height: 1.1; white-space: normal; text-align: center;
 }

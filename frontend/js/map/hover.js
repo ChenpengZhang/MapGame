@@ -96,7 +96,7 @@ function reachableSegments(d) {
       out.push({ line, path: line.path, stops });
       continue;
     }
-    if (i >= stops.length - 1) continue; // 本方向到此为止，无法从这里上车
+    if (i >= stops.length - 1) continue; // 本方向到此为止，无法从这里上车（站牌同样不列，见 endsHere）
     const here = stops[i];
     let start = 0, best = Infinity;
     line.path.forEach((p, k) => {
@@ -200,10 +200,20 @@ function displayLines(d) {
   for (const id of d.line_ids || []) {
     const line = getLine(id);
     if (!isLineAvailable(line) || !line.path || line.path.length < 2 || seen.has(line.name)) continue; // 禁用地铁时站牌不列地铁
+    if (endsHere(line, d)) continue; // 在本站终止的单向车次（如到北京西站为止的 S102）上不了车，预览也画不出线
     seen.add(line.name);
     shown.push(line);
   }
   return shown;
+}
+
+/** 单向线路在本站已到终点（与 reachableSegments 同一判定）；同名的另一方向仍可上车时由它列出 */
+function endsHere(line, d) {
+  if (!line.oneWay || line.isLoop) return false;
+  const stops = line.stops || [];
+  const physId = d.stopByLine ? d.stopByLine[String(line.id)] : null;
+  const i = physId == null ? -1 : stops.findIndex((st) => String(st.id) === String(physId));
+  return i >= 0 && i >= stops.length - 1;
 }
 
 /** 信息卡内容：按公交/地铁标牌语言展示站名与途经线路（大站可折叠）。 */

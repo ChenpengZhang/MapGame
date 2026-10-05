@@ -27,6 +27,12 @@ export const CITIES = [
   { id: 'wuhan', name: '武汉', center: [114.305, 30.593], sample: null, pinyin: 'wu han' },
   { id: 'nanjing', name: '南京', center: [118.796, 32.059], sample: null, pinyin: 'nan jing' },
   { id: 'tianjin', name: '天津', center: [117.201, 39.084], sample: null, pinyin: 'tian jin' },
+  { id: 'qingdao', name: '青岛', center: [120.383, 36.067], sample: null, pinyin: 'qing dao' },
+  { id: 'kunming', name: '昆明', center: [102.833, 24.880], sample: null, pinyin: 'kun ming' },
+  { id: 'xiamen', name: '厦门', center: [118.089, 24.479], sample: null, pinyin: 'xia men' },
+  { id: 'jinan', name: '济南', center: [117.000, 36.651], sample: null, pinyin: 'ji nan' },
+  { id: 'zhengzhou', name: '郑州', center: [113.625, 34.747], sample: null, pinyin: 'zheng zhou' },
+  { id: 'changchun', name: '长春', center: [125.324, 43.817], sample: null, pinyin: 'chang chun' },
 ];
 
 /** 按 id 取城市对象 */

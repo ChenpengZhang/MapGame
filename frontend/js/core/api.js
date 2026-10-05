@@ -10,6 +10,7 @@ const messages = {
   UNTRUSTED_ORIGIN:'网站地址与服务器配置不一致，请联系维护者。',
   PUZZLE_VERSION_UNAVAILABLE:'地图数据已更新，请刷新页面；旧爬塔需从第一层重开。',
   DAILY_CLOSED:'今天的挑战已结束，请返回菜单重新开始。',
+  DAILY_NOT_FOUND:'这一天没有每日挑战。',DAILY_NOT_CLOSED:'这道题还没有截止，答案暂不公开。',
   LINE_NOT_ALLOWED:'路线使用了本局不允许的线路。', INVALID_STOPS:'路线站点无效，尚未入库。',
   DISCONNECTED_ROUTE:'路线不连续，尚未入库。', START_TOO_FAR:'首站距离起点过远。',END_TOO_FAR:'末站距离终点过远。',
   WRONG_DIRECTION_OR_MISSING_EDGE:'路线方向或站间数据无效，尚未入库。',

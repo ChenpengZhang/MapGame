@@ -29,9 +29,8 @@ function renderPreview(key = activeKey) {
   activeKey = key;
   const stage = $('settings-preview-stage');
   if (stage) {
-    // 有的设置不需要示意图（如缩放速度），只显示说明文字
+    // 有的设置没有示意图（如缩放速度）：保留同样大小的空框占位，切换选项时版面不跳动
     stage.innerHTML = def.render ? def.render(valueOf(key)) : '';
-    stage.classList.toggle('hidden', !def.render);
   }
   const title = $('settings-preview-title');
   if (title) title.textContent = def.title;

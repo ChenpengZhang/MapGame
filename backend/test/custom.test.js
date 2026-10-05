@@ -48,6 +48,19 @@ test('transit builds a custom round on real data and rejects too-close levels', 
 });
 
 const url = process.env.TEST_DATABASE_URL;
+test('transit caches custom optimal durations per city/scenario/endpoints/data hash', async () => {
+  const transit = new Transit();
+  const first = await transit.custom(SHUANGHE);
+  assert.equal(transit.customOptimal.size, 1);
+  // 缓存命中时不再跑寻路：把缓存值改掉，第二次取到的就是改过的值
+  const [key] = transit.customOptimal.keys();
+  transit.customOptimal.set(key, first.optimalDurationMs + 1);
+  assert.equal((await transit.custom(SHUANGHE)).optimalDurationMs, first.optimalDurationMs + 1);
+  // 改了情景就是另一关，重新计算
+  await transit.custom({ ...SHUANGHE, scenario: 'rain' });
+  assert.equal(transit.customOptimal.size, 2);
+});
+
 test('PostgreSQL: custom map lifecycle, scored rounds, leaderboard and versioning', { skip: !url }, async (t) => {
   assert.match(new URL(url).pathname.slice(1), /_test$/, 'TEST_DATABASE_URL must target a *_test database');
   const pool = new pg.Pool({ connectionString: url, max: 5 });

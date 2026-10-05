@@ -68,6 +68,7 @@ export function startLevel(level, opts) {
   }
   if(!opts.onlineStage) leaveOnlineRound();
   state.currentLevel = level;
+  state.answerView = !!level.answerView; // 每日挑战答案：只看不玩（见 game/daily-answer.js）
   state.gameMode = level.mode || 'standard'; // 固定关卡=standard；随机=random
   state.ORIGIN = [level.origin.lng, level.origin.lat];
   state.DEST = [level.dest.lng, level.dest.lat];
@@ -120,6 +121,7 @@ export function showMenu() {
   const wasOnline=!!state.onlineRound;
   leaveOnlineRound();
   if (state.editorActive) closeCustomEditor(); // 编辑中点了回主页：直接关闭编辑器（未保存的修改丢弃）
+  state.answerView = false;
   state.customPlay = null; // 自定义关卡组：离开即结束本次游玩（登录玩家的进行中对局保留在服务端，可继续）
   // 先记下爬塔状态：resetRoute 会清掉 finished，必须在它之前取
   const tower = state.towerActive

@@ -15,6 +15,7 @@ import { cityById } from '../data/cities.js';
 import { showPanel } from '../ui/menu.js';
 import { openAccount } from './account-actions.js';
 import { startOnline } from './online.js';
+import { showDailyAnswer } from './daily-answer.js';
 
 let dailyInfo = null;     // GET /daily 的结果（缓存到切日）
 let countdownTimer = null;
@@ -44,11 +45,11 @@ function renderInfo() {
   setText('daily-info', `${dailyInfo.date} · ${city} · 距本题截止还有 ${formatRemaining(dailyInfo.closesAt)}`);
 }
 
-/** 完成时刻（第二排名键：同用时更早完成者靠前），显示为本地时间 时:分:秒 */
+/** 完成时刻（第二排名键：同用时更早完成者靠前），统一按北京时间（UTC+8）显示 时:分:秒，与每日题目的日期边界一致 */
 function formatAchieved(value) {
   const d = value ? new Date(value) : null;
   if (!d || Number.isNaN(d.getTime())) return '—';
-  return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+  return d.toLocaleTimeString('zh-CN', { timeZone: 'Asia/Shanghai', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
 }
 
 function boardRow(list, row, own) {
@@ -150,6 +151,10 @@ function initYesterdayPanel() {
   const narrow = typeof window !== 'undefined' && window.innerWidth < 1180;
   setYesterdayCollapsed(saved != null ? saved === '1' : (!!state.isTouch || narrow));
   toggle.addEventListener('click', () => setYesterdayCollapsed(!$('daily-yesterday').classList.contains('collapsed')));
+  // 查看昨日答案：地图上画出最快路线（服务端只公开已截止的题目）
+  $('daily-yesterday-answer')?.addEventListener('click', () => {
+    if (dailyInfo) void showDailyAnswer(previousDate(dailyInfo.date));
+  });
 }
 
 /** 打开每日挑战面板 */

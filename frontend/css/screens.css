@@ -277,7 +277,9 @@
 .setting-key-actions { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12px; }
 .settings-preview { display: flex; flex-direction: column; gap: 8px; min-height: 0; }
 .settings-preview-stage {
-  aspect-ratio: 360 / 200; border-radius: 12px; overflow: hidden; background: #0b1424; border: 1px solid var(--ring);
+  /* 固定为字号示意图（760×412）的比例：图片没加载出来、或该项没有示意图时也占着同样大小，
+     手机上切换选项时下面的设置列表不会上下跳；其它截图按此比例裁切（cover），不拉伸 */
+  aspect-ratio: 760 / 412; border-radius: 12px; overflow: hidden; background: #0b1424; border: 1px solid var(--ring);
   display: grid; place-items: center;
 }
 .settings-preview-svg { width: 100%; height: 100%; display: block; background: #f6f5f0; font-family: var(--font-sign); }
@@ -287,10 +289,8 @@
 /* 真实截图预览（scripts/capture-settings-previews.mjs 生成） */
 .pv-compare { display: grid; grid-template-columns: 1fr 1fr; gap: 2px; width: 100%; height: 100%; background: #0b1424; }
 .pv-shot { position: relative; width: 100%; height: 100%; margin: 0; }
-/* 单张截图：预览框按图片自身比例变高或变矮，整张图完整显示，不裁切也不留边 */
-.settings-preview-stage:has(> .pv-shot) { aspect-ratio: auto; display: block; }
-.settings-preview-stage > .pv-shot { height: auto; }
-.settings-preview-stage > .pv-shot img { height: auto; }
+/* 截图铺满固定比例的预览框（多出的部分居中裁掉） */
+.settings-preview-stage:has(> .pv-shot, > .pv-compare) { display: block; }
 .pv-shot img { display: block; width: 100%; height: 100%; object-fit: cover; }
 .pv-shot figcaption {
   position: absolute; left: 8px; bottom: 8px; padding: 3px 8px; border-radius: 6px;

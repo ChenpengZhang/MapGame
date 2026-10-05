@@ -61,3 +61,8 @@
 .account-card a{color:#cbd5e1;text-underline-offset:4px}.hidden{display:none!important}
 
 @media (max-width:600px){.account-card{padding:24px 20px}.account-trigger{max-width:80px;font-size:13px}.leaderboard-card{padding:24px 12px 28px}.leaderboard-heading{margin-left:6px}.leaderboard-scenarios{grid-template-columns:repeat(2,1fr)}.leaderboard-table th,.leaderboard-row td{padding:8px 7px}.leaderboard-table th:nth-child(1),.leaderboard-table td:nth-child(1){width:50px}.leaderboard-table th:nth-child(3),.leaderboard-table td:nth-child(3){width:52px}.leaderboard-table th:nth-child(4),.leaderboard-table td:nth-child(4){width:108px}.leaderboard-row td{height:48px;font-size:12px}.leaderboard-rank{font-size:15px}.leaderboard-name{font-size:13px}.leaderboard-time{font-size:12px;letter-spacing:0}}
+/* 游玩记录「加载更多」：列表末尾一行居中的文字 */
+.history-more{all:unset;display:block;box-sizing:border-box;width:100%;padding:14px 0 4px;text-align:center;color:#5fd3e0;font-size:14px;cursor:pointer}
+.history-more:hover{color:#9be7ef}
+.history-more:disabled{color:#7f93a6;cursor:default}
+.history-more:focus-visible{outline:2px solid #5fd3e0;outline-offset:2px}

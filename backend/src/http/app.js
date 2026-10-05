@@ -80,12 +80,14 @@ export const submissionBody = z.object({
   ).min(1).max(200),
 }).strict();
 
+const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(
+  (v) => !Number.isNaN(Date.parse(v)) && new Date(v).toISOString().slice(0, 10) === v,
+);
+const dailyAnswerQuery = z.object({ date: isoDate }).strict();
 const boardQuery = z.discriminatedUnion('mode', [
   z.object({
     mode: z.literal('daily'),
-    date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(
-      (v) => !Number.isNaN(Date.parse(v)) && new Date(v).toISOString().slice(0, 10) === v,
-    ),
+    date: isoDate,
   }).strict(),
   z.object({ mode: z.literal('tower'), city, scenario }).strict(),
   z.object({ mode: z.literal('custom'), map: shareCode }).strict(),
@@ -140,6 +142,8 @@ export function createApp({ auth, game, repository, config }) {
   });
 
   app.get(`${prefix}/daily`, async (req, res) => res.json(await game.dailyInfo()));
+  // 已截止的每日题目（昨日答案）：只给起终点和情景，最快路线由前端用同一套寻路画出
+  app.get(`${prefix}/daily/answer`, async (req, res) => res.json(await game.dailyAnswer(dailyAnswerQuery.parse(req.query).date)));
 
   app.get(`${prefix}/leaderboard`, async (req, res) => {
     const session = await auth.api.getSession({ headers: fromNodeHeaders(req.headers) });
@@ -168,7 +172,10 @@ export function createApp({ auth, game, repository, config }) {
   app.use(prefix, rateLimit({ windowMs: 60000, limit: 30, keyGenerator: (req) => req.userId, standardHeaders: 'draft-8', legacyHeaders: false }));
 
   app.get(`${prefix}/me`, (req, res) => res.json({ userId: req.userId }));
-  app.get(`${prefix}/history`, async (req, res) => res.json(await game.history(req.userId)));
+  app.get(`${prefix}/history`, async (req, res) => {
+    const query = z.object({ cursor: z.string().max(64).optional() }).strict().parse(req.query);
+    res.json(await game.history(req.userId, query.cursor ?? null));
+  });
   app.get(`${prefix}/story-progress`, async (req, res) => res.json(await game.storyProgress(req.userId)));
 
   app.get(`${prefix}/tower-progress`, async (req, res) => {

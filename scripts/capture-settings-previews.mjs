@@ -1,5 +1,6 @@
-// 设置页预览图：用真实浏览器截取“公交站显示级别”与 OSM 底图示例，存到 frontend/assets/settings/。
-// 字号、地铁底图、步行换乘、高德示例是手动截取的，不由本脚本生成。
+// 设置页预览图：用真实浏览器截取“公交站显示级别”与 OSM 底图示例，存到 design/settings-previews-src/（原图）。
+// 字号、地铁底图、步行换乘、高德示例是手动截取的，不由本脚本生成，原图同样放在该目录。
+// 截完后运行 python3 scripts/compress-settings-previews.py，裁切压缩成 frontend/assets/settings/*.webp 才会上线。
 // 用法：先启动开发服务器（PORT=8090 NO_OPEN=1 node server.js），再运行
 //   node scripts/capture-settings-previews.mjs [http://localhost:8090]
 // 使用本机 Chrome（Playwright 的 channel: 'chrome'），底图为免 Key 的 OSM，需要联网加载瓦片。
@@ -7,7 +8,7 @@ import { chromium } from 'playwright';
 import { mkdirSync } from 'node:fs';
 
 const BASE = process.argv[2] || 'http://localhost:8090';
-const OUT = new URL('../frontend/assets/settings/', import.meta.url);
+const OUT = new URL('../design/settings-previews-src/', import.meta.url);
 mkdirSync(OUT, { recursive: true });
 
 // 北京市中心的固定场景：起点在西单附近，终点在东边，保证每次截图内容一致

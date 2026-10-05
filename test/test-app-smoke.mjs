@@ -764,10 +764,10 @@ await step('每日挑战面板：今日题目、游客提示、我的名次', as
     const u = String(url);
     if (u.endsWith('/api/daily')) return json({ id: 'd1', date: '2026-09-29', city: 'beijing', scenario: 'normal', opensAt: closesAt, closesAt });
     if (u.includes('/leaderboard?') && u.includes('date=2026-09-28')) {
-      return json({ leaders: [{ rank: '1', name: '昨日冠军', duration_ms: 1200000, achieved_at: '2026-09-28T09:00:00' }], player: null });
+      return json({ leaders: [{ rank: '1', name: '昨日冠军', duration_ms: 1200000, achieved_at: '2026-09-28T01:00:00Z' }], player: null });
     }
     if (u.includes('/leaderboard?') && u.includes('mode=daily')) {
-      return json({ leaders: [{ rank: '1', name: '甲', duration_ms: 1500000, achieved_at: '2026-09-29T08:05:09' }], player: { rank: '23', name: '测试玩家', duration_ms: 1860000, is_me: true } });
+      return json({ leaders: [{ rank: '1', name: '甲', duration_ms: 1500000, achieved_at: '2026-09-29T00:05:09Z' }], player: { rank: '23', name: '测试玩家', duration_ms: 1860000, is_me: true } });
     }
     return originalFetch(url);
   };

@@ -3,6 +3,7 @@ import { account,refreshAccount } from '../core/account.js';
 import { $,hide,show,setText } from '../core/dom.js';
 import { showMenu } from './session.js';
 import { clearGuestTowerState,loadStoryProgress,loadTowerState } from './progress.js';
+import { cityById } from '../data/cities.js';
 
 let mode='login';
 let busy=false;
@@ -167,21 +168,46 @@ export async function logout() {
   try{await api('/auth/sign-out',{});location.assign('/mapgame/');}
   catch(error){openAccount('login');setText('account-message',error.message);}finally{busy=false;}
 }
+// 游玩记录分页：每页条数由服务端决定（见 backend game-service.js HISTORY_PAGE），点「加载更多」接着取下一页
+const HISTORY_MODES={tower:'无尽模式',free:'随机模式',story:'故事模式',daily:'每日挑战',custom:'自定义模式'};
+let historyVersion=0;
+
+function historyRow(row) {
+  const element=document.createElement('div');element.className='history-row';
+  const city=cityById(row.city_id)?.name||row.city_id;
+  element.textContent=`${city} · ${HISTORY_MODES[row.mode]||row.mode}${row.mode==='tower'?` · 第 ${row.stage_no} 层`:''}\n路线 ${(Number(row.duration_ms)/60000).toFixed(1)} 分钟 · ${row.passed?'完成':'未通过'}\n${new Date(row.submitted_at).toLocaleString('zh-CN')}`;
+  element.style.whiteSpace='pre-line';
+  return element;
+}
+
+/** 把一页记录追加到列表；还有下一页时在末尾放「加载更多」 */
+function appendHistoryPage(list,page,version) {
+  list.querySelector('.history-more')?.remove();
+  for(const row of page.rows||[])list.appendChild(historyRow(row));
+  if(!page.next)return;
+  const more=document.createElement('button');more.type='button';more.className='history-more';more.textContent='加载更多';
+  more.addEventListener('click',async()=>{
+    more.disabled=true;more.textContent='正在加载…';
+    try{
+      const next=await api(`/history?${new URLSearchParams({cursor:page.next})}`);
+      if(version===historyVersion)appendHistoryPage(list,next,version);
+    }catch(error){more.disabled=false;more.textContent=`加载失败（${error.message}），点此重试`;}
+  });
+  list.appendChild(more);
+}
+
 export async function showHistory() {
   closeAccountMenu();
   document.body?.classList.add('modal-open');
   show('history-dialog');setText('history-list','正在加载…');
+  const version=++historyVersion;
   try {
-    const rows=await api('/history');const list=$('history-list');list.replaceChildren();
-    if(!rows.length) { list.textContent='还没有已保存的游玩记录，完成一局后会显示在这里。';return; }
-    const modes={tower:'无尽模式',free:'随机模式',story:'故事模式',daily:'每日挑战'};
-    const cities={beijing:'北京',shanghai:'上海',guangzhou:'广州',shenzhen:'深圳'};
-    for(const row of rows) {
-      const element=document.createElement('div');element.className='history-row';
-      element.textContent=`${cities[row.city_id]||row.city_id} · ${modes[row.mode]||row.mode}${row.mode==='tower'?` · 第 ${row.stage_no} 层`:''}\n路线 ${(Number(row.duration_ms)/60000).toFixed(1)} 分钟 · ${row.passed?'完成':'未通过'}\n${new Date(row.submitted_at).toLocaleString('zh-CN')}`;
-      element.style.whiteSpace='pre-line';list.appendChild(element);
-    }
-  }catch(error){setText('history-list',error.message);}
+    const first=await api('/history');
+    if(version!==historyVersion)return;
+    const list=$('history-list');list.replaceChildren();
+    if(!first.rows?.length) { list.textContent='还没有已保存的游玩记录，完成一局后会显示在这里。';return; }
+    appendHistoryPage(list,first,version);
+  }catch(error){if(version===historyVersion)setText('history-list',error.message);}
 }
 export function closeHistory() {
   hide('history-dialog');

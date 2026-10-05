@@ -293,8 +293,30 @@
   border: 1px solid rgba(255,255,255,.12); border-right: 0; background: #111c30f2;
 }
 .daily-yesterday-body h3 { margin: 0 0 4px; font-size: 16px; color: var(--ink); }
-.daily-yesterday-date { margin: 0 0 10px; font-size: 12px; color: #9fb0c3; }
+.daily-yesterday-date { margin: 0 0 10px; font-size: 12px; color: #9fb0c3; display: flex; align-items: baseline; gap: 10px; }
+/* “查看昨日答案”：只是一行可点的文字（带下划线），不做成按钮的样子 */
+.daily-yesterday .daily-answer-link {
+  all: unset; margin-left: auto; color: #5fd3e0; font-size: 12px; cursor: pointer;
+  text-decoration: underline; text-underline-offset: 3px;
+}
+.daily-yesterday .daily-answer-link:hover { color: #9be7ef; }
+.daily-yesterday .daily-answer-link:focus-visible { outline: 2px solid #5fd3e0; outline-offset: 2px; }
 .daily-yesterday .daily-board-wrap { max-height: min(360px, 60vh); }
 /* 共用排行表是固定列宽（为宽弹窗设计），窄侧栏改为按内容自动分配 */
 .daily-yesterday .leaderboard-table { table-layout: auto; }
 .daily-yesterday .daily-board th, .daily-yesterday .daily-board td { width: auto; height: auto; padding: 7px 8px; white-space: nowrap; font-size: 12px; }
+
+/* 关卡编辑器：最快路线旁的上下车站名牌（optimal-layer.js drawRouteStationSigns）
+   天津站牌式小牌：米白底、顶部灰压条（地铁为深蓝）、站名黑字，上车站再附该段线路牌。 */
+.rss-anchor { position: relative; width: 0; height: 0; pointer-events: none; }
+.route-stop-sign {
+  position: absolute; left: 9px; bottom: 7px;
+  display: flex; align-items: center; gap: 4px; padding: 3px 5px;
+  font-family: var(--font-sign); color: var(--sign-ink); background: var(--sign-bg);
+  border-top: 3px solid var(--sign-bar); box-shadow: var(--sign-shadow);
+  white-space: nowrap; pointer-events: none;
+}
+.route-stop-sign.metro { border-top-color: #1f3b73; }
+.route-stop-sign .rss-name { font-size: 12px; font-weight: 700; line-height: 1.2; }
+#map .route-stop-sign .line-tag { transform-origin: left center; height: 22px; box-shadow: none; }
+#map .route-stop-sign .bus-line { height: 20px; }

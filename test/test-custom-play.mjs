@@ -24,7 +24,10 @@ assert.equal(first.origin.name, '起点');
 
 const second = customLevelView(map, 1, 5000);
 assert.equal(second.hudText, '第 2/2 关 · 累计 5000 分 · ≤ 最速 150% · 盲棋');
-assert.deepEqual(second.story, [{ type: 'narration', text: '换乘\n先坐 3路' }]);
+assert.deepEqual(second.story, [{ type: 'narration', text: '先坐 3路' }], '对话框只放提示文字，标题已在任务目标里');
+assert.equal(second.goalText, '换乘');
+const titleOnly = customLevelView({ ...map, levels: [{ ...map.levels[1], text: undefined }] }, 0, 0);
+assert.equal(titleOnly.story, null, '只写了标题、没写提示文字时不弹对话框');
 assert.equal(second.origin.name, '迎宾桥');
 assert.equal(second.title, '测试组 · 第 2/2 关');
 assert.equal(customScenario('blind').blindMap, true, '盲棋情景带上无底图标志');

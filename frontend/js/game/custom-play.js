@@ -24,9 +24,8 @@ export function customLevelView(map, index, totalScore = 0) {
   const hud = [`第 ${index + 1}/${count} 关`, `累计 ${totalScore} 分`];
   if (def.timeLimit) hud.push(describeTimeLimit(def.timeLimit));
   if (def.scenario !== 'normal') hud.push(scenario.label);
-  const story = def.title || def.text
-    ? [{ type: 'narration', text: [def.title, def.text].filter(Boolean).join('\n') }]
-    : null;
+  // 只有写了提示文字才在开局弹对话框；本关标题已显示在任务目标（goalText）里，不再重复弹出
+  const story = def.text ? [{ type: 'narration', text: def.text }] : null;
   return {
     id: 'custom',
     mode: 'random',

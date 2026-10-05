@@ -7,39 +7,43 @@
 
 import { FONT_SCALES } from '../core/settings.js';
 
-/** 一张截图 + 左下角说明；预览框按图片比例自适应高度（见 css/screens.css） */
+// 截图是压缩后的 WebP（scripts/compress-settings-previews.py 生成）。带版本号走一年强缓存：
+// 切换设置项时预览会重建 <img>，不带版本号的资源服务器回 no-store，每次都会重新下载。换图时把版本号加一。
+const SHOT_VERSION = 1;
+const shotUrl = (name) => `assets/settings/${name}.webp?v=${SHOT_VERSION}`;
+
+/** 一张截图 + 左下角说明；预览框固定为字号示意图的比例，截图铺满裁切（见 css/screens.css） */
 function shot(src, caption = '') {
-  return `<figure class="pv-shot"><img src="assets/settings/${src}" alt="">`
+  return `<figure class="pv-shot"><img src="${shotUrl(src)}" alt="" decoding="async">`
     + (caption ? `<figcaption>${caption}</figcaption>` : '') + '</figure>';
 }
 
 /** 真实截图：步行换乘（绿色虚线）——下车后步行到附近另一站换乘 */
 function walkTransferPreview(on) {
-  return shot('walk-transfer.jpg', on ? '已开启：虚线为步行换乘' : '已关闭：只能在同一站换乘');
+  return shot('walk-transfer', on ? '已开启：虚线为步行换乘' : '已关闭：只能在同一站换乘');
 }
 
 /** 真实截图（scripts/capture-settings-previews.mjs 生成）：东单一带正好缩放到该级别时的样子 */
 function busZoomPreview(threshold) {
-  return `<figure class="pv-shot"><img src="assets/settings/bus-zoom-${threshold}.jpg" alt="">
-    <figcaption>缩放到 ${threshold} 级：公交站开始显示</figcaption></figure>`;
+  return shot(`bus-zoom-${threshold}`, `缩放到 ${threshold} 级：公交站开始显示`);
 }
 
 /** 真实截图：同一位置开 / 关地铁底图 */
 function metroBasePreview(on) {
-  return shot(on ? 'metro-on.jpg' : 'metro-off.jpg', on ? '显示地铁底图' : '隐藏地铁底图');
+  return shot(on ? 'metro-on' : 'metro-off', on ? '显示地铁底图' : '隐藏地铁底图');
 }
 
 /** 真实截图：同一局游戏三种字号，站牌在左上角 */
 function fontScalePreview(scale) {
   const name = scale in FONT_SCALES ? scale : 'normal';
-  return shot(`font-${name}.jpg`);
+  return shot(`font-${name}`);
 }
 
 /** 真实截图：同一地点（北京建国门一带）的两种底图 */
 function amapPreview() {
   return `<div class="pv-compare">
-    <figure class="pv-shot"><img src="assets/settings/osm-sample.jpg" alt=""><figcaption>OpenStreetMap（默认）</figcaption></figure>
-    <figure class="pv-shot"><img src="assets/settings/amap-sample.jpg" alt=""><figcaption>高德地图</figcaption></figure>
+    ${shot('osm-sample', 'OpenStreetMap（默认）')}
+    ${shot('amap-sample', '高德地图')}
   </div>`;
 }
 

@@ -21,9 +21,11 @@ export const SCENARIOS = Object.freeze({
 });
 
 export const CITIES = ['beijing', 'shanghai', 'guangzhou', 'shenzhen', 'wenshan', 'shuanghe', 'kokdala', 'datong',
-  'chengdu', 'chongqing', 'hangzhou', 'wuhan', 'nanjing', 'tianjin'];
+  'chengdu', 'chongqing', 'hangzhou', 'wuhan', 'nanjing', 'tianjin', 'qingdao',
+  'kunming', 'xiamen', 'jinan', 'zhengzhou', 'changchun'];
 // 大城市（公交 + 地铁 500 条线以上）：每日挑战每天在其中随机选一个城市出题
-export const BIG_CITIES = ['beijing', 'shanghai', 'guangzhou', 'shenzhen', 'chengdu', 'chongqing', 'hangzhou', 'wuhan', 'nanjing', 'tianjin'];
+export const BIG_CITIES = ['beijing', 'shanghai', 'guangzhou', 'shenzhen', 'chengdu', 'chongqing', 'hangzhou', 'wuhan', 'nanjing', 'tianjin', 'qingdao',
+  'kunming', 'xiamen', 'jinan', 'zhengzhou', 'changchun'];
 export const RULES_VERSION = 1;
 export const DATA_VERSION = 7;
 

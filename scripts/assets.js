@@ -28,7 +28,7 @@ function publicAssets(root) {
   collect('data/boundaries','/data/boundaries',new Set(['.json']));
   // 江河中心线（武汉、重庆等）：禁止步行过江，见 shared/rivers.js
   collect('data/rivers','/data/rivers',new Set(['.json']));
-  for (const name of ['sample','beijing-transit','guangzhou-transit','shanghai-transit','shenzhen-transit','wenshan-transit','shuanghe-transit','kokdala-transit','datong-transit','chengdu-transit','chongqing-transit','hangzhou-transit','wuhan-transit','nanjing-transit','tianjin-transit']) {
+  for (const name of ['sample','beijing-transit','guangzhou-transit','shanghai-transit','shenzhen-transit','wenshan-transit','shuanghe-transit','kokdala-transit','datong-transit','chengdu-transit','chongqing-transit','hangzhou-transit','wuhan-transit','nanjing-transit','tianjin-transit','qingdao-transit','kunming-transit','xiamen-transit','jinan-transit','zhengzhou-transit','changchun-transit']) {
     const relative = `data/${name}.json`;
     if (fs.existsSync(path.join(root,relative))) assets.set(`/${relative}`,relative);
   }

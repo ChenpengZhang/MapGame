@@ -43,3 +43,23 @@ test('production cannot accidentally use preview mail or HTTP; config errors omi
   assert.throws(()=>configFromEnv({...base,NODE_ENV:'production'}));
   try { configFromEnv({...base,DATABASE_URL:'PRIVATE_SECRET'}); } catch(error) { assert.ok(!error.message.includes('PRIVATE_SECRET')); }
 });
+
+test('daily answer is only public after the challenge closes', async () => {
+  const { GameService } = await import('../src/application/game-service.js');
+  const daily = {
+    opens_at: new Date('2026-10-03T16:00:00Z'), closes_at: new Date('2026-10-04T16:00:00Z'),
+    puzzle: { city: 'beijing', scenario: 'normal', origin: [116.4, 39.9], destination: [116.5, 39.95], optimalDurationMs: 1800000, dataHash: 'x' },
+  };
+  let now = new Date('2026-10-04T12:00:00Z');
+  const repository = { daily: async (date) => (date === '2026-10-04' ? daily : null), now: async () => now };
+  const game = new GameService(repository, null);
+  await assert.rejects(game.dailyAnswer('2026-10-04'), { code: 'DAILY_NOT_CLOSED' });
+  await assert.rejects(game.dailyAnswer('2026-10-01'), { code: 'DAILY_NOT_FOUND' });
+  now = new Date('2026-10-04T16:00:01Z');
+  const answer = await game.dailyAnswer('2026-10-04');
+  assert.deepEqual(answer, {
+    date: '2026-10-04', city: 'beijing', scenario: 'normal',
+    origin: [116.4, 39.9], destination: [116.5, 39.95], optimalDurationMs: 1800000,
+  });
+  assert.equal('dataHash' in answer, false, '只公开起终点与情景');
+});

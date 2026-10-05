@@ -150,9 +150,12 @@ test('PostgreSQL: authentication, reset, authoritative settlement, concurrency a
   assert.equal(storyResult.passed,true);
   assert.deepEqual(await game.storyProgress(user.id),{unlocked:2});
   const history=await (await request('/history',undefined,cookie)).json();
-  assert.ok(history.some(row=>row.run_id===free.run.id && row.mode==='free'));
-  assert.ok(history.some(row=>row.run_id===story.run.id && row.story_id==='wenshan_intro'));
-  assert.deepEqual(await game.history('another-user'),[]);
+  assert.ok(history.rows.some(row=>row.run_id===free.run.id && row.mode==='free'));
+  assert.ok(history.rows.some(row=>row.run_id===story.run.id && row.story_id==='wenshan_intro'));
+  assert.equal(history.next,null,'不满一页时没有下一页');
+  assert.equal('cursor_us' in history.rows[0],false,'游标字段不外露');
+  assert.deepEqual(await game.history('another-user'),{rows:[],next:null});
+  assert.equal((await request('/history?cursor=bad',undefined,cookie)).status,400);
   assert.equal((await request('/history')).status,401);
   assert.equal((await request('/runs',{mode:'story',levelId:'injected'},cookie)).status,400);
   response = await request('/auth/email-otp/request-password-reset',{email});

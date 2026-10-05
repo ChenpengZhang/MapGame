@@ -224,7 +224,7 @@ setStopChoiceFilter((data) => {
 
 /** 基础站点层的点击回调（由 app.js 注入到 map/stop-layer.js） */
 export function onStopClick(e) {
-  if (state.storyActive || state.editorActive) return; // 剧情/教学、关卡编辑期间禁止开始规划
+  if (state.storyActive || state.editorActive || state.answerView) return; // 剧情/教学、关卡编辑、查看答案期间禁止开始规划
   if (isMapPracticePending()) {
     clearHighlight();
     return;
@@ -630,7 +630,7 @@ function commitWalkTransfer(logical, prev, force,selectedPhys) {
 
 /** 点"终"图钉（或终点步行）后完成规划，并触发最优路线对比 */
 export function finishRoute({ silentOutOfRange = false } = {}) {
-  if (state.finished) return;
+  if (state.finished || state.answerView) return; // 查看答案时点“终”只聚焦终点范围
   if (isMapPracticePending()) return;
 
   // 未选择任何站点：直接从起点步行到终点

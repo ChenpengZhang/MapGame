@@ -61,6 +61,12 @@ const INCLUDE = [
   'data/wuhan-transit.json',
   'data/nanjing-transit.json',
   'data/tianjin-transit.json',
+  'data/qingdao-transit.json',
+  'data/kunming-transit.json',
+  'data/xiamen-transit.json',
+  'data/jinan-transit.json',
+  'data/zhengzhou-transit.json',
+  'data/changchun-transit.json',
   'data/boundaries',            // 城市行政边界：无尽模式“盲棋”画城市轮廓
   'data/rivers',                // 江河中心线：武汉、重庆禁止步行过江
   'data/sample.json',           // 演示兜底

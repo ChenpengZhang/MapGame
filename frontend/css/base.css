@@ -8,6 +8,9 @@ html, body {
   background: var(--bg);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+  /* 手机浏览器：禁止双击放大页面（保留单指滚动；双指缩放由 dom.js preventPagePinch 拦截），也去掉点击的 300ms 延迟。
+     地图容器自身是 touch-action: none，平移与双指缩放由地图库处理，不受影响 */
+  touch-action: manipulation;
 }
 ::selection { background: var(--primary-soft); color: var(--primary-deep); }
 

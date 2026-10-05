@@ -52,6 +52,7 @@ export const state = {
   storyUnlocked: 1,             // 故事模式已解锁关卡数（1 = 仅第 1 关）
   storyActive: false,           // 剧情/教学进行中，禁止地图操作
   editorActive: false,          // 关卡编辑器打开中：站点点击/悬浮不触发规划
+  answerView: false,            // 查看每日挑战答案中：只展示最快路线，不能规划
   customPlay: null,
   candidatePoints: [],          // 当前候选网络上所有可达站的坐标（确认站点后聚焦视野用）
   settings: { zoomSpeed: 0.5, busMinZoom: 15, metroBase: true, fontScale: 'normal', focusOnConfirm: true }, // 玩家设置（启动时由 core/settings.js 读取覆盖）             // 自定义关卡组游玩中：{ map, index, total, scores, online }

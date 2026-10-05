@@ -138,11 +138,15 @@ export function isTouchDevice() {
  *     地图上的双指手势交给 Leaflet（e.target 命中 .leaflet-container 就跳过）。
  */
 export function preventPagePinch() {
-  document.addEventListener('gesturestart', (e) => e.preventDefault());
+  // iOS Safari 无视 viewport 的 user-scalable=no，页面缩放要靠拦截它私有的 gesture 事件；
+  // 双击放大由 CSS 的 touch-action: manipulation 禁止（见 css/base.css）。地图自己的双指缩放走 touch 事件，不受影响。
+  for (const type of ['gesturestart', 'gesturechange', 'gestureend']) {
+    document.addEventListener(type, (e) => e.preventDefault(), { passive: false });
+  }
   document.addEventListener('touchmove', (e) => {
     if (e.touches && e.touches.length > 1) {
       const t = e.target;
-      const onMap = t && t.closest ? t.closest('.leaflet-container') : null;
+      const onMap = t && t.closest ? t.closest('#map') : null; // 两种底图的地图容器都在 #map 内，双指留给地图缩放
       if (!onMap) e.preventDefault();
     }
   }, { passive: false });

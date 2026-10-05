@@ -43,6 +43,12 @@ const CITIES = {
   wuhan:     { dir: 'Wuhan',     zh: '武汉' },
   nanjing:   { dir: 'nanking', prefix: 'nanking', zh: '南京' },
   tianjin:   { dir: 'Tianjin',   zh: '天津' },
+  qingdao:   { dir: 'Qingdao',   zh: '青岛' },
+  kunming:   { dir: 'Kunming',   zh: '昆明' },
+  xiamen:    { dir: 'Xiamen',    zh: '厦门' },
+  jinan:     { dir: 'Jinan',     zh: '济南' },
+  zhengzhou: { dir: 'Zhengzhou', zh: '郑州' },
+  changchun: { dir: 'Changchun', zh: '长春' },
 };
 
 // ---------- 幽灵站修正（坑2：未开通/预留站仍出现在数据里，需按线路+站名剔除） ----------
@@ -62,11 +68,26 @@ const GHOST_STOPS = {
   wuhan: {},
   nanjing: {},
   tianjin: {},
+  qingdao: {},
+  kunming: {},
+  xiamen: {},
+  jinan: {},
+  zhengzhou: {},
+  changchun: {},
 };
 
 // ---------- 邻市地铁改名（坑 15：邻市线路延伸进本市，需带城市名以免与本市线路重名） ----------
 const METRO_RENAMES = {
   hangzhou: { '轨道交通1号线': '绍兴1号线' },
+  // 青岛：数据用的是线路别名，正式线号是 11 号线（蓝谷快线）、13 号线（西海岸快线）
+  qingdao: { '蓝谷快线': '地铁11号线', '西海岸快线': '地铁13号线' },
+};
+
+// ---------- 跨市地铁按边界裁剪（坑 15 续） ----------
+// 地铁默认不裁剪（本市地铁不会出界）；邻市地铁 / 城际线伸出本市的部分按行政边界裁掉，
+// 否则会把几十个外市站带进来（随机起终点可能落到外市）。键为去掉「(起点--终点)」后的线路名。
+const METRO_CLIP = {
+  zhengzhou: ['郑许线'],    // 郑许市域铁路：只留郑州境内
 };
 
 // ---------- WGS-84 → GCJ-02 ----------
@@ -157,10 +178,10 @@ function stationSetKey(stops) {
 }
 
 // 短交路/快车等服务变体：它们不是独立线路或支线，只是同一物理线路上的运营模式
-// （如「地铁10号线(夜班)」「地铁2号线(8号线)晨曦特快」「地铁16号线大站车」），
+// （如「地铁10号线(夜班)」「青岛地铁8号线(早班)」「地铁2号线(8号线)晨曦特快」「地铁16号线大站车」），
 // 若当成分支处理会把一条线误拆成多条。分支检测前先把这些 route_cn 排除。
 function isServiceVariant(cn) {
-  return /夜班|大站车|快车|特快|晨曦|区间|直达|高峰/.test(cn);
+  return /早班|夜班|大站车|快车|特快|晨曦|区间|直达|高峰/.test(cn);
 }
 
 // 两个站是否同一个物理站：优先按 stop_id（CPTOND 在汇合站复用同一 id），
@@ -340,6 +361,12 @@ const BOUNDARY_FILES = {
   wuhan: 'data/boundaries/wuhan.json',
   nanjing: 'data/boundaries/nanjing.json',
   tianjin: 'data/boundaries/tianjin.json',
+  qingdao: 'data/boundaries/qingdao.json',
+  kunming: 'data/boundaries/kunming.json',
+  xiamen: 'data/boundaries/xiamen.json',
+  jinan: 'data/boundaries/jinan.json',
+  zhengzhou: 'data/boundaries/zhengzhou.json',
+  changchun: 'data/boundaries/changchun.json',
 };
 
 // 跨市公交的线路名标识：单字邻市（佛=佛山/莞=东莞）只认开头，多字邻市名可出现在任意位置。
@@ -501,11 +528,16 @@ function convertCity(cityKey) {
   const ghostMap = GHOST_STOPS[cityKey] || {};
   const lines = [];
   let orphanRoutes = 0;
+  const isMetroGroup = (cns) => cns.some((cn) => {
+    const r = routeByCn.get(cn);
+    return r && guessMode(r.attrs.route_type, r.attrs.type_en) === 'metro';
+  });
+  // 地铁服务变体单独成组时（如「轨道交通11号线大站车(共青区间)」），只要同名正式线路存在就整组丢弃
+  const metroBases = [...baseGroups].filter(([, cns]) => isMetroGroup(cns)).map(([b]) => b);
+  const metroClip = new Set(METRO_CLIP[cityKey] || []);
   for (const [base, cns] of baseGroups) {
-    const isMetro = cns.some((cn) => {
-      const r = routeByCn.get(cn);
-      return r && guessMode(r.attrs.route_type, r.attrs.type_en) === 'metro';
-    });
+    const isMetro = isMetroGroup(cns);
+    if (isMetro && isServiceVariant(base) && metroBases.some((b) => b !== base && base.startsWith(b) && !isServiceVariant(b))) continue;
 
     // ===== 公交：拆上下行，每个方向一条单向线 =====
     // 公交上下行常走不同街道（单行道绕行），必须拆成两条单向线，否则路由器把
@@ -579,14 +611,19 @@ function convertCity(cityKey) {
       if (!best) continue;
       if (best.route && best.stops.length === 0) orphanRoutes++;
 
-      const stops = orderedStops(best.stops);
+      let stops = orderedStops(best.stops);
+      let rawPath = best.route && best.route.geom && best.route.geom.points ? best.route.geom.points : null;
       const attrs = best.route ? best.route.attrs : {};
+      const clip = metroClip.has(base);
+      if (clip) ({ stops, rawPath } = clipToBoundary(stops, rawPath, boundary));
+      if (clip && stops.length < 2) continue;
       resolved.push({
         attrs,
         stops,
-        rawPath: best.route && best.route.geom && best.route.geom.points ? best.route.geom.points : null,
-        front: String(attrs.s_stop_cn || (stops[0] ? stops[0].name : '')),
-        terminal: String(attrs.e_stop_cn || (stops.length ? stops[stops.length - 1].name : '')),
+        rawPath,
+        // 裁剪过的跨市线端点取裁剪后的首末站（原端点在外市）
+        front: String((!clip && attrs.s_stop_cn) || (stops[0] ? stops[0].name : '')),
+        terminal: String((!clip && attrs.e_stop_cn) || (stops.length ? stops[stops.length - 1].name : '')),
         spliced: false,
       });
     }

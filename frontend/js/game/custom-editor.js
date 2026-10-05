@@ -9,7 +9,7 @@
 
 import { state } from '../core/state.js';
 import { api } from '../core/api.js';
-import { $, setText, show, hide, toggleHidden, showCenterToast } from '../core/dom.js';
+import { $, setText, show, hide, toggleHidden, showCenterToast, showLoading, hideLoading } from '../core/dom.js';
 import { findOptimalRoute, haversineKm } from '../core/router-api.js';
 import { CITIES, cityById } from '../data/cities.js';
 import { TOWER_SCENARIOS, TOWER_KEYS } from '../data/levels.js';
@@ -18,11 +18,15 @@ import { hideAllPanels } from '../ui/menu.js';
 import { createWalkRangeCircle } from '../map/walk-range.js';
 import { ensureGameDataReady } from './data-ready.js';
 import { fitMapBounds } from '../map/map-init.js';
+import { drawOptimalRoute, drawOptimalTransfers, drawRouteStationSigns } from '../map/optimal-layer.js';
 
 let draft = null;        // { code, title, description, visibility, levels }
 let selected = 0;
 let placing = null;      // 'origin' | 'dest' | null
 let overlays = [];
+let routeOverlays = [];  // 最快路线与站名牌（起终点 / 城市 / 情景变了才整体替换）
+const checkedRoutes = new Map(); // 本地验证结果缓存：routeKeyOf(level) → 最快路线（不可达为 null）
+let routeKey = null;     // 当前画着的路线对应的关卡参数；只改时限等不影响路线的字段时不重画
 let mapClickBound = false;
 let checkVersion = 0;
 let bound = false;
@@ -72,6 +76,7 @@ export function openCustomEditor(map) {
 /** 关闭编辑器（不保存）；回主菜单时 session.showMenu 也会调用 */
 export function closeCustomEditor() {
   state.editorActive = false;
+  checkVersion++; // 作废还在进行的验证，免得关掉后又画出路线
   placing = null;
   clearOverlays();
   $('app')?.classList.remove('custom-editing');
@@ -232,6 +237,28 @@ function bindMapClick() {
 function clearOverlays() {
   for (const overlay of overlays) overlay.setMap(null);
   overlays = [];
+  clearRoute();
+}
+
+function clearRoute() {
+  routeOverlays.dead = true; // 还在计算的步行段回来后不再画到这批里
+  for (const overlay of routeOverlays) overlay.setMap(null);
+  routeOverlays = [];
+  routeKey = null;
+}
+
+const routeKeyOf = (level) => JSON.stringify([level.city, level.origin, level.dest, level.scenario]);
+
+/** 把最快路线画在地图上：换乘点标“换”，路线旁放上下车站的站名牌 */
+function drawRoute(best, level) {
+  const key = routeKeyOf(level);
+  if (key === routeKey) return;
+  clearRoute();
+  if (!state.map || !state.editorActive) return;
+  routeKey = key;
+  drawOptimalRoute(best, { origin: level.origin, dest: level.dest, sink: routeOverlays });
+  drawOptimalTransfers(best, routeOverlays); // 换乘点：橙色“换”图钉
+  drawRouteStationSigns(best, routeOverlays);
 }
 
 function drawLevel({ fit }) {
@@ -279,6 +306,7 @@ function editorPadding() {
 async function checkLevel() {
   const version = ++checkVersion;
   const level = current();
+  if (routeKeyOf(level) !== routeKey) clearRoute();
   const out = (text, bad = false) => {
     if (version !== checkVersion) return;
     setText('custom-ed-check', text);
@@ -287,15 +315,22 @@ async function checkLevel() {
   if (!level.origin || !level.dest) return out('');
   if (haversineKm(level.origin, level.dest) < CUSTOM_LIMITS.minDistanceKm) return out(`起终点太近：需要相距 ${CUSTOM_LIMITS.minDistanceKm} 公里以上。`, true);
   if (state.loadedCityId !== level.city || !state.routerGraph) return out('正在加载城市数据…');
-  out('正在计算最快路线…');
   const scenario = (TOWER_SCENARIOS[level.scenario] || TOWER_SCENARIOS.normal).scenario;
   const walkFactor = scenario.walkSpeedFactor || 1;
   try {
-    const best = await findOptimalRoute(state.routerGraph, level.origin, level.dest,
-      { allowMetro: !scenario.noMetro, busSpeedFactor: scenario.busSpeedFactor, walkSpeedFactor: walkFactor },
-      async (a, b) => ({ min: (haversineKm(a, b) * 1000) / (75 * walkFactor) }));
+    // 验证过的关卡（城市、起终点、情景都没变）直接用缓存结果，不再跑寻路
+    const key = routeKeyOf(level);
+    let best = checkedRoutes.get(key);
+    if (best === undefined) {
+      out('正在计算最快路线…');
+      best = await findOptimalRoute(state.routerGraph, level.origin, level.dest,
+        { allowMetro: !scenario.noMetro, busSpeedFactor: scenario.busSpeedFactor, walkSpeedFactor: walkFactor },
+        async (a, b) => ({ min: (haversineKm(a, b) * 1000) / (75 * walkFactor) })) || null;
+      checkedRoutes.set(key, best);
+    }
     const rides = (best?.legs || []).filter((leg) => leg.type === 'ride').length;
     if (!best || !rides) return out('没有可行的乘车路线：起终点附近 1.5 公里内需要有能连通的公交或地铁站。', true);
+    if (version === checkVersion) drawRoute(best, level);
     const minutes = best.totalMin;
     let text = `可以到达 · 最快约 ${minutes.toFixed(1)} 分钟，乘车 ${rides} 段`;
     const limit = level.timeLimit;
@@ -338,7 +373,9 @@ async function save() {
   const body = { title: draft.title, description: draft.description, visibility: draft.visibility, levels: draft.levels.map(levelPayload) };
   const button = $('custom-ed-save');
   if (button) button.disabled = true;
-  setText('custom-ed-status', '正在保存并校验每一关…');
+  setText('custom-ed-status', '');
+  // 与下载城市数据同款的全屏公交转圈遮罩；服务端校验过的关卡有缓存，未改动的关很快
+  showLoading('正在保存并校验每一关…');
   try {
     const saved = draft.code
       ? await api(`/custom-maps/${draft.code}`, body, 'PUT')
@@ -352,6 +389,7 @@ async function save() {
     const match = /^[A-Z_]+:(\d+)$/.exec(error.code || '');
     if (match) selectLevel(Number(match[1]) - 1);
   } finally {
+    hideLoading();
     if (button) button.disabled = false;
   }
 }
