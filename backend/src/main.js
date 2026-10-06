@@ -1,7 +1,7 @@
 import { bootstrapDatabase } from './infrastructure/bootstrap-database.js';
 import { configFromEnv } from './config.js';
 import { createMail } from './infrastructure/mail.js';
-import { createAuth } from './infrastructure/auth.js';
+import { createAuth, deleteStaleUnverifiedUsers } from './infrastructure/auth.js';
 import { Repository } from './infrastructure/repository.js';
 import { Transit } from './infrastructure/transit.js';
 import { GameService } from './application/game-service.js';
@@ -21,6 +21,12 @@ await repository.now();
 const server = createApp({ auth, game, repository, config }).listen(config.PORT, config.HOST, () => {
   console.log(`MapGame API listening on ${config.HOST}:${config.PORT}/mapgame/api`);
 });
+// 每小时清理超过 24 小时仍未验证邮箱的账号（释放被占用的邮箱；昵称本来就只在已验证账号间唯一）
+const cleanStaleAccounts = () => deleteStaleUnverifiedUsers(pool)
+  .then((n) => { if (n) console.log(`已清理 ${n} 个超过 24 小时未验证邮箱的账号`); })
+  .catch((error) => console.error('清理未验证账号失败', error));
+void cleanStaleAccounts();
+setInterval(cleanStaleAccounts, 60 * 60 * 1000).unref();
 server.requestTimeout = 15000;
 server.headersTimeout = 10000;
 

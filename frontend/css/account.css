@@ -66,3 +66,6 @@
 .history-more:hover{color:#9be7ef}
 .history-more:disabled{color:#7f93a6;cursor:default}
 .history-more:focus-visible{outline:2px solid #5fd3e0;outline-offset:2px}
+/* 注册时设置密码下方的说明：密码只存哈希 */
+.account-password-note{margin:10px 0 0;font-size:12px;line-height:1.6;color:#a9bccf}
+.account-password-note strong{color:#eef5fc;font-weight:700}

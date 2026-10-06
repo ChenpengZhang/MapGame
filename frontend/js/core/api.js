@@ -5,6 +5,7 @@ const messages = {
   INVALID_OTP:'验证码不正确。', OTP_EXPIRED:'验证码已过期，请重新发送。',
   TOO_MANY_ATTEMPTS:'尝试次数过多，请重新发送验证码。',
   PASSWORD_TOO_SHORT:'密码至少需要 12 位。', PASSWORD_TOO_LONG:'密码过长。',
+  NAME_TAKEN:'这个昵称已被使用，换一个吧。', INVALID_NAME:'昵称需为 1–40 个字符。',
   INVALID_TOKEN:'链接已失效，请重新申请。', TOKEN_EXPIRED:'链接已过期，请重新申请。',
   INVALID_INPUT:'提交内容不符合要求，请刷新后重试。',
   UNTRUSTED_ORIGIN:'网站地址与服务器配置不一致，请联系维护者。',

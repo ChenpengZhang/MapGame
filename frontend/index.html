@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1.0, user-scalable=no" />
   <title>TransitGuesser · 公交导航模拟器</title>
-  <link rel="stylesheet" href="css/account.css?v=6" />
+  <link rel="stylesheet" href="css/account.css?v=7" />
   <link rel="icon" type="image/svg+xml" href="assets/map.svg" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="css/tokens.css?v=1" />
@@ -46,6 +46,7 @@
           <button class="account-trigger" id="account-button" type="button">登录 / 注册</button>
           <div class="account-menu hidden" id="account-menu">
             <button id="history-button" type="button">游玩记录</button>
+            <button id="rename-button" type="button">修改昵称</button>
             <button id="logout-button" type="button">退出登录</button>
           </div>
         </div>
@@ -410,7 +411,7 @@
       <form id="account-form"><div id="account-name-field" class="hidden"><label for="account-nickname">昵称</label><input id="account-nickname" maxlength="40" autocomplete="nickname"></div>
         <div id="account-email-field"><label for="account-email">邮箱</label><input id="account-email" type="email" maxlength="254" autocomplete="email" required></div>
         <div id="account-password-field"><label for="account-password">密码</label><input id="account-password" type="password" minlength="12" maxlength="128" autocomplete="current-password" placeholder="至少 12 位" required></div>
-        <div id="account-register-confirm-field" class="hidden"><label for="account-register-confirm">确认密码</label><input id="account-register-confirm" type="password" minlength="12" maxlength="128" autocomplete="new-password"></div>
+        <div id="account-register-confirm-field" class="hidden"><label for="account-register-confirm">确认密码</label><input id="account-register-confirm" type="password" minlength="12" maxlength="128" autocomplete="new-password"><p class="account-password-note">本项目完全在GitHub开源，密码以哈希形式储存在后端服务器，后台没有<strong>任何办法</strong>看到你的密码明文。</p></div>
         <div id="account-otp-field" class="hidden"><label for="account-otp">验证码</label><input id="account-otp" class="account-code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" minlength="6" maxlength="6" placeholder="6 位数字"></div>
         <div id="account-new-password-field" class="hidden"><label for="account-new-password">新密码</label><input id="account-new-password" type="password" minlength="12" maxlength="128" autocomplete="new-password" placeholder="至少 12 位"><label for="account-confirm-password">确认新密码</label><input id="account-confirm-password" type="password" minlength="12" maxlength="128" autocomplete="new-password"></div>
         <button id="account-submit" class="primary" type="submit">登录</button></form>
@@ -434,6 +435,6 @@
   <script src="shared/rivers.js?v=1"></script>
   <script src="shared/transit-format.js?v=1"></script>
   <script src="js/amap-polyfill.js"></script>
-  <script src="js/app.js?v=138" type="module"></script>
+  <script src="js/app.js?v=140" type="module"></script>
 </body>
 </html>

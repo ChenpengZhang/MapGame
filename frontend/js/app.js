@@ -95,6 +95,7 @@ function bindUiEvents() {
   on('account-forgot',()=>openAccount('forgot'));on('account-close',closeAccount);
   on('account-form',submitAccount,'submit');on('account-resend',resendAccountCode);
   on('logout-button',logout);on('history-button',showHistory);on('history-close',closeHistory);
+  on('rename-button',()=>openAccount('rename')); // 修改昵称（全局唯一，服务端校验）
   on('result-retry',submitOnlineResult);
   // ---- 规划中的操作条 ----
   on('undo-btn', undoRoute);                  // 上一步

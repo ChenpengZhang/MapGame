@@ -15,6 +15,7 @@ const MODE_UI={
   forgot:{title:'找回密码',submit:'发送验证码',email:true},
   'forgot-otp':{title:'输入验证码',submit:'下一步',otp:true,otpLinks:true},
   'reset-password':{title:'设置新密码',submit:'确认',newPassword:true},
+  rename:{title:'修改昵称',submit:'保存',name:true},
 };
 
 function renderAccount() {
@@ -83,6 +84,9 @@ export function openAccount(nextMode='login') {
   $('account-new-password').value='';
   $('account-confirm-password').value='';
   show('account-dialog');
+  // 修改昵称：预填当前昵称；从改名切到其它模式时清掉预填，避免注册框带着别人的昵称
+  if(nextMode==='rename') $('account-nickname').value=account.user?.name || '';
+  else if(mode==='rename') $('account-nickname').value='';
   setAccountMode(nextMode);
 }
 export function closeAccount() {
@@ -106,7 +110,16 @@ export async function submitAccount(event) {
   setAccountBusy(true);setText('account-message','正在处理…');
   const email=$('account-email').value.trim();
   try {
-    if(mode==='register') {
+    if(mode==='rename') {
+      // 昵称全局唯一：重名、非法由服务端校验并返回 NAME_TAKEN / INVALID_NAME
+      const name=$('account-nickname').value.trim();
+      if(name!==account.user?.name) await api('/auth/update-user',{name});
+      await refreshAccount();
+      renderAccount();
+      setAccountBusy(false);
+      closeAccount();
+      return;
+    } else if(mode==='register') {
       const password=$('account-password').value;
       if(password!==$('account-register-confirm').value) throw new Error('两次密码不一致。');
       await api('/auth/sign-up/email',{email,password,name:$('account-nickname').value.trim()});
