@@ -9,7 +9,7 @@ const lines = [
   {id:'metro',name:'metro',mode:'metro',stops:[stop('C',120.02),stop('D',120.03)]},
 ];
 const transit = new Transit();
-transit.cache.set('beijing',Promise.resolve({graph:router.buildGraph(lines),hash:'test'}));
+transit.cache.set('beijing',Promise.resolve({graph:router.buildGraph(lines),hash:'test',compatible:new Set(['test'])}));
 const puzzle = {city:'beijing',scenario:'normal',origin:[120,30],destination:[120.02,30],dataHash:'test',dataVersion:DATA_VERSION,rulesVersion:1};
 const ride = (lineId,fromStopId,toStopId) => ({lineId,fromStopId,toStopId});
 test('recomputes finite duration and rejects reversed one-way edges, teleport, forged stop and forbidden metro',async()=> {

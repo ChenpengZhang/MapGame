@@ -18,13 +18,14 @@ import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
 const R = require('../shared/router.js');
+const transitFormat = require('../shared/transit-format.js');
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const CITIES = ['beijing', 'shanghai', 'shenzhen', 'guangzhou'];
 const CROSS_CITY_RE = /(^佛|^莞|平湖|嘉善|泰兴|昆山|太仓|花桥|吴江|启东|海门|燕郊|涿州|廊坊|三河|香河|固安|大厂|惠州|凤岗|珠海|清远|肇庆|江门)/;
 
 const data = {};
-for (const id of CITIES) data[id] = JSON.parse(fs.readFileSync(path.join(ROOT, 'data', id + '-transit.json'), 'utf8'));
+for (const id of CITIES) data[id] = transitFormat.decode(JSON.parse(fs.readFileSync(path.join(ROOT, 'data', id + '-transit.json'), 'utf8')));
 
 let pass = 0, fail = 0;
 function check(name, fn) {

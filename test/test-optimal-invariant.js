@@ -10,7 +10,7 @@
 const R = require('../shared/router.js');
 // 用法：node test/test-optimal-invariant.js [城市id]（默认北京）；新城市上线前务必跑一遍（见数据管线文档坑 9）
 const CITY = process.argv[2] || 'beijing';
-const data = require(`../data/${CITY}-transit.json`);
+const data = require('../shared/transit-format.js').decode(require(`../data/${CITY}-transit.json`));
 
 const graph = R.buildGraph(data.lines);
 const MAX_WALK_KM = 1.5;

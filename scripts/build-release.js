@@ -40,12 +40,14 @@ const TARGETS = {
 const INCLUDE = [
   'server.js',
   'scripts/assets.js',          // Static URL manifest shared with server.js
+  'scripts/precompress.js',     // 大文件预压缩（server.js 依赖）
   'frontend/index.html',
   'frontend/css',
   'frontend/assets',
   'frontend/js',
   'shared/router.js',
   'shared/rivers.js',            // 禁止步行过江（江河中心线判断）
+  'shared/transit-format.js',    // 交通数据文件格式（format 2）解码
   'frontend/fonts',                      // ChillRoundF 字体（SIL OFL，本地打包）
   'data/beijing-transit.json',  // 北京全量数据（GCJ-02）
   'data/guangzhou-transit.json',// 广州全量数据

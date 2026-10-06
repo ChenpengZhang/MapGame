@@ -71,6 +71,13 @@ export class GameService {
     this.dailyPending = new Map();
   }
 
+  /** 返回给前端的关卡：旧格式数据生成、图完全相同的题目换上当前数据版本标记（否则前端会判定版本不一致） */
+  async fresh(stage) {
+    if (!stage) return stage;
+    const puzzle = await this.transit.current(stage.puzzle);
+    return puzzle === stage.puzzle ? stage : { ...stage, puzzle };
+  }
+
   async ensureDaily() {
     const date = beijingDate(await this.repository.now());
     // 进程内去重：同一天并发请求复用同一个 Promise，避免重复建题。
@@ -156,11 +163,12 @@ export class GameService {
 
       let run = await tx.active(userId, mode, city, scenario, daily?.id ?? null);
       if (!run) {
-        const puzzle = daily?.puzzle ?? (await this.transit.generate(city, scenario));
+        // 每日题目在当天首次访问时生成并持久化；数据只改了格式时换上当前版本标记，当天照常可玩
+        const puzzle = daily ? await this.transit.current(daily.puzzle) : await this.transit.generate(city, scenario);
         run = await tx.createRun(userId, mode, puzzle, daily?.id ?? null);
         await tx.createStage(run.id, 1, puzzle);
       }
-      return { run, stage: publicStage(await tx.latestStage(run.id)) };
+      return { run, stage: publicStage(await this.fresh(await tx.latestStage(run.id))) };
     });
   }
 
@@ -168,7 +176,7 @@ export class GameService {
     return this.repository.transaction(async (tx) => {
       const run = await tx.run(runId, userId);
       ensure(run, 'RUN_NOT_FOUND', 404);
-      return { run, stage: publicStage(await tx.latestStage(run.id)) };
+      return { run, stage: publicStage(await this.fresh(await tx.latestStage(run.id))) };
     });
   }
 
@@ -179,7 +187,7 @@ export class GameService {
       ensure((run.mode === 'tower' || run.mode === 'custom') && run.status === 'active', 'RUN_NOT_ACTIVE', 409);
 
       const latest = await tx.latestStage(run.id);
-      if (latest.status === 'active') return publicStage(latest);
+      if (latest.status === 'active') return publicStage(await this.fresh(latest));
       if (run.mode === 'custom') {
         // 自定义：本关无论成败都进入下一关
         ensure(latest.stage_no === run.cleared_layers, 'INVALID_STAGE_SEQUENCE', 409);
@@ -196,8 +204,9 @@ export class GameService {
       );
 
       const puzzle = await this.transit.generate(run.city_id, run.scenario_key);
+      // 存档开局时的数据哈希须与当前数据一致（或仅文件格式不同、图完全相同），否则旧存档不能继续
       ensure(
-        puzzle.dataHash === run.data_hash && puzzle.rulesVersion === run.rules_version,
+        (await this.transit.compatibleHashes(run.city_id)).includes(run.data_hash) && puzzle.rulesVersion === run.rules_version,
         'PUZZLE_VERSION_UNAVAILABLE',
         409,
       );
@@ -310,11 +319,11 @@ export class GameService {
       ensure(map, 'MAP_NOT_FOUND', 404);
       return this.board(await this.repository.customLeaderboard(map.id, map.version, viewerId));
     }
-    // 爬塔榜按当前地图数据哈希过滤，旧数据版本的成绩不参与排名。
-    const hash = query.mode === 'tower' ? (await this.transit.load(query.city)).hash : null;
+    // 爬塔榜按当前地图数据过滤，旧数据版本的成绩不参与排名（仅文件格式升级、图相同的旧哈希仍算同一版本）。
+    const hashes = query.mode === 'tower' ? await this.transit.compatibleHashes(query.city) : null;
     const rows = await this.repository.leaderboard({
       ...query,
-      hash,
+      hashes,
       rulesVersion: RULES_VERSION,
       viewerId,
     });
@@ -406,7 +415,7 @@ export class GameService {
       await tx.lockUser(userId);
       const active = await tx.activeCustom(userId, map.id);
       if (active && !restart && active.custom_map_version === map.version) {
-        return { run: active, stage: publicStage(await tx.latestStage(active.id)), map: publicCustomMap(map, userId) };
+        return { run: active, stage: publicStage(await this.fresh(await tx.latestStage(active.id))), map: publicCustomMap(map, userId) };
       }
       if (active) await tx.abandonCustom(userId, map.id);
       const puzzle = await this.customPuzzle(map, 0);

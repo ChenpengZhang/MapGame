@@ -1,7 +1,9 @@
 // 线路走向修补：只有站点连线的线路，从同名线路借用真实走向（真实数据：北京 快速直达专线196路）
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { repairBarePaths, hasBarePath } from '../frontend/js/data/line-geometry.js';
+const transitFormat = createRequire(import.meta.url)('../shared/transit-format.js');
 
 const dist = (a, b) => {
   const t = Math.PI / 180, dLat = (b[1] - a[1]) * t, dLng = (b[0] - a[0]) * t;
@@ -10,7 +12,7 @@ const dist = (a, b) => {
 };
 const maxJump = (path) => Math.max(...path.slice(1).map((p, i) => dist(path[i], p)));
 
-const data = JSON.parse(readFileSync(new URL('../data/beijing-transit.json', import.meta.url)));
+const data = transitFormat.decode(JSON.parse(readFileSync(new URL('../data/beijing-transit.json', import.meta.url))));
 const line = data.lines.find((l) => l.id === 'L_f79f586d3121');
 assert.ok(hasBarePath(line), '196路这一班次原始数据只有站点坐标');
 assert.ok(maxJump(line.path) > 15000, '原始走向里有一段十几公里的直线');

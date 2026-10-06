@@ -8,6 +8,7 @@
     "test:zoom": "node test/test-amap-wheel.mjs",
     "test:e2e": "node test/e2e/user-journey.mjs",
     "build:web": "node scripts/build-web.js",
+    "precompress": "node scripts/precompress.js",
     "test:paths": "node --test test/test-layout.mjs",
     "dev": "node scripts/dev.js"
   },

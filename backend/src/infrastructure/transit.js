@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { createHash, randomInt } from 'node:crypto';
 import router from '../../../shared/router.js';
 import rivers from '../../../shared/rivers.js';
+import transitFormat from '../../../shared/transit-format.js';
 // Pure level definitions; no browser state or DOM dependencies.
 import { LEVELS } from '../../../frontend/js/data/levels.js';
 import { CUSTOM_LIMITS, customLimitMs } from '../../../frontend/js/data/custom-maps.js';
@@ -31,10 +32,17 @@ export class Transit {
         // 江河中心线（可选）：有的城市禁止步行过江，见 shared/rivers.js
         readFile(new URL(`rivers/${city}.json`, this.directory)).then((raw) => JSON.parse(raw)).catch(() => null),
       ]).then(([raw, riverData]) => {
-        const graph = router.buildGraph(JSON.parse(raw).lines);
+        // 数据文件是 format 2：解码后直接用预先算好的站点合并结果建图（与前端同一份数据、同一逻辑）
+        const file = JSON.parse(raw);
+        const data = transitFormat.decode(file);
+        const graph = router.buildGraph(data.lines, { logical: data.logical, mergeRules: data.mergeRules });
         const index = rivers.buildRiverIndex(riverData);
         if (index) graph.rivers = { crosses: (a, b) => rivers.crossesRiver(index, a, b) };
-        return { graph, hash: createHash('sha256').update(raw).digest('hex') };
+        const hash = createHash('sha256').update(raw).digest('hex');
+        // compatibleHashes：只改了文件格式、建出的图完全相同的旧数据文件哈希（scripts/migrate-transit-format.js 写入）。
+        // 带这些哈希的题目、对局与排行仍然有效：继续游玩、照常校验，不会因格式升级被作废。
+        const compatible = new Set([hash, ...(Array.isArray(file.compatibleHashes) ? file.compatibleHashes : [])]);
+        return { graph, hash, compatible };
       });
       this.cache.set(city, pending);
       pending.catch(() => this.cache.delete(city));
@@ -168,11 +176,28 @@ export class Transit {
 
   // 服务端权威重算：逐段校验物理站、乘车方向、线路衔接与步行距离，
   // 用权威速度参数重算总时长——完全不信任客户端提交的任何数值。
+  /** 某城市当前数据认可的全部数据哈希（当前文件 + 图完全相同的旧格式文件） */
+  async compatibleHashes(city) {
+    return [...(await this.load(city)).compatible];
+  }
+
+  /**
+   * 题目换上当前数据的版本标记：只对“图完全相同、仅文件格式不同”的旧题目生效
+   * （如格式升级前生成的今日每日挑战、进行中的无尽存档），起终点与最优用时不变。
+   * 真正过期（数据内容变了）的题目原样返回，由原有逻辑拒绝。
+   */
+  async current(puzzle) {
+    if (!puzzle || !puzzle.city || !CITIES.includes(puzzle.city)) return puzzle;
+    const { hash, compatible } = await this.load(puzzle.city);
+    if (puzzle.dataHash === hash && puzzle.dataVersion === DATA_VERSION) return puzzle;
+    if (!compatible.has(puzzle.dataHash) || puzzle.rulesVersion !== RULES_VERSION) return puzzle;
+    return { ...puzzle, dataHash: hash, dataVersion: DATA_VERSION };
+  }
+
   async evaluate(puzzle, route, mode) {
-    const { graph, hash } = await this.load(puzzle.city);
+    const { graph, compatible } = await this.load(puzzle.city);
     ensure(
-      puzzle.dataHash === hash &&
-        puzzle.dataVersion === DATA_VERSION &&
+      compatible.has(puzzle.dataHash) &&
         puzzle.rulesVersion === RULES_VERSION,
       'PUZZLE_VERSION_UNAVAILABLE',
       409,

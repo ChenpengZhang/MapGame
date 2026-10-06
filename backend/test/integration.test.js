@@ -39,6 +39,8 @@ test('PostgreSQL: authentication, reset, authoritative settlement, concurrency a
     story:async levelId=>({...puzzle,storyId:levelId,limitMs:20000}),
     evaluate:async(_puzzle,route)=>route[0].lineId === 'slow' ? 999999 : 15000,
     load:async()=>({hash:puzzle.dataHash}),
+    current:async stagePuzzle=>stagePuzzle,
+    compatibleHashes:async()=>[puzzle.dataHash],
   };
   const game = new GameService(repository,transit);
   server = createApp({auth,game,repository,config}).listen(0,'127.0.0.1');

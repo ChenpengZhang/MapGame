@@ -87,11 +87,21 @@ test('web artifact and portable release preserve paths without backend files',as
   assert.equal(nextVersion.length,entryVersion.length,'test keeps version string length unchanged');
   const appBefore=await fetch(`${base}/js/app.js?v=${entryVersion}`,{headers:{'accept-encoding':'gzip'}});
   assert.equal(appBefore.headers.get('content-encoding'),'gzip');
-  assert.equal(appBefore.headers.get('cache-control'),'no-store');
+  // 代码可缓存但每次都要向服务器确认（ETag）：没变回 304，变了拿新内容
+  assert.equal(appBefore.headers.get('cache-control'),'no-cache');
+  const etagBefore=appBefore.headers.get('etag');
+  assert.ok(etagBefore,'modules carry an ETag');
   assert.match(await appBefore.text(),new RegExp(`state\\.js\\?v=${entryVersion}`));
-  const transit=await fetch(`${base}/data/wenshan-transit.json?v=7`);
+  const revalidated=await fetch(`${base}/js/app.js?v=${entryVersion}`,{headers:{'if-none-match':etagBefore}});
+  assert.equal(revalidated.status,304,'unchanged module answers 304');
+  const transit=await fetch(`${base}/data/wenshan-transit.json?v=9`);
   assert.match(transit.headers.get('cache-control') || '',/immutable/);
+  const routeEtag=(await fetch(`${base}/js/game/route.js`)).headers.get('etag');
+  assert.equal((await fetch(`${base}/js/game/route.js`,{headers:{'if-none-match':routeEtag}})).status,304);
   fs.writeFileSync(htmlPath,originalHtml.replace(`js/app.js?v=${entryVersion}`,`js/app.js?v=${nextVersion}`));
+  // 入口版本号变了：模块内容（改写后的 import 版本）随之变化，旧 ETag 不能再命中 304
+  const staleCheck=await fetch(`${base}/js/game/route.js`,{headers:{'if-none-match':routeEtag}});
+  assert.equal(staleCheck.status,200,'module ETag includes the entry version');
   const appAfter=await fetch(`${base}/js/app.js?v=${nextVersion}`,{headers:{'accept-encoding':'gzip'}});
   assert.equal(appAfter.headers.get('content-encoding'),'gzip');
   assert.match(await appAfter.text(),new RegExp(`state\\.js\\?v=${nextVersion}`));

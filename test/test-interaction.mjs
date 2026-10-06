@@ -89,6 +89,7 @@ globalThis.AMap = {
 };
 
 globalThis.window.TransitRouter = require('../shared/router.js');
+globalThis.window.TransitFormat = require('../shared/transit-format.js');
 
 // ============ 导入被测模块 ============
 const { state } = await import('../frontend/js/core/state.js');
@@ -109,7 +110,7 @@ function check(name, fn) {
 
 console.log('\n=== 前端交互行为测试（广州真实数据）===\n');
 
-const data = JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'guangzhou-transit.json'), 'utf8'));
+const data = window.TransitFormat.decode(JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'guangzhou-transit.json'), 'utf8')));
 buildIndex(data);
 state.map = new AMap.Map();
 state.scenario = { noMetro: false, busSpeedFactor: 1, walkSpeedFactor: 1 };

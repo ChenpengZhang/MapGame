@@ -6,7 +6,7 @@ import { $,hide,show,setText,setStatus,showLoading,hideLoading,showCenterToast,s
 import { loadWalkTransfer } from '../core/storage.js';
 import { LEVELS,TOWER_SCENARIOS } from '../data/levels.js';
 import { startLevel,ensureStopsReady } from './session.js';
-import { ensureGameDataReady } from './data-ready.js';
+import { ensureGameDataReady, reloadGameData } from './data-ready.js';
 import { showResultOverlay,towerSign } from '../ui/result.js';
 import { startTowerTimer,stopTowerTimer } from './tower-timer.js';
 import { loadStoryProgress } from './progress.js';
@@ -104,6 +104,12 @@ export async function startOnline(command,{restart=false,city=null,date=null,sce
       payload=await api('/runs',command);
     }
     if(payload.stage.status==='passed' && command.mode==='tower') payload.stage=await api(`/runs/${payload.run.id}/next`,{});
+    // 本地数据（可能来自缓存）与服务器指纹不一致：丢掉缓存重新下载一次再对比，仍不一致才报错
+    const puzzle=payload.stage.puzzle;
+    if(puzzle.dataVersion===DATA_VERSION && state.transitDataHash!==puzzle.dataHash){
+      if(!(await reloadGameData(puzzle.city)))return;
+      showLoading('正在加载…');
+    }
     activateOnline(payload,command,owner,epoch,{city,date,scenarioKey,customMap});
   } catch(error) {
     setStatus(error.message);

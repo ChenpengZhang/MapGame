@@ -6,6 +6,7 @@
 //   node scripts/build-rivers.mjs wuhan --raw a.json [--raw b.json]   # 用已下载的 Overpass 响应（out geom）生成
 // Overpass 主站经常超时（504），脚本按区域分块并重试；可用环境变量 OVERPASS_URL 指定镜像。
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import transitFormat from '../shared/transit-format.js';
 
 // 需要禁止步行过江的城市与江河名（OSM 中汉江的名字是“汉水”）
 const CITY_RIVERS = {
@@ -46,7 +47,7 @@ function wgs2gcj(lng, lat) {
 
 /** 城市交通数据的包围盒（只要覆盖了站点的范围），[south, west, north, east] */
 function cityBox(city) {
-  const data = JSON.parse(readFileSync(new URL(`data/${city}-transit.json`, ROOT)));
+  const data = transitFormat.decode(JSON.parse(readFileSync(new URL(`data/${city}-transit.json`, ROOT))));
   const box = [90, 180, -90, -180];
   for (const line of data.lines) {
     for (const s of line.stops) {
@@ -64,7 +65,7 @@ function cityBox(city) {
  */
 const KEEP_M = 3000;
 function stopGrid(city) {
-  const data = JSON.parse(readFileSync(new URL(`data/${city}-transit.json`, ROOT)));
+  const data = transitFormat.decode(JSON.parse(readFileSync(new URL(`data/${city}-transit.json`, ROOT))));
   const cell = 0.03; // 约 3km
   const grid = new Set();
   for (const line of data.lines) for (const st of line.stops) grid.add(Math.floor(st.lng / cell) + ':' + Math.floor(st.lat / cell));

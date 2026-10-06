@@ -19,7 +19,7 @@
 import { state } from '../core/state.js';
 import { setStatus, showLoading, hideLoading, showError, setLoadingProgress } from '../core/dom.js';
 import { buildGraph } from '../core/router-api.js';
-import { loadTransitData } from '../data/loader.js';
+import { loadTransitData, hasCachedTransitData, dropCachedTransitData } from '../data/loader.js';
 import { buildIndex } from '../data/index-builder.js';
 import { renderMetroContext, renderStops, disposeStops } from '../map/stop-layer.js';
 import { removeOverlay } from '../map/anim.js';
@@ -62,20 +62,35 @@ export function ensureGameDataReady(cityId = state.currentCityId) {
   return readyPromise;
 }
 
+/**
+ * 丢弃本地缓存并重新下载、重建某城市数据。
+ * 用于本地数据与服务器不一致时自愈（例如数据文件更新了而数据版本号没变，本地缓存还是旧文件）。
+ */
+export async function reloadGameData(cityId) {
+  await dropCachedTransitData(cityId);
+  if (state.loadedCityId === cityId) state.loadedCityId = null;
+  return ensureGameDataReady(cityId);
+}
+
 /** 完整加载：下载 JSON → 建索引 → 建寻路图 → 渲染地铁底图与站点层 */
 async function loadAll(cityId) {
-  // 文案不写死大小：拿到 Content-Length 后再动态补上「约 X MB」；
-  // gzip/brotli 下拿不到（浏览器剥头），就保持这句通用文案。多城市无需单独配置。
+  // 文案不写死大小：拿到实际传输大小（压缩后的 Content-Length）后再动态补上「约 X MB」；
+  // 拿不到或直接读本地缓存时保持这句通用文案。多城市无需单独配置。
   try {
     await waitForMap(); // 底图尚未初始化时，沿用 bootstrap 的「正在加载地图」遮罩。
-    showLoading('正在下载城市交通数据…');
+    // 本地已缓存的城市不再显示“下载”：读本地很快，随后的建图才是主要耗时（北京约 1 秒）
+    showLoading(await hasCachedTransitData(cityId) ? '正在读取本地交通数据…' : '正在下载城市交通数据…');
     setLoadingProgress(null); // 初始隐藏进度条，等下载开始有 Content-Length 再显示
     const { data, source } = await loadTransitData(
       (f) => setLoadingProgress(f),
       (bytes) => showLoading('正在下载交通数据（约 ' + formatMB(bytes) + '）…'),
       cityId,
     );
-    const graph = buildGraph(data.lines);                  // 唯一一次建图：索引和最优路线共用
+    setLoadingProgress(null);
+    showLoading('正在构建线路网络…');
+    await new Promise((resolve) => setTimeout(resolve, 0)); // 让提示先绘制出来，再进入耗时的同步建图
+    // 唯一一次建图：索引和最优路线共用；数据文件自带预先算好的站点合并结果，跳过最耗时的合并
+    const graph = buildGraph(data.lines, { logical: data.logical, mergeRules: data.mergeRules });
     await loadRivers(cityId);                              // 江河（武汉、重庆）：禁止步行过江
     attachRiversToGraph(graph);
     if (state.loadedCityId && state.loadedCityId !== cityId) resetRoute();

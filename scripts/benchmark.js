@@ -6,7 +6,7 @@
 
 const router = require('../shared/router.js');
 
-const data = require('../data/beijing-transit.json');
+const data = require('../shared/transit-format.js').decode(require('../data/beijing-transit.json'));
 const samples = require('../data/calibrate-samples.json').samples;
 
 function median(arr) {

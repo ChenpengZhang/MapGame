@@ -22,6 +22,11 @@
   'use strict';
 
   // 默认成本参数（与 app.js 常量一致，可用 opts 覆盖以模拟情景模式）
+  // 站点合并规则的版本号：改动 namesMatch / fuzzyNamesMatch / airportTerminalKey、合并距离或合并流程时必须加一。
+  // 数据文件（format 2）里存了按这套规则预先算好的逻辑站分组；版本对不上时加载会回退为现场计算，
+  // 并应重新生成数据（node scripts/migrate-transit-format.js）。
+  const MERGE_RULES_VERSION = 1;
+
   const DEFAULT_PARAMS = {
     metroSpeedKmh: 35,
     metroDwellMin: 0.6,
@@ -117,6 +122,16 @@
   // 结尾的“站”或编号，再比较——相同、一者包含另一者，或短名（≥3 字）按顺序出现在长名里且只多 1~2 个字
   // （如“蔡榨街客运站 / 蔡家榨街客运站”“大同总工会 / 大同市总工会”“江东北路·龙园北路 / 江东北路龙园北路”）。
   // 这类合并更宽松，只在 fuzzyMergeDistanceM（150m）内使用，避免把附近真正不同的站并在一起。
+  // 建图期间的站名归一化缓存：站点合并要比较约 27 万对近邻站（北京），每对都跑正则很慢，
+  // 而不同站名只有几万个。只在 buildGraph 执行期间启用（纯函数缓存，结果不变）。
+  let nameMemo = null;
+  function memoName(kind, name, fn) {
+    if (!nameMemo) return fn(name);
+    const key = kind + '\u0000' + name;
+    let value = nameMemo.get(key);
+    if (value === undefined && !nameMemo.has(key)) { value = fn(name); nameMemo.set(key, value); }
+    return value;
+  }
   function normalizeStopName(name) {
     return String(name || '').trim()
       .replace(/[（(][^）)]*[)）]/g, '')
@@ -130,7 +145,7 @@
     return i === short.length;
   }
   function fuzzyNamesMatch(a, b) {
-    const x = normalizeStopName(a), y = normalizeStopName(b);
+    const x = memoName('n', a, normalizeStopName), y = memoName('n', b, normalizeStopName);
     const shorter = x.length <= y.length ? x : y;
     const longer = x.length <= y.length ? y : x;
     if (shorter.length < 3) return false;
@@ -166,7 +181,7 @@
     return /机场站?$/.test(name) ? 'airport' : null;
   }
   function airportTerminalMatch(a, b) {
-    const ka = airportTerminalKey(a), kb = airportTerminalKey(b);
+    const ka = memoName('a', a, airportTerminalKey), kb = memoName('a', b, airportTerminalKey);
     if (ka == null || kb == null) return false;
     // 机场主站（如“天河机场”地铁站）与该机场任一航站楼在 300m 内即视为同一站
     return ka === kb || ((ka === 'airport') !== (kb === 'airport') && !['daxing', 't2', 't3'].includes(ka === 'airport' ? kb : ka));
@@ -215,7 +230,40 @@
   };
 
   // ============ 建图：物理点去重 → 逻辑站合并 ============
-  function buildGraph(lines) {
+  /**
+   * 建图。precomputed 为数据文件里预先算好的合并结果 { logical: [[物理站id…]…], mergeRules }，
+   * 规则版本一致且覆盖全部物理站时直接使用（跳过最耗时的站点合并），否则现场计算。
+   */
+  function buildGraph(lines, precomputed) {
+    nameMemo = new Map();
+    try { return buildGraphInner(lines, precomputed); }
+    finally { nameMemo = null; }
+  }
+
+  /** 把预先算好的分组还原成与现场合并相同的 groups（顺序一致）；不可用时返回 null */
+  function precomputedGroups(precomputed, physById) {
+    if (!precomputed || !Array.isArray(precomputed.logical)) return null;
+    if (precomputed.mergeRules !== MERGE_RULES_VERSION) {
+      if (typeof console !== 'undefined') console.warn('[router] 数据里的站点合并结果是旧规则生成的，改为现场计算；请重新生成数据');
+      return null;
+    }
+    const groups = new Map();
+    let covered = 0;
+    for (const ids of precomputed.logical) {
+      const members = [];
+      for (const id of ids) {
+        const p = physById.get(String(id));
+        if (!p) return null;
+        members.push(p);
+      }
+      if (!members.length) return null;
+      groups.set(members[0].id, members);
+      covered += members.length;
+    }
+    return covered === physById.size ? groups : null;
+  }
+
+  function buildGraphInner(lines, precomputed) {
     const lineById = new Map();
     const physById = new Map(); // 物理 stop_id -> {id,name,lng,lat,mode,lineIds:Set}
 
@@ -255,6 +303,13 @@
     }
 
     const physList = Array.from(physById.values());
+    const ready = precomputedGroups(precomputed, physById);
+    const groups = ready || mergePhysicalStops(physList);
+    return finishGraph(lineById, physById, physList, groups);
+  }
+
+  /** 站点合并：距离与站名都匹配的物理站并为一个逻辑站（并查集），返回 根 → 成员 的分组 */
+  function mergePhysicalStops(physList) {
 
     // 合并：距离小于 mergeDistanceM 且名字匹配（完全相同 或 一者包含另一者）
     const CELL = 0.01;
@@ -282,13 +337,22 @@
       rootLines.delete(ra);
     };
 
+    // 性能：每个站要和周围 3×3 格（约 3km 见方）内的几百个站逐一比较，绝大多数远超合并距离。
+    // 先用平面近似距离（米）粗筛掉明显过远的站，再做“是否同线”与精确球面距离判断。
+    // 只是跳过不可能合并的站对，遍历与 union 顺序不变，合并结果与原实现逐字节一致。
+    const M_PER_DEG_LAT = 111320;
+    const maxMergeM = Math.max(DEFAULT_PARAMS.mergeDistanceM, DEFAULT_PARAMS.fuzzyMergeDistanceM);
+    const roughLimit2 = (maxMergeM * 1.05 + 5) ** 2; // 留余量：平面近似在 3km 内误差远小于 5%
     for (const p of physList) {
       const gi = Math.floor(p.lng / CELL), gj = Math.floor(p.lat / CELL);
+      const mPerDegLng = M_PER_DEG_LAT * Math.cos((p.lat * Math.PI) / 180);
       for (let di = -1; di <= 1; di++) {
         for (let dj = -1; dj <= 1; dj++) {
           const cell = grid.get((gi + di) + ':' + (gj + dj));
           if (!cell) continue;
           for (const q of cell) {
+            const dx = (q.lng - p.lng) * mPerDegLng, dy = (q.lat - p.lat) * M_PER_DEG_LAT;
+            if (dx * dx + dy * dy > roughLimit2) continue;
             if (q.id === p.id) continue;
             if (sharesLine(p, q)) continue;
             const d = haversineM(p, q);
@@ -305,7 +369,11 @@
       if (!groups.has(r)) groups.set(r, []);
       groups.get(r).push(p);
     }
+    return groups;
+  }
 
+  /** 由分组生成逻辑站与 物理站→逻辑站 映射 */
+  function finishGraph(lineById, physById, physList, groups) {
     const logicalById = new Map();
     const physToLogical = new Map();
 
@@ -390,31 +458,124 @@
   }
 
   // ============ Dijkstra over (logicalStop, line) ============
+  //
+  // 状态 =（逻辑站, 线路）。性能：旧实现用 “逻辑站id|线路id” 拼字符串当 Map 键，每次松弛都要拼串、
+  // 查哈希；大换乘站每条线都要尝试换到其它所有线，字符串开销占了寻路时间的大头。
+  // 现在建图后第一次寻路时给每个状态编一个整数下标（缓存在 graph 上），距离/前驱用定长数组，
+  // 乘车边的下一状态也预先算好。松弛顺序、比较方式、堆的出入顺序与原实现完全一致，结果逐字节相同。
+
+  /** 状态编号表（每个图只建一次）：同一逻辑站的各线路状态连续编号，顺序同 log.lineIds */
+  function stateTable(graph) {
+    if (graph._states) return graph._states;
+    const logicalOf = [];   // 状态 → 逻辑站 id
+    const lineOf = [];      // 状态 → 线路 id
+    const lineObj = [];     // 状态 → 线路对象
+    const rangeEnd = [];    // 状态 → 所属逻辑站状态区间的末尾（换乘边遍历 [rangeStart, rangeEnd)）
+    const rangeStart = [];
+    const keyToState = new Map();
+    for (const [logId, log] of graph.logicalById) {
+      const first = logicalOf.length;
+      for (const lid of log.lineIds) {
+        keyToState.set(stateKey(logId, lid), logicalOf.length);
+        logicalOf.push(logId);
+        lineOf.push(lid);
+        lineObj.push(graph.lineById.get(lid) || null);
+      }
+      for (let i = first; i < logicalOf.length; i++) { rangeStart.push(first); rangeEnd.push(logicalOf.length); }
+    }
+    // 每条线路上每个站位所对应的状态（乘车边的目标），没有对应逻辑站时为 -1
+    const lineStopState = new Map();
+    for (const [lid, line] of graph.lineById) {
+      const arr = new Int32Array(line.stops.length).fill(-1);
+      line.stops.forEach((st, i) => {
+        const logId = graph.physToLogical.get(st.id);
+        const k = logId ? keyToState.get(stateKey(logId, lid)) : undefined;
+        if (k !== undefined) arr[i] = k;
+      });
+      lineStopState.set(lid, arr);
+    }
+    // 状态在其线路上的站位（log.stopByLine 指向的物理站）
+    const position = new Int32Array(logicalOf.length).fill(-1);
+    for (let i = 0; i < logicalOf.length; i++) {
+      const line = lineObj[i];
+      const physId = graph.logicalById.get(logicalOf[i]).stopByLine[lineOf[i]];
+      const idx = line && line.stopIndex ? line.stopIndex.get(physId) : undefined;
+      if (idx != null) position[i] = idx;
+    }
+    graph._states = { logicalOf, lineOf, lineObj, rangeStart, rangeEnd, keyToState, lineStopState, position, size: logicalOf.length };
+    return graph._states;
+  }
+
   function runDijkstra(graph, sources, opts) {
-    const dist = new Map();
-    const parent = new Map();
-    const heap = new MinHeap();
+    const T = stateTable(graph);
+    const dist = new Float64Array(T.size);       // 0 = 未访问（原实现 dist.get(k) || Infinity 同样把 0 当作无穷）
+    const parent = new Int32Array(T.size).fill(-1); // -1 未访问，-2 源点（原实现 parent 为 null），其余为前驱状态
+    // 二叉堆（与 MinHeap 完全相同的上浮/下沉比较，保证出堆顺序一致），代价与状态分存两个数组
+    const hc = [], hs = [];
+    const push = (cost, st) => {
+      let i = hc.length;
+      hc.push(cost); hs.push(st);
+      while (i > 0) {
+        const p = (i - 1) >> 1;
+        if (hc[p] <= hc[i]) break;
+        const tc = hc[p]; hc[p] = hc[i]; hc[i] = tc;
+        const ts = hs[p]; hs[p] = hs[i]; hs[i] = ts;
+        i = p;
+      }
+    };
+    const relax = (st, nCost, from) => {
+      if (nCost < (dist[st] || Infinity)) {
+        dist[st] = nCost;
+        parent[st] = from;
+        push(nCost, st);
+      }
+    };
 
     for (const [key, s] of sources) {
-      dist.set(key, s.cost);
-      parent.set(key, null);
-      heap.push(s.cost, { logicalId: s.logicalId, lineId: s.lineId });
+      const st = T.keyToState.get(key);
+      if (st === undefined) continue;
+      dist[st] = s.cost;
+      parent[st] = -2;
+      push(s.cost, st);
     }
 
-    while (heap.size()) {
-      const [cost, cur] = heap.pop();
-      const curKey = stateKey(cur.logicalId, cur.lineId);
-      if (cost > (dist.get(curKey) || Infinity)) continue; // 过期条目
+    while (hc.length) {
+      const cost = hc[0], cur = hs[0];
+      const lastC = hc.pop(), lastS = hs.pop();
+      if (hc.length) {
+        hc[0] = lastC; hs[0] = lastS;
+        let i = 0;
+        for (;;) {
+          const l = i * 2 + 1, r = i * 2 + 2;
+          let m = i;
+          if (l < hc.length && hc[l] < hc[m]) m = l;
+          if (r < hc.length && hc[r] < hc[m]) m = r;
+          if (m === i) break;
+          const tc = hc[m]; hc[m] = hc[i]; hc[i] = tc;
+          const ts = hs[m]; hs[m] = hs[i]; hs[i] = ts;
+          i = m;
+        }
+      }
+      if (cost > (dist[cur] || Infinity)) continue; // 过期条目
 
-      const line = graph.lineById.get(cur.lineId);
-      const log = graph.logicalById.get(cur.logicalId);
-      if (!line || !log) continue;
+      const line = T.lineObj[cur];
+      if (!line) continue;
 
       // 乘车边：沿当前线路向两侧相邻物理站移动
-      const physId = log.stopByLine[cur.lineId];
-      const stops = line.stops;
-      const idx = line.stopIndex ? line.stopIndex.get(physId) : undefined;
-      if (idx != null) {
+      const idx = T.position[cur];
+      if (idx >= 0) {
+        const stops = line.stops;
+        const next = T.lineStopState.get(T.lineOf[cur]);
+        const relaxRide = (aIdx, bIdx, explicitDist) => {
+          const a = stops[aIdx], b = stops[bIdx];
+          const lo = a.seq <= b.seq ? a : b; // 用 seq 较小一站的 d（到下一站的距离）
+          const d = explicitDist != null ? explicitDist : lo.d;
+          if (typeof d !== 'number' || !(d > 0)) return;
+          const target = next[bIdx];
+          if (target < 0) return;
+          const edge = segmentRideMin(line, d, opts) + dwellOf(line, opts); // 先合成边权再累加，与原实现的浮点运算顺序一致
+          relax(target, cost + edge, cur);
+        };
         // 前进方向（seq 递增）：所有线路都允许
         if (idx + 1 < stops.length) relaxRide(idx, idx + 1);
         // 反向：仅双向线（非 oneWay）允许
@@ -426,40 +587,34 @@
         }
       }
 
-      function relaxRide(aIdx, bIdx, explicitDist) {
-        const a = stops[aIdx], b = stops[bIdx];
-        const lo = a.seq <= b.seq ? a : b; // 用 seq 较小一站的 d（到下一站的距离）
-        const d = explicitDist != null ? explicitDist : lo.d;
-        if (typeof d !== 'number' || !(d > 0)) return;
-        const bLog = graph.physToLogical.get(b.id);
-        if (!bLog) return;
-        const edge = segmentRideMin(line, d, opts) + dwellOf(line, opts);
-        const nKey = stateKey(bLog, cur.lineId);
-        const nCost = cost + edge;
-        if (nCost < (dist.get(nKey) || Infinity)) {
-          dist.set(nKey, nCost);
-          parent.set(nKey, { logicalId: cur.logicalId, lineId: cur.lineId });
-          heap.push(nCost, { logicalId: bLog, lineId: cur.lineId });
-        }
-      }
-
       // 换乘边：同逻辑站换到其它线路（重新等车 + 换乘惩罚）
-      for (const lid of log.lineIds) {
-        if (lid === cur.lineId) continue;
-        const nline = graph.lineById.get(lid);
+      for (let st = T.rangeStart[cur], end = T.rangeEnd[cur]; st < end; st++) {
+        if (st === cur) continue;
+        const nline = T.lineObj[st];
         if (!nline) continue;
         if (!opts.allowMetro && nline.mode === 'metro') continue;
-        const nCost = cost + transferOf(line, nline, opts) + waitOf(nline, opts);
-        const nKey = stateKey(cur.logicalId, lid);
-        if (nCost < (dist.get(nKey) || Infinity)) {
-          dist.set(nKey, nCost);
-          parent.set(nKey, { logicalId: cur.logicalId, lineId: cur.lineId });
-          heap.push(nCost, { logicalId: cur.logicalId, lineId: lid });
-        }
+        relax(st, cost + transferOf(line, nline, opts) + waitOf(nline, opts), cur);
       }
     }
 
-    return { dist, parent };
+    // 对外仍提供按 “逻辑站id|线路id” 查询的接口（回溯与终点判断只查少量状态）
+    return {
+      dist: {
+        get(key) {
+          const st = T.keyToState.get(key);
+          return st === undefined || !dist[st] ? undefined : dist[st];
+        },
+      },
+      parent: {
+        get(key) {
+          const st = T.keyToState.get(key);
+          if (st === undefined || parent[st] === -1) return undefined;
+          if (parent[st] === -2) return null;
+          const p = parent[st];
+          return { logicalId: T.logicalOf[p], lineId: T.lineOf[p] };
+        },
+      },
+    };
   }
 
   // 两逻辑站在某线路上的段统计（段数/距离/乘车时间）
@@ -705,6 +860,7 @@
   }
 
   return {
+    MERGE_RULES_VERSION,
     DEFAULT_PARAMS,
     segmentRideMin, // Shared by the authoritative backend route validator.
     rideStatsBetween,

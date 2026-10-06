@@ -19,6 +19,8 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { parseDbf, parseShp } = require('../lib/shp');
+const router = require('../shared/router.js');
+const transitFormat = require('../shared/transit-format.js');
 
 const PATH_MAX_POINTS = 300;
 
@@ -684,7 +686,9 @@ function convertCity(cityKey) {
     count: lines.length,
     lines,
   };
-  fs.writeFileSync(OUT_FILE, JSON.stringify(out));
+  // 输出 format 2：站点去重、路径差分、附带按 shared/router.js 合并规则预先算好的逻辑站分组（见 shared/transit-format.js）
+  const graph = router.buildGraph(lines);
+  fs.writeFileSync(OUT_FILE, JSON.stringify(transitFormat.encode(out, graph, router.MERGE_RULES_VERSION)));
 
   const sizeMB = (fs.statSync(OUT_FILE).size / 1024 / 1024).toFixed(1);
   const summary = {

@@ -29,7 +29,7 @@ assert.ok(ring.some((p) => dist(center, p) < 600), '朝江的方向被截短到�
 assert.equal(rivers.clipWalkRange(index, [114.42, 30.48], 1500), null, '远离江的地方照常画圆');
 
 // 寻路器：挂上过江判断后，起点附近江对岸的站不会被选为上车站
-const data = read('../data/wuhan-transit.json');
+const data = require('../shared/transit-format.js').decode(read('../data/wuhan-transit.json'));
 const graph = router.buildGraph(data.lines);
 graph.rivers = { crosses: (a, b) => rivers.crossesRiver(index, a, b) };
 const walk = async (a, b) => ({ min: dist(a, b) / 75 });

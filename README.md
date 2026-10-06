@@ -97,6 +97,13 @@ Nginx API 代理和静态目录示例见 [`backend/deploy/nginx.conf.example`](b
 
 本地 `npm start` 和 Release 启动脚本保持不变。`npm run test:paths` 检查根路径、`/mapgame/`、资源引用和发行包资源是否完整。
 
+### 交通数据的压缩与缓存
+
+- **服务器（`server.js`）**：≥512KB 的大文件（各城市交通数据）第一次被经代理请求时，在后台生成 brotli-11 与 gzip-9 版本，存到 `.cache/compressed/`（不进仓库），之后直接发送预压缩文件（北京 37MB → br 4.0MB，gzip 9.8MB）。压缩异步进行、一次一个文件，不阻塞请求；压好之前临时用 gzip-6。文件名带原文件大小与修改时间，数据更新后自动重压，旧文件在启动时清理。本机直连（便携版、本地开发）不触发后台压缩。
+- **预热**：部署后可执行一次 `npm run precompress`，把所有城市一次压好（约十几分钟，只需一次），避免首批玩家拿到较大的临时 gzip。
+- **若改为由 Caddy 直接托管静态文件**：把 `.cache/compressed/` 的结果改放到文件旁（`xxx.json.br` / `.gz`），并在 `file_server` 里开启 `precompressed br gzip`。
+- **前端**：数据下载后存入 Cache Storage（`mg-transit-data`），刷新或再次进入同一城市直接读本地；`DATA_VERSION` 变化时旧版本数据自动删除。
+
 ---
 
 ## 数据生成（CPTOND-2025）
@@ -114,24 +121,29 @@ node scripts/cptond-convert.js
 
 ---
 
-## 数据格式（beijing-transit.json）
+## 数据格式（`<城市>-transit.json`，format 2）
+
+文件格式由 `shared/transit-format.js` 编码/解码（前端、后端、测试、脚本共用），解码后得到下面的「线路列表」结构，下游代码只用这个结构：
 
 ```jsonc
-{
-  "city": "北京",
-  "count": 2213,
-  "lines": [
-    {
-      "id": "L_xxx", "name": "地铁2号线外环", "mode": "metro",
-      "front": "西直门", "terminal": "积水潭",
-      "stops": [ { "id": "BV…@lng,lat", "name": "西直门", "lng": 116.35, "lat": 39.94, "seq": 1, "d": 1.2 } ],
-      "path": [ [116.35, 39.94], … ]   // GCJ-02 轨迹（高德直接用；OSM 在渲染边界换算回 WGS-84）
-    }
-  ]
-}
+// 解码后的内存结构
+{ "city": "北京", "count": 4123,
+  "lines": [ { "id": "L_xxx", "name": "地铁2号线外环", "mode": "metro", "front": "西直门", "terminal": "积水潭",
+               "stops": [ { "id": "BV…@lng,lat", "name": "西直门", "lng": 116.35, "lat": 39.94, "seq": 1, "d": 1.2 } ],
+               "path":  [ [116.35, 39.94], … ] } ],          // GCJ-02 轨迹（OSM 在渲染边界换算回 WGS-84）
+  "logical": [ ["BV…", "BV…"], … ], "mergeRules": 1 }   // 预先算好的逻辑站分组（物理站 id）
 ```
+
+文件本身（format 2）比上面更紧凑：
+- `stops`：每个物理站只存一次 `[id, 名称, lng, lat]`，线路里只存下标（同一站在各线路的坐标差 ≤1.3m，统一为首次出现的坐标；线路对站名的不同写法按位置单独记录）；
+- `path`：坐标 ×10⁶ 取整后与前一点做差的扁平整数数组；
+- `logical` + `mergeRules`：按 `shared/router.js` 当前合并规则算好的「哪些物理站是同一个换乘站」。只合并归属，各站台坐标不变。加载时直接使用，跳过建图里最耗时的站点合并；改了合并规则（`MERGE_RULES_VERSION`）就要重新生成：`node scripts/migrate-transit-format.js`。
+
+其它约定：
 - `d`：该站到下一站的公里数（末站为 `null`）。
 - 站点 `id` 是 `原始id@lng,lat` 复合键，避免 CPTOND 里「临时站」复用同一 id 的问题。
+- 北京：36.9MB → 14.1MB（brotli 后约 4MB 以内），解析 + 建图约 770ms → 210ms。
+- `compatibleHashes`：只改了文件格式、建出的图逐字节相同的旧数据文件哈希（迁移脚本验证后写入）。服务器把带这些哈希的题目、进行中的存档与无尽排行视为同一版本数据——格式升级当天的每日挑战照常可玩，无尽存档和排行不会被清空。从源数据重新转换（数据内容真的变了）时不写，旧对局照常提示“地图数据已更新”。
 
 ---
 

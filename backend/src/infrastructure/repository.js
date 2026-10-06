@@ -243,7 +243,7 @@ export class Repository {
   }
 
   // 榜单用窗口函数：先取每人最佳成绩（choice=1），再按 rank/position 排名。
-  async leaderboard({ mode, date, city, scenario, hash, rulesVersion, viewerId }) {
+  async leaderboard({ mode, date, city, scenario, hashes, rulesVersion, viewerId }) {
     if (mode === 'tower') {
       return (
         await this.db.query(
@@ -252,7 +252,7 @@ export class Repository {
         row_number() OVER(PARTITION BY g.user_id ORDER BY t.cleared_layers DESC,t.total_elapsed_ms ASC,t.achieved_at,g.id) AS choice
       FROM tower_run_stats t JOIN game_runs g ON g.id=t.run_id JOIN "user" u ON u.id=g.user_id
       WHERE g.mode='tower' AND g.status<>'invalid' AND t.invalidated_at IS NULL AND t.cleared_layers>0
-        AND g.city_id=$1 AND g.scenario_key=$2 AND g.data_hash=$3 AND g.rules_version=$4
+        AND g.city_id=$1 AND g.scenario_key=$2 AND g.data_hash=ANY($3::text[]) AND g.rules_version=$4
     ), ranked AS (SELECT user_id,name,cleared_layers,total_elapsed_ms,achieved_at,
       rank() OVER(ORDER BY cleared_layers DESC,total_elapsed_ms ASC) AS rank,
       row_number() OVER(ORDER BY cleared_layers DESC,total_elapsed_ms ASC,achieved_at,user_id) AS position
@@ -260,7 +260,7 @@ export class Repository {
       SELECT name,cleared_layers,total_elapsed_ms,achieved_at,rank,position,user_id=$5 AS is_me
       FROM ranked WHERE position<=20 OR user_id=$5
       ORDER BY cleared_layers DESC,total_elapsed_ms ASC,achieved_at,user_id`,
-          [city, scenario, hash, rulesVersion, viewerId ?? ''],
+          [city, scenario, hashes, rulesVersion, viewerId ?? ''],
         )
       ).rows;
     }

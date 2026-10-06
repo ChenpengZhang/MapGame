@@ -188,6 +188,7 @@ globalThis.AMap = {
 // ======================================================================
 
 globalThis.window.TransitRouter = require('../shared/router.js');
+globalThis.window.TransitFormat = require('../shared/transit-format.js');
 
 const { state } = await import('../frontend/js/core/state.js');
 const { account } = await import('../frontend/js/core/account.js');

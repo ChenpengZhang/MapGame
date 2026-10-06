@@ -6,7 +6,7 @@
 
 const router = require('../shared/router.js');
 
-const data = require('../data/beijing-transit.json');
+const data = require('../shared/transit-format.js').decode(require('../data/beijing-transit.json'));
 
 const ORIGIN = [116.3971, 39.9163]; // 故宫
 const DEST = [116.4615, 39.9095];   // 国贸

@@ -27,7 +27,7 @@ export const CITIES = ['beijing', 'shanghai', 'guangzhou', 'shenzhen', 'wenshan'
 export const BIG_CITIES = ['beijing', 'shanghai', 'guangzhou', 'shenzhen', 'chengdu', 'chongqing', 'hangzhou', 'wuhan', 'nanjing', 'tianjin', 'qingdao',
   'kunming', 'xiamen', 'jinan', 'zhengzhou', 'changchun'];
 export const RULES_VERSION = 1;
-export const DATA_VERSION = 7;
+export const DATA_VERSION = 9;
 
 // 爬塔难度曲线：第 1 层允许比最优慢 ≤100%（即 2 倍最优以内），
 // 线性收紧到第 12 层 ≤1%，之后保持 1%。

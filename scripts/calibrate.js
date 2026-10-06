@@ -20,7 +20,7 @@
 // 经验性检查：5 次随机对半划分，train/test 锚点几乎一致（地铁 ±0.4、公交 ±1、步行 ±1），
 // 无过拟合迹象。
 
-const data = require('../data/beijing-transit.json');
+const data = require('../shared/transit-format.js').decode(require('../data/beijing-transit.json'));
 const samples = require('../data/calibrate-samples.json').samples;
 
 const localByName = new Map();

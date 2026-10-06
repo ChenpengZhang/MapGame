@@ -132,6 +132,7 @@ export function installAMap() {
 
 export function installRouter() {
   globalThis.window.TransitRouter = require('../shared/router.js');
+globalThis.window.TransitFormat = require('../shared/transit-format.js');
 }
 
 /** 一键安装全部桩件 */

@@ -25,9 +25,17 @@ export const DEFAULT_PARAMS = Object.freeze({ ...R().DEFAULT_PARAMS });
 /**
  * 构建寻路图（供最优路线计算）。
  * @param {Array} lines 线路数组（data.lines）
+ * @param {{logical?: Array, mergeRules?: number}} [precomputed] 数据文件里预先算好的站点合并结果（有则跳过合并计算）
  */
-export function buildGraph(lines) {
-  return R().buildGraph(lines);
+export function buildGraph(lines, precomputed) {
+  return R().buildGraph(lines, precomputed);
+}
+
+/** 交通数据文件（已 JSON.parse）→ 统一的内存结构；format 2 解码，旧格式原样返回（见 shared/transit-format.js） */
+export function decodeTransitData(obj) {
+  const format = typeof window !== 'undefined' ? window.TransitFormat : null;
+  if (!format) throw new Error('shared/transit-format.js 未加载：请检查 index.html 的脚本顺序');
+  return format.decode(obj);
 }
 
 /** 单段乘车时间；前端玩家计时与系统最优共用同一公式。 */

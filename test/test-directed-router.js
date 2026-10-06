@@ -6,7 +6,7 @@
 'use strict';
 const assert = require('node:assert/strict');
 const R = require('../shared/router.js');
-const data = require('../data/guangzhou-transit.json');
+const data = require('../shared/transit-format.js').decode(require('../data/guangzhou-transit.json'));
 
 const graph = R.buildGraph(data.lines);
 const walk = (a, b) => {

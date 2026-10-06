@@ -9,6 +9,7 @@ function publicAssets(root) {
     ['/index.html', 'frontend/index.html'],
     ['/shared/router.js', 'shared/router.js'],
     ['/shared/rivers.js', 'shared/rivers.js'],
+    ['/shared/transit-format.js', 'shared/transit-format.js'],
   ]);
   function collect(directory, publicDirectory, allowed) {
     if (!fs.existsSync(path.join(root,directory))) return; // 可选目录（如精简包里没有的边界数据）

@@ -29,7 +29,7 @@ const CITY = '010'; // 北京 citycode
 const RANDOM_OFFSET_MIN_M = 300;
 const RANDOM_OFFSET_MAX_M = 1500;
 
-const data = require('../data/beijing-transit.json');
+const data = require('../shared/transit-format.js').decode(require('../data/beijing-transit.json'));
 
 // 全部物理站点（合并去重后的点）——简化：直接取所有 line.stops 的坐标去重
 function buildPointPool() {

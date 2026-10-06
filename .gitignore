@@ -38,3 +38,6 @@ dist/
 
 # ---- UI 方案效果图（设计稿，不进仓库）----
 design/ui-proposals/
+
+# 服务器预压缩的大文件（scripts/precompress.js 生成）
+.cache/
