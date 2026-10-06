@@ -289,6 +289,19 @@ export class GameService {
     });
   }
 
+  /**
+   * 保存一局的规划过程（玩家行为分析用，不参与计分）。游客只按匿名 id 记录；
+   * 登录玩家的记录可关联到自己的对局/关卡，关联不属于自己的对局时只保存、不关联。
+   */
+  async recordTrace(userId, trace) {
+    let runId = null, roundId = null;
+    if (userId && trace.runId && await this.repository.ownedRound(userId, trace.runId, trace.roundId ?? null)) {
+      runId = trace.runId;
+      roundId = trace.roundId ?? null;
+    }
+    await this.repository.insertTrace({ ...trace, userId: userId ?? null, runId, roundId });
+  }
+
   /** 游玩记录一页：{ rows, next }；next 为下一页游标（没有更多时为 null） */
   async history(userId, cursor = null) {
     const before = parseHistoryCursor(cursor);

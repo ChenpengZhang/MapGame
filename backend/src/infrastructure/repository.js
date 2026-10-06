@@ -218,6 +218,34 @@ export class Repository {
     ).rows;
   }
 
+  /**
+   * 保存一局的规划过程。id 由浏览器生成：同一局先按“放弃”上报（切后台等）、之后又完成时，
+   * 用同一 id 覆盖为最新内容；只允许同一匿名 id 覆盖，别人无法改写。
+   */
+  async insertTrace(t) {
+    await this.db.query(
+      `INSERT INTO play_traces(id,user_id,anon_id,run_id,round_id,mode,city_id,scenario,level_id,origin,destination,
+        outcome,duration_ms,events,route,summary,client)
+      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+      ON CONFLICT (id) DO UPDATE SET outcome=EXCLUDED.outcome, duration_ms=EXCLUDED.duration_ms, events=EXCLUDED.events,
+        route=EXCLUDED.route, summary=EXCLUDED.summary, client=EXCLUDED.client,
+        user_id=COALESCE(play_traces.user_id, EXCLUDED.user_id), received_at=clock_timestamp()
+      WHERE play_traces.anon_id=EXCLUDED.anon_id`,
+      [t.id, t.userId, t.anonId, t.runId, t.roundId, t.mode, t.city, t.scenario ?? null, t.levelId ?? null,
+        JSON.stringify(t.origin ?? null), JSON.stringify(t.destination ?? null), t.outcome, t.durationMs,
+        JSON.stringify(t.events), JSON.stringify(t.route ?? null), t.summary ?? null, t.client ?? null],
+    );
+  }
+
+  /** 对局与关卡是否属于该用户（规划记录只关联自己的对局） */
+  async ownedRound(userId, runId, roundId) {
+    return this.one(
+      `SELECT g.id FROM game_runs g ${roundId ? 'JOIN run_rounds s ON s.run_id=g.id AND s.id=$3' : ''}
+      WHERE g.id=$1 AND g.user_id=$2`,
+      roundId ? [runId, userId, roundId] : [runId, userId],
+    );
+  }
+
   async towerProgress(userId, city) {
     return (
       await this.db.query(

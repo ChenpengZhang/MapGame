@@ -31,6 +31,7 @@ import { makeTransitLineLayers } from '../map/transit-line-style.js';
 import { walkRangeBounds } from '../map/walk-range.js';
 import { crossesRiver } from '../core/rivers.js';
 import { isNativeAmap, registerPickableLine, setStopChoiceFilter } from '../map/native-picker.js';
+import { logTrace } from './trace.js';
 import { onStopMouseOver, onStopMouseOut, clearHighlight, renderHighlight, cancelPreview, showCurrentStopInfo, clearCurrentStopInfo } from '../map/hover.js';
 import { clearOptimal } from '../map/optimal-layer.js';
 import { haversineKm, findOptimalRoute } from '../core/router-api.js';
@@ -115,9 +116,11 @@ function toggleCurrentLine(lineName, lineId = null) {
   if (state.selectedLineName === lineName) {
     state.selectedLineName = null;
     state.selectedLineId = null;
+    logTrace('line', { ln: lineName, on: 0 });
   } else {
     state.selectedLineName = lineName;
     state.selectedLineId = lineId == null ? null : String(lineId);
+    logTrace('line', { ln: lineName, on: 1 });
   }
   state.pendingCandidate = null;
   clearHighlight();
@@ -234,10 +237,12 @@ export function onStopClick(e) {
   if (!phys || !logical || state.routeStops.length) return;
   // 起点步行上限：不允许超过 1.5km
   if (haversineKm(state.ORIGIN, phys.lnglat) * 1000 > MAX_WALK_M) {
+    logTrace('reject', { why: 'far', stop: String(phys.id), n: logical.name });
     showCenterToast('距离起点步行超过 1.5km，请选择更近的站点');
     return;
   }
   if (crossesRiver(state.ORIGIN, phys.lnglat)) {
+    logTrace('reject', { why: 'river', stop: String(phys.id), n: logical.name });
     showCenterToast('这个站在江对岸，不能步行过江');
     return;
   }
@@ -246,6 +251,7 @@ export function onStopClick(e) {
   // 从“图钉 / 站点”选择框选中的站：不再预选，直接确定并走到该站
   if (e.direct) {
     if (state.showAllStops) { showCenterToast('请关闭全图显示后再确定'); return; }
+    logTrace('direct', { stop: d.physicalStopId, n: logical.name }); // 从“图钉/站点”选择框直接确定
     startRoute(d);
     return;
   }
@@ -258,6 +264,7 @@ export function onStopClick(e) {
 
 /** 两端统一的第一步：预览线路和站点，红圈严格落在实际点击的物理站坐标。 */
 function previewStart(d) {
+  logTrace('preview', { stop: d.physicalStopId, n: d.logical.name, first: 1 });
   state.pendingStart = d;
   state.pendingCandidate = null;
   selectOnlyLine(d.logical);
@@ -286,6 +293,7 @@ function startRoute(d) {
   const chosenLineName = state.selectedLineName;
   const chosenLineId = state.selectedLineId;
   resetRoute();
+  logTrace('start', { stop: d.physicalStopId, n: d.logical.name, line: state.selectedLineName ?? chosenLineName ?? null });
   state.routeOverlayGroups = [[]]; // 第一组：首站标记 + 首段步行
   state.routeStops = [d];
   selectOnlyLine(d.logical);
@@ -357,6 +365,7 @@ export function onCandidateStopClick(phys, { direct = false } = {}) {
 
 /** 下一站第一步：在实际点击的物理站坐标上预览。 */
 function previewCandidate(logical,phys) {
+  logTrace('preview', { stop: String(phys.id), n: logical.name });
   state.pendingCandidate = { logical,phys };
   const point = physicalPoint(phys);
   renderHighlight(logical, point);
@@ -383,6 +392,7 @@ export function cancelRoutePreview(_event, force = false) {
   const hadPreview = !!(state.pendingStart || state.pendingCandidate);
   const hadLineSelection = !!state.selectedLineName && !!state.routeStops.length && !state.finished;
   if (!hadPreview && !hadLineSelection) return;
+  logTrace('cancel', { preview: hadPreview ? 1 : 0 }); // 点地图空白处取消预览 / 线路选择
   if (hadPreview) cancelPreview();
   if (wasStart) {
     state.selectedLineName = null;
@@ -412,6 +422,7 @@ export function cancelRoutePreview(_event, force = false) {
  */
 export function setForceWalk(on) {
   state.forceWalk = !!on && state.walkTransfer;
+  logTrace('force_walk', { on: state.forceWalk ? 1 : 0 });
   if (state.routeStops.length && !state.finished) {
     const current = state.routeStops[state.routeStops.length - 1];
     showCandidateNetwork(current.logical, current.point, current.physicalStopId);
@@ -553,6 +564,7 @@ function commitRide(logical, prev, line) {
   state.routeOverlayGroups.push([]); // 新组：本步站点标记 + 乘车段（供撤回）
   state.routeRides.push(line);
   state.routeStops.push(cur);
+  logTrace('ride', { line: String(line.id), ln: line.name, stop: cur.physicalStopId ?? null, n: logical.name });
   addStopMarker(state.routeStops.length, cur.point);
   drawRideSegment(line, prev.logical, cur.logical);
 
@@ -610,6 +622,7 @@ function commitWalkTransfer(logical, prev, force,selectedPhys) {
   state.routeOverlayGroups.push([]);
   state.routeRides.push(null); // null = 步行换乘段（非乘车）
   state.routeStops.push(cur);
+  logTrace('walk', { stop: cur.physicalStopId ?? null, n: logical.name, force: force ? 1 : 0 });
   addStopMarker(state.routeStops.length, cur.point);
   drawWalkTransfer(prev.point, cur.point);
 
@@ -744,6 +757,7 @@ export function undoRoute() {
     showCenterToast('真实乘坐模式下不能撤回');
     return;
   }
+  logTrace('undo', { stops: state.routeStops.length });
   clearTutorialMistake();
   // 预选中点"上一步"= 取消预选，而不是撤回已确认的路线
   if (state.pendingStart || state.pendingCandidate) {

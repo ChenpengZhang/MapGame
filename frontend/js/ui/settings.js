@@ -78,6 +78,8 @@ export function syncControls() {
   if (metro) metro.checked = !!state.settings.metroBase;
   const focus = $('focus-on-confirm-toggle');
   if (focus) focus.checked = state.settings.focusOnConfirm !== false;
+  const traces = $('collect-traces-toggle');
+  if (traces) traces.checked = state.settings.collectTraces !== false;
   for (const btn of document.querySelectorAll('#settings-panel [data-choice]')) {
     const [key, raw] = btn.dataset.choice.split(':');
     const current = String(state.settings[key]);
@@ -105,6 +107,7 @@ export function bindSettings() {
   $('zoom-speed-slider')?.addEventListener('input', (e) => update('zoomSpeed', Math.min(1, Math.max(0, parseFloat(e.target.value) || 0))));
   $('metro-base-toggle')?.addEventListener('change', (e) => update('metroBase', !!e.target.checked));
   $('focus-on-confirm-toggle')?.addEventListener('change', (e) => update('focusOnConfirm', !!e.target.checked));
+  $('collect-traces-toggle')?.addEventListener('change', (e) => update('collectTraces', !!e.target.checked));
   // 步行换乘的生效与提示由 app.js 处理；这里在它之后刷新预览
   $('walk-transfer-toggle')?.addEventListener('change', () => setTimeout(() => renderPreview('walkTransfer'), 0));
   for (const btn of panel.querySelectorAll('[data-choice]')) {

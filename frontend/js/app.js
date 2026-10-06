@@ -40,6 +40,7 @@ import { buildStoryLevels, openSettingsPanel, closeSettingsPanel, setCityLabel, 
 import { hideResultOverlay } from './ui/result.js';
 import { storyNext } from './ui/story.js';
 import { openDailyMenu, startDaily } from './game/daily.js';
+import { logTrace } from './game/trace.js';
 import { bindCustomMenu, openSharedMapFromUrl } from './game/custom-menu.js';
 import { loadSettings } from './core/settings.js';
 import { bindSettings, showSettingsPreview, applySavedSettings } from './ui/settings.js';
@@ -97,9 +98,9 @@ function bindUiEvents() {
   on('result-retry',submitOnlineResult);
   // ---- 规划中的操作条 ----
   on('undo-btn', undoRoute);                  // 上一步
-  on('reset-btn', () => state.onlineRound?.submission ? restartLevel() : resetRoute());                // 取消（重置路线）
+  on('reset-btn', () => { logTrace('reset', { stops: state.routeStops.length }); return state.onlineRound?.submission ? restartLevel() : resetRoute(); }); // 取消（重置路线）
   on('error-close', () => hide('error'));
-  on('show-all-btn', toggleShowAllStops);     // 显示/关闭全图站点
+  on('show-all-btn', () => { toggleShowAllStops(); logTrace('show_all', { on: state.showAllStops ? 1 : 0 }); }); // 显示/关闭全图站点
   on('trip-card', () => fitEndpoints());      // 行程牌：同时看到起点和终点
   on('dest-indicator', focusDestination);     // 终点方向指示：飞到终点
   on('tower-restart-btn', openTowerResetConfirm);

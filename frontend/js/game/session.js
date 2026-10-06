@@ -34,6 +34,7 @@ import { saveTowerState } from './progress.js';
 import { stopTowerTimer } from './tower-timer.js';
 import { closeCustomEditor } from './custom-editor.js';
 import { crossesRiver } from '../core/rivers.js';
+import { startTrace, abandonTrace } from './trace.js';
 
 // ============ 地图交互锁（剧情/教学期间禁止拖拽缩放） ============
 // 锁定实现放在 map/map-init.js（它同时管滚轮缩放），这里只负责在合适的时机调用。
@@ -42,6 +43,7 @@ import { crossesRiver } from '../core/rivers.js';
 export function beginGameplay(level) {
   setMapLocked(false);
   showMapTutorial(level.mapTutorial);
+  startTrace(level); // 规划过程记录（玩家行为分析）；上一局没结束会先按“放弃”上报
 }
 
 // ============ 启动一局 ============
@@ -119,6 +121,7 @@ export function showMenu() {
   // 若回主页就露出底图，玩家能先看清周围再回来继续。路线已完成（底图已揭晓）则照常恢复。
   const keepBlind = !!state.scenario?.blindMap && !state.finished;
   const wasOnline=!!state.onlineRound;
+  abandonTrace(); // 规划到一半回主页：按“放弃”上报当时的过程
   leaveOnlineRound();
   if (state.editorActive) closeCustomEditor(); // 编辑中点了回主页：直接关闭编辑器（未保存的修改丢弃）
   state.answerView = false;

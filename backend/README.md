@@ -223,3 +223,46 @@ Nginx 静态目录只复制前端资源，绝不能指向含后端和 .env 的�
 TEST_DATABASE_URL=postgresql://你的用户名@localhost/mapgame_backend_test node backend/test/e2e-account.mjs
 ```
 可用 `PLAYWRIGHT_MODULE` 指定 Playwright 模块路径。覆盖游客入口、注册验证、登录、真实路线入库、伪造线路拒绝、响应丢失幂等重试、历史记录、退出和密码重置。邮件在测试内存中捕获，不发送到外部邮箱。
+
+## 玩家规划记录（`play_traces`，行为分析用）
+
+每局一行，记录玩家“怎么规划的”，不参与计分。前端 `frontend/js/game/trace.js` 采集，`POST /mapgame/api/traces` 上报（游客也可以，按 IP 限频）：
+完成路线时上报一次；中途回主页、开下一局、刷新/关闭页面、切到后台时按“放弃”上报当时的过程与半成品路线（同一局同一 id，之后完成会覆盖为最新）。
+设置页「隐私 → 匿名记录规划过程」可关闭。
+
+| 字段 | 说明 |
+|---|---|
+| `user_id` / `anon_id` | 登录玩家的账号（删号后置空）/ 每个浏览器一个随机匿名 id |
+| `run_id` / `round_id` | 登录玩家的正式对局与关卡（可与 `round_submissions` 的最终成绩关联） |
+| `mode` `city_id` `scenario` `level_id` | 模式（free/story/tower/daily/custom）、城市、情景开关、关卡（故事关 id、无尽 `layer:N`、自定义 `分享码:序号`） |
+| `outcome` `duration_ms` | `finished` / `abandoned`，开局到上报的毫秒数 |
+| `events` | 操作序列 `{t: 开局后毫秒, e: 类型, …}`，见下表 |
+| `route` | 完成或放弃时的路线：`start` 首站、`ride` 乘某线到某站、`walk` 步行换乘到某站 |
+| `summary` `client` | 站数/乘车段/步行段/玩家用时；屏幕尺寸、触屏、底图、步行换乘开关、前端版本 |
+
+事件类型：`preview`（预览站点，`first:1` 为首站）、`start`（确定首站）、`direct`（从图钉/站点选择框直接确定）、
+`ride` / `walk`（乘车或步行到某站）、`line`（选中/取消线路 `on`）、`cancel`（点空白取消预览）、`undo`、`reset`、
+`force_walk`、`show_all`、`reject`（点了不允许的站，`why`: far/river）、`finish`、`leave`、`truncated`（页面关闭时过长被截断）。
+
+常用查询：
+
+```sql
+-- 各模式的完成率与平均用时
+SELECT mode, count(*) AS games, round(avg((outcome='finished')::int)*100,1) AS finish_pct,
+       round(avg(duration_ms)/1000) AS avg_sec
+FROM play_traces GROUP BY mode ORDER BY games DESC;
+
+-- 放弃的局卡在第几步（放弃时已确定的站数）
+SELECT (summary->>'stops')::int AS stops_when_left, count(*) FROM play_traces
+WHERE outcome='abandoned' GROUP BY 1 ORDER BY 1;
+
+-- 每局平均预览、撤回次数（犹豫程度）
+SELECT mode,
+  round(avg((SELECT count(*) FROM jsonb_array_elements(events) e WHERE e->>'e'='preview')),1) AS previews,
+  round(avg((SELECT count(*) FROM jsonb_array_elements(events) e WHERE e->>'e'='undo')),1) AS undos
+FROM play_traces GROUP BY mode;
+
+-- 登录玩家：规划过程 + 服务端核定的成绩
+SELECT t.events, s.duration_ms, s.passed, r.optimal_duration_ms
+FROM play_traces t JOIN round_submissions s ON s.round_id=t.round_id JOIN run_rounds r ON r.id=t.round_id;
+```

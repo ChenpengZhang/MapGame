@@ -84,6 +84,29 @@ const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(
   (v) => !Number.isNaN(Date.parse(v)) && new Date(v).toISOString().slice(0, 10) === v,
 );
 const dailyAnswerQuery = z.object({ date: isoDate }).strict();
+
+// 规划过程记录（玩家行为分析）：事件是扁平的小对象，字段与取值都限长，防止被当作任意存储
+const traceValue = z.union([z.string().max(200), z.number().finite(), z.boolean(), z.null()]);
+const traceObject = z.record(z.string().max(24), traceValue);
+const coord = z.tuple([z.number().finite(), z.number().finite()]);
+export const traceBody = z.object({
+  id: uuid,
+  anonId: uuid,
+  runId: uuid.nullable().optional(),
+  roundId: uuid.nullable().optional(),
+  mode: z.enum(['free', 'story', 'tower', 'daily', 'custom']),
+  city,
+  scenario: traceObject.optional(),
+  levelId: z.string().max(64).nullable().optional(),
+  origin: coord.nullable().optional(),
+  destination: coord.nullable().optional(),
+  outcome: z.enum(['finished', 'abandoned']),
+  durationMs: z.number().int().min(0).max(7 * 24 * 3600 * 1000),
+  events: z.array(traceObject.refine((e) => Object.keys(e).length <= 12)).max(2000),
+  route: z.array(traceObject).max(64).nullable().optional(),
+  summary: traceObject.optional(),
+  client: traceObject.optional(),
+}).strict();
 const boardQuery = z.discriminatedUnion('mode', [
   z.object({
     mode: z.literal('daily'),
@@ -126,6 +149,18 @@ export function createApp({ auth, game, repository, config }) {
 
   // Better Auth's Node adapter supports a pre-read string body; limit auth payloads too.
   app.all(`${prefix}/auth/{*path}`, express.text({ type: 'application/json', limit: '16kb' }), toNodeHandler(auth));
+
+  // 规划过程记录：游客也可上报（不要求登录），单独的较大 body 上限与按 IP 的频率限制；登录时自动关联账号
+  app.post(
+    `${prefix}/traces`,
+    rateLimit({ windowMs: 60000, limit: 30, standardHeaders: 'draft-8', legacyHeaders: false }),
+    express.json({ limit: '256kb' }),
+    async (req, res) => {
+      const session = await auth.api.getSession({ headers: fromNodeHeaders(req.headers) });
+      await game.recordTrace(session?.user?.emailVerified ? session.user.id : null, traceBody.parse(req.body));
+      res.status(204).end();
+    },
+  );
 
   app.use(prefix, express.json({ limit: '64kb' }));
 
