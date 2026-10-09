@@ -7,7 +7,6 @@
  *   metroBase   是否显示灰色地铁底图
  *   fontScale   界面字号 'normal' | 'lg' | 'xl'
  *   focusOnConfirm  确认站点后自动缩放到可达站 / 终点范围（默认开）
- *   collectTraces   匿名记录每局的规划过程，用于分析和改进游戏（默认开，见 game/trace.js）
  */
 
 import { readJSON, writeJSON } from './storage.js';
@@ -20,7 +19,6 @@ export const DEFAULT_SETTINGS = Object.freeze({
   metroBase: true,
   fontScale: 'normal',
   focusOnConfirm: true,
-  collectTraces: true,
 });
 
 export const BUS_ZOOM_CHOICES = [13, 14, 15, 16];
@@ -34,7 +32,6 @@ export function loadSettings() {
   if (BUS_ZOOM_CHOICES.includes(saved.busMinZoom)) out.busMinZoom = saved.busMinZoom;
   if (typeof saved.metroBase === 'boolean') out.metroBase = saved.metroBase;
   if (typeof saved.focusOnConfirm === 'boolean') out.focusOnConfirm = saved.focusOnConfirm;
-  if (typeof saved.collectTraces === 'boolean') out.collectTraces = saved.collectTraces;
   if (saved.fontScale in FONT_SCALES) out.fontScale = saved.fontScale;
   return out;
 }

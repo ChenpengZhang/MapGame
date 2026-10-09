@@ -6,7 +6,7 @@
  * 中途离开（回主页、开下一局、刷新/关闭页面、切到后台）时把当时的过程和半成品路线作为“放弃”上报；
  * 同一局用同一个 id，之后又完成会覆盖为“完成”（服务端按 id 更新为最新）。
  * 登录玩家的记录会关联到对应的正式对局；游客用每个浏览器一个随机匿名 id。
- * 设置里可以关闭（state.settings.collectTraces === false 时不记录、不上报）。
+ * 设置页「隐私 → 匿名记录规划过程」有说明（不提供关闭开关）。
  *
  * 事件格式：{ t: 毫秒, e: 类型, …少量字段 }，字段名保持很短；单局最多 2000 条。
  */
@@ -23,7 +23,7 @@ let trace = null;        // 当前这一局
 let sessionAnonId = null; // localStorage 不可用时，本次会话内的匿名 id
 
 function enabled() {
-  return state.settings?.collectTraces !== false && typeof fetch === 'function'
+  return typeof fetch === 'function'
     && typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function';
 }
 

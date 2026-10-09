@@ -10,9 +10,9 @@
   <link rel="stylesheet" href="css/tokens.css?v=1" />
   <link rel="stylesheet" href="css/base.css?v=2" />
   <link rel="stylesheet" href="css/hud.css?v=6" />
-  <link rel="stylesheet" href="css/screens.css?v=6" />
+  <link rel="stylesheet" href="css/screens.css?v=7" />
   <link rel="stylesheet" href="css/mobile.css?v=1" />
-  <link rel="stylesheet" href="css/signage.css?v=3" />
+  <link rel="stylesheet" href="css/signage.css?v=4" />
   <link rel="stylesheet" href="css/font-scale.css?v=1" />
   <link rel="stylesheet" href="css/custom.css?v=1" />
   <link rel="stylesheet" href="css/trip.css?v=3" />
@@ -379,10 +379,10 @@
             </div>
 
             <h3 class="settings-group">隐私</h3>
-            <label class="setting-row" data-setting="collectTraces">
+            <div class="setting-row" data-setting="collectTraces" tabindex="0">
               <span class="setting-label">匿名记录规划过程</span>
-              <span class="setting-control"><input type="checkbox" id="collect-traces-toggle" class="setting-switch"></span>
-            </label>
+              <span class="setting-control setting-info">查看说明</span>
+            </div>
 
             <h3 class="settings-group">高级</h3>
             <div class="setting-row setting-row-block" data-setting="amapKey">
@@ -435,6 +435,6 @@
   <script src="shared/rivers.js?v=1"></script>
   <script src="shared/transit-format.js?v=1"></script>
   <script src="js/amap-polyfill.js"></script>
-  <script src="js/app.js?v=140" type="module"></script>
+  <script src="js/app.js?v=141" type="module"></script>
 </body>
 </html>
