@@ -67,11 +67,5 @@ export const PREVIEWS = {
     desc: '每确认一个站点，地图自动缩放到所有可达的站；已到终点附近时缩放到终点的步行范围。关闭后地图保持当前视野。',
     render: null,
   },
-  collectTraces: {
-    title: '匿名记录规划过程',
-    desc: '为了改进关卡和交互，游戏会记录每局的规划过程：预览和确认了哪些站、选了哪些线路、撤回和用时，以及最终路线和屏幕尺寸等设备信息。'
-      + '不记录姓名、邮箱、位置等个人信息；未登录时只用一个随机生成的匿名编号区分浏览器，登录后会关联到你的游玩记录。',
-    render: null,
-  },
   amapKey: { title: '高德地图 Key', desc: '默认使用免 Key 的 OpenStreetMap 底图。填写自己的高德 Key 并保存后会刷新页面，改用高德底图。', render: amapPreview },
 };

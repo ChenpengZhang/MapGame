@@ -260,7 +260,6 @@
 .setting-row.active { background: rgba(25,183,201,.10); border-color: rgba(25,183,201,.45); }
 .setting-label { font-size: 14px; font-weight: 600; color: var(--ink-strong); white-space: nowrap; }
 .setting-control { display: flex; align-items: center; gap: 8px; }
-.setting-info { font-size: 12px; color: var(--ink-muted); } /* 只读说明项（如匿名记录规划过程）：没有开关，点开看右侧说明 */
 .setting-range { flex: 0 1 200px; font-size: 12px; color: var(--ink-muted); }
 .setting-range input { flex: 1; min-width: 0; }
 .setting-choices { gap: 0; border: 1px solid var(--ring-strong); border-radius: 8px; overflow: hidden; }

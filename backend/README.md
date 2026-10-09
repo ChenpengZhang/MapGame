@@ -228,7 +228,6 @@ TEST_DATABASE_URL=postgresql://你的用户名@localhost/mapgame_backend_test no
 
 每局一行，记录玩家“怎么规划的”，不参与计分。前端 `frontend/js/game/trace.js` 采集，`POST /mapgame/api/traces` 上报（游客也可以，按 IP 限频）：
 完成路线时上报一次；中途回主页、开下一局、刷新/关闭页面、切到后台时按“放弃”上报当时的过程与半成品路线（同一局同一 id，之后完成会覆盖为最新）。
-设置页「隐私 → 匿名记录规划过程」有说明（不提供关闭开关）。
 
 | 字段 | 说明 |
 |---|---|

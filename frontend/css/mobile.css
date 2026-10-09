@@ -20,8 +20,12 @@
   #mode-hud > * { flex: none; }
   #mode-hud #tower-layer-label, #mode-hud #mode-hud-secondary { overflow: hidden; text-overflow: ellipsis; flex: 0 1 auto; min-width: 0; }
   #tower-restart-btn { top:62px;right:10px;width:32px;height:32px;font-size:19px; }
-  .btn-group { right: 10px; top: 104px; bottom: auto; flex-wrap: wrap; justify-content: flex-end; max-width: 74vw; }
-  .btn-group button { padding: 7px 12px; font-size: 12px; }
+  /* 宽度上限放到屏幕宽减两侧边距：四个按钮在常见手机上排成一行（更窄时仍会换行） */
+  .btn-group { right: 10px; top: 104px; bottom: auto; flex-wrap: wrap; justify-content: flex-end; max-width: calc(100vw - 20px); gap: 6px; }
+  /* 规划操作条整体缩小一档：四个按钮（含“强制步行”开关）同样的字号与内边距 */
+  .btn-group button, #force-walk-row { padding: 5px 10px; font-size: 11px; }
+  #force-walk-row { gap: 4px; }
+  #force-walk-row input { width: 12px; height: 12px; }
   #result-toggle-btn { right: 10px; top: 104px; bottom: auto; padding: 7px 12px; font-size: 12px; }
 
   /* 路线面板 / 信息卡：改成底部抽屉 */

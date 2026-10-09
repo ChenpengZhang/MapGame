@@ -129,6 +129,22 @@ async function loadYesterdayBoard(version) {
 // ============ 昨日排行侧栏：可折叠到屏幕右缘 ============
 const YESTERDAY_COLLAPSED_KEY = 'mg_daily_yesterday_collapsed';
 
+/**
+ * 昨日排行侧栏与今日排行顶部对齐（今日排行的位置随题目信息、我的名次等内容变化，所以每次渲染后重算）；
+ * 展开后若超出屏幕底部则整体上移。
+ */
+function alignYesterday() {
+  const menu = $('daily-menu'), aside = $('daily-yesterday');
+  const board = menu?.querySelector('.daily-inner .daily-board-wrap');
+  if (!menu || !aside || !board || menu.classList.contains('hidden') || typeof menu.getBoundingClientRect !== 'function') return;
+  const menuBox = menu.getBoundingClientRect();
+  const maxTop = Math.max(8, menuBox.height - aside.offsetHeight - 8);
+  const top = Math.min(board.getBoundingClientRect().top - menuBox.top, maxTop);
+  aside.style.setProperty('--yesterday-top', `${Math.round(top)}px`);
+  aside.style.setProperty('--yesterday-shift', '0px');
+}
+if (typeof window?.addEventListener === 'function') window.addEventListener('resize', alignYesterday);
+
 function setYesterdayCollapsed(collapsed) {
   const aside = $('daily-yesterday');
   if (!aside) return;
@@ -139,6 +155,7 @@ function setYesterdayCollapsed(collapsed) {
     toggle.setAttribute?.('aria-label', collapsed ? '展开昨日排行' : '收起昨日排行');
   }
   try { localStorage.setItem(YESTERDAY_COLLAPSED_KEY, collapsed ? '1' : '0'); } catch { /* 存储不可用时只影响本次 */ }
+  alignYesterday();
 }
 
 function initYesterdayPanel() {
@@ -161,6 +178,7 @@ function initYesterdayPanel() {
 export async function openDailyMenu() {
   const version = ++requestVersion;
   showPanel('daily-menu');
+  alignYesterday();
   setText('daily-mine', '');
   toggleHidden('daily-guest-notice', !!account.user);
   const start = $('daily-start');
@@ -179,7 +197,9 @@ export async function openDailyMenu() {
       renderInfo();
     }, 30000);
     initYesterdayPanel();
+    alignYesterday();
     await Promise.all([loadBoard(version), loadYesterdayBoard(version)]);
+    if (version === requestVersion) alignYesterday();
   } catch (error) {
     if (version === requestVersion) setText('daily-info', '今日题目获取失败：' + error.message);
   }

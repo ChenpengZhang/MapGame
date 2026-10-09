@@ -260,9 +260,9 @@
 /* 每日挑战面板：沿用无尽模式菜单的布局，加一张当日排行 */
 #daily-menu { position: fixed; inset: 0; z-index: 910; display: flex; align-items: center; justify-content: center; }
 .daily-inner { max-width: 520px; }
-/* 窄屏：右侧留出“昨日排行”把手（34px）的位置，免得把手压住今日排行最右一列和下面的说明文字 */
+/* 窄屏：两侧各留出“昨日排行”把手（34px）的宽度，内容保持居中，把手不会压住今日排行最右一列和说明文字 */
 @media (max-width: 640px) {
-  #daily-menu .daily-inner { width: calc(100% - 60px); margin: 0 44px 0 16px; }
+  #daily-menu .daily-inner { width: calc(100% - 88px); margin: 0 44px; }
 }
 .daily-mine { min-height: 20px; margin: -10px 0 14px; color: var(--accent); font-size: 14px; font-weight: 700; }
 .daily-board-wrap { max-height: 300px; overflow-y: auto; margin-bottom: 18px; border: 1px solid rgba(255,255,255,.12); border-radius: 10px; }
@@ -278,11 +278,12 @@
 .daily-start:hover { filter: brightness(1.08); }
 .daily-start:disabled { opacity: .5; cursor: default; }
 /* 昨日排行：贴右缘的侧栏，收起时整体滑出屏幕，只留竖排的“昨日排行”把手 */
+/* 竖直位置由 daily.js 设为与今日排行顶部对齐（--yesterday-top / --yesterday-shift）；未设置时居中 */
 .daily-yesterday {
-  position: absolute; top: 50%; right: 0; z-index: 2; display: flex; align-items: stretch;
-  transform: translateY(-50%); transition: transform .28s ease;
+  position: absolute; top: var(--yesterday-top, 50%); right: 0; z-index: 2; display: flex; align-items: stretch;
+  transform: translateY(var(--yesterday-shift, -50%)); transition: transform .28s ease;
 }
-.daily-yesterday.collapsed { transform: translate(calc(100% - 34px), -50%); }
+.daily-yesterday.collapsed { transform: translate(calc(100% - 34px), var(--yesterday-shift, -50%)); }
 .daily-yesterday-toggle {
   flex: 0 0 34px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
   margin: 0; padding: 12px 0; border: 1px solid rgba(255,255,255,.12); border-right: 0; border-radius: 12px 0 0 12px;

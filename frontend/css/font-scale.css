@@ -7,7 +7,7 @@
 #app:is([data-font-scale="lg"], [data-font-scale="xl"]) #tutorial-guide { width: min(320px, calc((100vw - 28px) / var(--ui-zoom))); }
 #app:is([data-font-scale="lg"], [data-font-scale="xl"]) .result-inner { width: min(380px, calc((100vw - 32px) / var(--ui-zoom))); }
 #app:is([data-font-scale="lg"], [data-font-scale="xl"]) :is(.main-inner, .story-menu-inner, .tower-menu-inner) { width: calc(92vw / var(--ui-zoom)); }
-#app:is([data-font-scale="lg"], [data-font-scale="xl"]) .btn-group { max-width: calc(74vw / var(--ui-zoom)); }
+#app:is([data-font-scale="lg"], [data-font-scale="xl"]) .btn-group { max-width: calc((100vw - 20px) / var(--ui-zoom)); }
 @media (max-width: 600px) {
   #app:is([data-font-scale="lg"], [data-font-scale="xl"]) #tutorial-guide { width: calc((100vw - 28px) / var(--ui-zoom)); }
   #app:is([data-font-scale="lg"], [data-font-scale="xl"]) :is(.stop-infocard.bus-board, .stop-infocard.metro-board) { width: auto; }
